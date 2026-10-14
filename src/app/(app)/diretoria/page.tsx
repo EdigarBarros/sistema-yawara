@@ -1,0 +1,435 @@
+"use client";
+
+import { useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Building2, KeyRound, Pencil, Plus, ShieldCheck, Undo2, UserPlus, Users } from "lucide-react";
+import type { Department, Member, Permission, Role } from "@/types";
+import { services } from "@/services";
+import { useAccess } from "@/hooks/use-access";
+import { useAction } from "@/hooks/use-action";
+import { useDirectory } from "@/hooks/use-data";
+import { ROLE_LEVEL_LABELS } from "@/lib/labels";
+import { formatDate } from "@/lib/format";
+import { cn, matchesQuery } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Avatar, Badge } from "@/components/ui/misc";
+import { Sheet, SheetContent } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/menu";
+import { DetailList, PageHeader, Panel, SectionTitle } from "@/components/shared/page";
+import { DataTable, type Column } from "@/components/shared/data-table";
+import { FilterChips, FilterSelect, SearchInput, Toolbar } from "@/components/shared/filters";
+import { DemoNotice, EmptyState, InlineLoader, RestrictedState } from "@/components/shared/states";
+import { confirmAction } from "@/components/shared/confirm";
+import { DepartmentDialog, MemberDialog, RoleDialog } from "@/features/organization/org-dialogs";
+import { PermissionMatrix, PermissionSummary } from "@/features/organization/permission-matrix";
+
+const TABS = ["integrantes", "cargos", "departamentos", "permissoes"] as const;
+type Tab = (typeof TABS)[number];
+
+function StatusPill({ active }: { active: boolean }) {
+  return (
+    <Badge tone={active ? "ok" : "neutral"} dot>
+      {active ? "Ativo" : "Inativo"}
+    </Badge>
+  );
+}
+
+/* ------------------------------------ Integrantes ------------------------------------ */
+
+function MembersTab({ onOpenMember }: { onOpenMember: (id: string) => void }) {
+  const access = useAccess();
+  const dir = useDirectory();
+  const [status, setStatus] = useState<"active" | "inactive" | "all">("active");
+  const [dep, setDep] = useState("");
+  const [query, setQuery] = useState("");
+  const [dialog, setDialog] = useState<{ member?: Member } | null>(null);
+
+  const rows = dir.members
+    .filter((m) => status === "all" || m.status === status)
+    .filter((m) => !dep || dir.role(m.roleId)?.departmentId === dep)
+    .filter((m) => matchesQuery(query, m.name, m.email, dir.role(m.roleId)?.name))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const columns: Column<Member>[] = [
+    {
+      key: "name",
+      header: "Integrante",
+      cell: (m) => (
+        <div className="flex items-center gap-3">
+          <Avatar name={m.name} id={m.id} size={32} />
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 truncate font-semibold">
+              {m.name}
+              {m.id === access.user?.id && <Badge tone="gold">Você</Badge>}
+            </p>
+            <p className="truncate text-[12px] text-fg-subtle">{m.email}</p>
+          </div>
+        </div>
+      ),
+    },
+    { key: "role", header: "Cargo", cell: (m) => <span>{dir.role(m.roleId)?.name}</span> },
+    { key: "dep", header: "Departamento", hideBelow: "lg", cell: (m) => <span className="text-fg-muted">{dir.departmentOf(m.id)?.name}</span> },
+    { key: "since", header: "Desde", hideBelow: "xl", cell: (m) => <span className="tnum font-mono text-[12.5px] text-fg-muted">{formatDate(m.joinedAt)}</span> },
+    { key: "status", header: "Situação", cell: (m) => <StatusPill active={m.status === "active"} /> },
+    {
+      key: "actions",
+      header: <span className="sr-only">Ações</span>,
+      align: "right",
+      cell: (m) =>
+        access.can("organization.edit") ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={(e) => {
+              e.stopPropagation();
+              setDialog({ member: m });
+            }}
+          >
+            <Pencil /> Editar
+          </Button>
+        ) : null,
+    },
+  ];
+
+  return (
+    <section className="rounded-xl border border-line bg-surface">
+      <Toolbar>
+        <FilterChips
+          ariaLabel="Situação"
+          value={status}
+          onChange={setStatus}
+          options={[
+            { value: "active", label: "Ativos", count: dir.members.filter((m) => m.status === "active").length },
+            { value: "inactive", label: "Inativos", count: dir.members.filter((m) => m.status === "inactive").length },
+            { value: "all", label: "Todos", count: dir.members.length },
+          ]}
+        />
+        <div className="flex flex-wrap gap-2">
+          <FilterSelect label="Departamento" value={dep} onChange={setDep} options={[{ value: "", label: "Todos os departamentos" }, ...dir.departments.map((d) => ({ value: d.id, label: d.name }))]} />
+          <SearchInput value={query} onChange={setQuery} placeholder="Buscar nome ou cargo" className="w-full sm:w-56" />
+          {access.can("organization.create") && (
+            <Button variant="primary" onClick={() => setDialog({})}>
+              <UserPlus /> Adicionar
+            </Button>
+          )}
+        </div>
+      </Toolbar>
+      <DataTable
+        caption="Integrantes"
+        rows={rows}
+        columns={columns}
+        loading={dir.loading}
+        getRowId={(m) => m.id}
+        onRowClick={(m) => onOpenMember(m.id)}
+        mobileCard={(m) => (
+          <div className="flex items-center gap-3">
+            <Avatar name={m.name} id={m.id} size={34} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-semibold">{m.name}</p>
+              <p className="truncate text-[12px] text-fg-subtle">{dir.role(m.roleId)?.name}</p>
+            </div>
+            <StatusPill active={m.status === "active"} />
+          </div>
+        )}
+        empty={<EmptyState compact icon={<Users />} title="Ninguém encontrado" />}
+      />
+      {dialog && <MemberDialog open onOpenChange={(o) => !o && setDialog(null)} member={dialog.member} />}
+    </section>
+  );
+}
+
+/* -------------------------------------- Cargos -------------------------------------- */
+
+function RolesTab() {
+  const access = useAccess();
+  const dir = useDirectory();
+  const [dialog, setDialog] = useState<{ role?: Role } | null>(null);
+  const columns: Column<Role>[] = [
+    {
+      key: "name",
+      header: "Cargo",
+      cell: (r) => (
+        <div className="min-w-0">
+          <p className="truncate font-semibold">{r.name}</p>
+          <p className="line-clamp-1 text-[12px] text-fg-subtle">{r.description}</p>
+        </div>
+      ),
+    },
+    { key: "dep", header: "Departamento", cell: (r) => <span className="text-fg-muted">{dir.department(r.departmentId)?.name}</span> },
+    {
+      key: "level",
+      header: "Nível",
+      hideBelow: "lg",
+      cell: (r) => (
+        <span className="flex items-center gap-2 text-fg-muted">
+          {ROLE_LEVEL_LABELS[r.level]}
+          {r.isBoard && <Badge tone="gold">Diretoria</Badge>}
+        </span>
+      ),
+    },
+    { key: "people", header: "Integrantes", hideBelow: "lg", align: "right", cell: (r) => <span className="tnum font-mono">{dir.members.filter((m) => m.roleId === r.id && m.status === "active").length}</span> },
+    { key: "perm", header: "Permissões", hideBelow: "xl", align: "right", cell: (r) => <span className="tnum font-mono text-fg-muted">{r.permissions.length}</span> },
+    { key: "status", header: "Situação", cell: (r) => <StatusPill active={r.active} /> },
+  ];
+  return (
+    <section className="rounded-xl border border-line bg-surface">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3.5 sm:px-5">
+        <p className="text-[13px] text-fg-muted">Cargos cadastrados. Clique para editar dados e permissões.</p>
+        {access.can("organization.create") && (
+          <Button variant="primary" onClick={() => setDialog({})}>
+            <Plus /> Novo cargo
+          </Button>
+        )}
+      </div>
+      <DataTable
+        caption="Cargos"
+        rows={[...dir.roles].sort((a, b) => (dir.department(a.departmentId)?.name ?? "").localeCompare(dir.department(b.departmentId)?.name ?? "") || a.name.localeCompare(b.name))}
+        columns={columns}
+        getRowId={(r) => r.id}
+        onRowClick={access.can("organization.edit") ? (r) => setDialog({ role: r }) : undefined}
+        mobileCard={(r) => (
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-semibold">{r.name}</p>
+              <p className="text-[12px] text-fg-subtle">
+                {dir.department(r.departmentId)?.name} · {ROLE_LEVEL_LABELS[r.level]}
+              </p>
+            </div>
+            <StatusPill active={r.active} />
+          </div>
+        )}
+        pageSize={30}
+      />
+      {dialog && <RoleDialog open onOpenChange={(o) => !o && setDialog(null)} role={dialog.role} />}
+    </section>
+  );
+}
+
+/* ----------------------------------- Departamentos ----------------------------------- */
+
+function DepartmentsTab() {
+  const access = useAccess();
+  const dir = useDirectory();
+  const [dialog, setDialog] = useState<{ department?: Department } | null>(null);
+  return (
+    <section className="rounded-xl border border-line bg-surface">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3.5 sm:px-5">
+        <p className="text-[13px] text-fg-muted">Departamentos da Atlética.</p>
+        {access.can("organization.create") && (
+          <Button variant="primary" onClick={() => setDialog({})}>
+            <Plus /> Novo departamento
+          </Button>
+        )}
+      </div>
+      <ul className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-3">
+        {dir.departments.map((d) => {
+          const roles = dir.roles.filter((r) => r.departmentId === d.id);
+          const people = dir.members.filter((m) => roles.some((r) => r.id === m.roleId) && m.status === "active");
+          return (
+            <li key={d.id} className="rounded-xl border border-line bg-sunken p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="grid size-10 place-items-center rounded-lg border border-gold/30 bg-gold/10 font-mono text-[12px] font-semibold text-gold-fg">{d.shortName}</span>
+                  <div>
+                    <p className="font-semibold">{d.name}</p>
+                    <p className="text-[12px] text-fg-subtle">
+                      {roles.length} cargo(s) · {people.length} pessoa(s)
+                    </p>
+                  </div>
+                </div>
+                <StatusPill active={d.active} />
+              </div>
+              <p className="mt-3 line-clamp-2 text-[12.5px] text-fg-muted">{d.description}</p>
+              {access.can("organization.edit") && (
+                <Button size="sm" variant="ghost" className="mt-2 -ml-2" onClick={() => setDialog({ department: d })}>
+                  <Pencil /> Editar
+                </Button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {dialog && <DepartmentDialog open onOpenChange={(o) => !o && setDialog(null)} department={dialog.department} />}
+    </section>
+  );
+}
+
+/* ------------------------------------ Permissões ------------------------------------ */
+
+function PermissionsTab() {
+  const access = useAccess();
+  const dir = useDirectory();
+  const canAdmin = access.can("organization.admin");
+  const [roleId, setRoleId] = useState(dir.roles[0]?.id ?? "");
+  const [draft, setDraft] = useState<Record<string, Permission[]>>({});
+  const role = dir.role(roleId);
+  const current = draft[roleId] ?? role?.permissions ?? [];
+  const dirty = !!draft[roleId] && JSON.stringify([...draft[roleId]].sort()) !== JSON.stringify([...(role?.permissions ?? [])].sort());
+  const save = useAction(() => services.organization.updateRole(roleId, { permissions: current }), {
+    success: "Permissões salvas",
+    successDescription: "Troque para um perfil com este cargo para ver o efeito.",
+    onSuccess: () => setDraft((d) => ({ ...d, [roleId]: undefined as never })),
+  });
+
+  if (!role) return <InlineLoader />;
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+      <nav aria-label="Cargos" className="rounded-xl border border-line bg-surface p-2 lg:self-start">
+        <select value={roleId} onChange={(e) => setRoleId(e.target.value)} aria-label="Cargo" className="h-10 w-full rounded-lg border border-line-strong bg-sunken px-3 text-[14px] lg:hidden">
+          {dir.roles.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.name}
+            </option>
+          ))}
+        </select>
+        <ul className="hidden space-y-0.5 lg:block">
+          {dir.departments.map((d) => (
+            <li key={d.id}>
+              <p className="eyebrow px-2.5 pt-3 pb-1.5">{d.name}</p>
+              {dir.roles
+                .filter((r) => r.departmentId === d.id)
+                .map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => setRoleId(r.id)}
+                    aria-pressed={r.id === roleId}
+                    className={cn("flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-[13px]", r.id === roleId ? "bg-gold/10 font-medium text-fg" : "text-fg-muted hover:bg-surface-2")}
+                  >
+                    <span className="truncate">{r.name}</span>
+                    {draft[r.id] && <span className="size-1.5 rounded-full bg-gold" aria-label="Alterações não salvas" />}
+                  </button>
+                ))}
+            </li>
+          ))}
+        </ul>
+      </nav>
+      <Panel
+        title={`Permissões: ${role.name}`}
+        description={`${dir.department(role.departmentId)?.name} · ${ROLE_LEVEL_LABELS[role.level]}${role.isBoard ? " · diretoria" : ""}`}
+        actions={
+          canAdmin && (
+            <>
+              {dirty && (
+                <Button size="sm" variant="ghost" onClick={() => setDraft((d) => ({ ...d, [roleId]: undefined as never }))}>
+                  <Undo2 /> Desfazer
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={!dirty}
+                loading={save.pending}
+                onClick={async () => {
+                  if (await confirmAction({ title: `Salvar permissões de ${role.name}?`, description: `${dir.members.filter((m) => m.roleId === roleId).length} integrante(s) com este cargo serão afetados.`, confirmLabel: "Salvar" }))
+                    save.runSafe();
+                }}
+              >
+                <ShieldCheck /> Salvar permissões
+              </Button>
+            </>
+          )
+        }
+      >
+        {!canAdmin && <DemoNotice tone="warn" className="mb-4">Seu perfil pode consultar, mas não alterar permissões.</DemoNotice>}
+        <PermissionMatrix value={current} onChange={canAdmin ? (v) => setDraft((d) => ({ ...d, [roleId]: v })) : undefined} readOnly={!canAdmin} />
+        <DemoNotice className="mt-4">
+          Permissões simuladas para a demonstração. Elas mudam menus e botões nesta interface, mas não são segurança real — a autorização efetiva será implementada no backend.
+        </DemoNotice>
+      </Panel>
+    </div>
+  );
+}
+
+/* --------------------------------------- Página --------------------------------------- */
+
+export default function OrganizationPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const access = useAccess();
+  const dir = useDirectory();
+  const requested = params.get("aba") as Tab | null;
+  const tab: Tab = requested && TABS.includes(requested) ? requested : "integrantes";
+  const memberId = params.get("integrante");
+  const member = dir.member(memberId ?? undefined);
+  const memberRole = dir.role(member?.roleId);
+
+  const setParams = (patch: Record<string, string | null>) => {
+    const next = new URLSearchParams(params.toString());
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === null) next.delete(k);
+      else next.set(k, v);
+    }
+    router.replace(next.size ? `${pathname}?${next}` : pathname, { scroll: false });
+  };
+
+  if (!access.canModule("organization")) return <RestrictedState />;
+
+  return (
+    <>
+      <PageHeader eyebrow="Administração" title="Diretoria e organização" description="Integrantes, cargos, departamentos e permissões da Atlética. Todos os nomes são fictícios." />
+      <Tabs value={tab} onValueChange={(v) => setParams({ aba: v })}>
+        <TabsList>
+          <TabsTrigger value="integrantes" count={dir.members.length}>
+            <Users /> Integrantes
+          </TabsTrigger>
+          <TabsTrigger value="cargos" count={dir.roles.length}>
+            <ShieldCheck /> Cargos
+          </TabsTrigger>
+          <TabsTrigger value="departamentos" count={dir.departments.length}>
+            <Building2 /> Departamentos
+          </TabsTrigger>
+          <TabsTrigger value="permissoes">
+            <KeyRound /> Permissões
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="integrantes" className="mt-5">
+          <MembersTab onOpenMember={(id) => setParams({ integrante: id })} />
+        </TabsContent>
+        <TabsContent value="cargos" className="mt-5">
+          <RolesTab />
+        </TabsContent>
+        <TabsContent value="departamentos" className="mt-5">
+          <DepartmentsTab />
+        </TabsContent>
+        <TabsContent value="permissoes" className="mt-5">
+          <PermissionsTab />
+        </TabsContent>
+      </Tabs>
+
+      <Sheet open={!!member} onOpenChange={(o) => !o && setParams({ integrante: null })}>
+        {member && (
+          <SheetContent eyebrow="Integrante (fictício)" title={member.name} description={memberRole?.name}>
+            <div className="space-y-6">
+              <div className="flex items-center gap-4">
+                <Avatar name={member.name} id={member.id} size={56} />
+                <div>
+                  <p className="text-[15px] font-semibold">{member.name}</p>
+                  <p className="text-[13px] text-fg-muted">{member.email}</p>
+                  <div className="mt-1.5">
+                    <StatusPill active={member.status === "active"} />
+                  </div>
+                </div>
+              </div>
+              <DetailList
+                items={[
+                  { label: "Cargo", value: memberRole?.name ?? "—" },
+                  { label: "Departamento", value: dir.departmentOf(member.id)?.name ?? "—" },
+                  { label: "Nível", value: memberRole ? ROLE_LEVEL_LABELS[memberRole.level] : "—" },
+                  { label: "Na Atlética desde", value: formatDate(member.joinedAt) },
+                  { label: "Perfil de demonstração", value: member.demoProfile ? member.demoProfile.label : "Não" },
+                ]}
+              />
+              <div>
+                <SectionTitle>O que este cargo pode fazer</SectionTitle>
+                <PermissionSummary value={memberRole?.permissions ?? []} />
+              </div>
+              <DemoNotice>Não há módulo de avaliação ou acompanhamento de desempenho na Central: esse controle ocorre fora do sistema.</DemoNotice>
+            </div>
+          </SheetContent>
+        )}
+      </Sheet>
+    </>
+  );
+}
