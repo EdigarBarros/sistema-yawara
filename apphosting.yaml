@@ -1,0 +1,39 @@
+# Configuração do Firebase App Hosting (hospedagem do Next.js).
+# Preencha os valores do app web do Firebase no console do App Hosting ou aqui.
+# As variáveis NEXT_PUBLIC_* precisam estar disponíveis no BUILD (são
+# incorporadas ao código do navegador) — elas são públicas por natureza.
+# Não coloque segredos neste arquivo.
+runConfig:
+  minInstances: 0
+  maxInstances: 2
+  concurrency: 80
+  memoryMiB: 512
+
+env:
+  - variable: NEXT_PUBLIC_DATA_SOURCE
+    value: firebase
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION
+    value: southamerica-east1
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: PREENCHER
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: PREENCHER
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: PREENCHER
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: PREENCHER
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: PREENCHER
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: PREENCHER
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_RECAPTCHA_ENTERPRISE_SITE_KEY
+    value: PREENCHER
+    availability: [BUILD, RUNTIME]
