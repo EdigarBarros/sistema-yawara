@@ -10,4 +10,5 @@ process.env.FIREBASE_CONFIG = JSON.stringify({ projectId: PROJECT, storageBucket
 process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8080";
 process.env.FIREBASE_AUTH_EMULATOR_HOST ??= "127.0.0.1:9099";
 process.env.FIREBASE_STORAGE_EMULATOR_HOST ??= "127.0.0.1:9199";
-process.env.STORAGE_EMULATOR_HOST ??= "http://127.0.0.1:9199";
+// O Admin SDK do Storage usa STORAGE_EMULATOR_HOST (com protocolo); deriva da porta do emulador em uso.
+process.env.STORAGE_EMULATOR_HOST = `http://${process.env.FIREBASE_STORAGE_EMULATOR_HOST}`;

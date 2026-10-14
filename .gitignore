@@ -22,6 +22,7 @@ storage-debug.log
 ui-debug.log
 functions/lib/
 emulator-data/
+firebase.*.local.json
 
 # Credenciais nunca devem ir para o repositório
 *service-account*.json
