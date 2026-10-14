@@ -136,7 +136,8 @@ export function canEditEntry(ctx: AccessContext, entry: FinanceEntry) {
 /* ------------------------------- Marketing ------------------------------ */
 
 export function canSeeContent(ctx: AccessContext, c: ContentItem) {
-  return c.responsibleId === ctx.user.id || canSeeRecord(ctx, "marketing", c);
+  if (c.responsibleId === ctx.user.id && hasPermission(ctx, "marketing.view")) return true;
+  return canSeeRecord(ctx, "marketing", c);
 }
 
 export function canEditContent(ctx: AccessContext, c: ContentItem) {
@@ -158,7 +159,13 @@ export function allowedContentStatuses(ctx: AccessContext, c: ContentItem): Cont
 /* --------------------------- Ensino e Extensão -------------------------- */
 
 export function canSeeProject(ctx: AccessContext, p: ExtensionProject) {
-  return p.responsibleId === ctx.user.id || canSeeRecord(ctx, "extension", p);
+  if (p.responsibleId === ctx.user.id && hasPermission(ctx, "extension.view")) return true;
+  return canSeeRecord(ctx, "extension", p);
+}
+
+/** Lista de presença (dados pessoais): somente quem pode editar o projeto. */
+export function canSeeAttendees(ctx: AccessContext, p: ExtensionProject) {
+  return canSeeProject(ctx, p) && (canEditProject(ctx, p) || hasPermission(ctx, "extension.admin"));
 }
 
 export function canEditProject(ctx: AccessContext, p: ExtensionProject) {

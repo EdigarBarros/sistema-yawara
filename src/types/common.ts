@@ -66,6 +66,10 @@ export interface FileRef {
   name: string;
   size: number;
   mimeType: string;
-  /** Presente quando o arquivo foi escolhido nesta sessão do navegador. */
+  /** Demonstração: presente quando o arquivo foi escolhido nesta sessão do navegador. */
   blobId?: string;
+  /** Firebase: caminho do objeto no Cloud Storage (nunca uma URL pública). */
+  path?: string;
+  /** Firebase: resumo SHA-256 do conteúdo, calculado pelo servidor. */
+  sha256?: string;
 }

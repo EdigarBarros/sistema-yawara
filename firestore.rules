@@ -1,0 +1,244 @@
+rules_version = '2';
+
+/*
+ * CENTRAL YAWARA — REGRAS DE SEGURANÇA DO CLOUD FIRESTORE
+ * ---------------------------------------------------------------------------
+ * Princípios:
+ *  1. Fechado por padrão: o que não está liberado aqui é negado.
+ *  2. Toda gravação de dados de negócio é feita pelo servidor (Cloud Functions,
+ *     Admin SDK), que valida identidade, permissões, regras de negócio e grava
+ *     a auditoria. O navegador só grava a marcação de leitura das próprias
+ *     notificações.
+ *  3. Leitura exige conta ATIVA. A autorização vem de `userAccess/{uid}`,
+ *     calculado e gravado somente pelo servidor (o cliente não consegue
+ *     alterar o próprio cargo, permissões ou marcadores).
+ *  4. Registros com público configurável guardam `readers` (marcadores de
+ *     público). A leitura é permitida quando há interseção com os marcadores
+ *     do usuário (`userAccess.tokens`), ou quando ele tem `<módulo>.admin`.
+ *     Consultas precisam filtrar por `readers array-contains-any <tokens>`
+ *     (as regras não filtram resultados: uma consulta ampla é recusada).
+ *
+ * Ver docs/backend/seguranca.md para o modelo completo.
+ */
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* ----------------------------- utilitários ----------------------------- */
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function accessDoc() {
+      return get(/databases/$(database)/documents/userAccess/$(request.auth.uid));
+    }
+
+    function access() {
+      return accessDoc().data;
+    }
+
+    /** Conta autenticada, com retrato de acesso e situação ativa. */
+    function active() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/userAccess/$(request.auth.uid))
+        && access().status == 'active';
+    }
+
+    function can(permission) {
+      return active() && permission in access().permissions;
+    }
+
+    function myTokens() {
+      return access().tokens;
+    }
+
+    /** Registro com público: permissão de ver o módulo + (admin do módulo ou público compatível). */
+    function visible(module, data) {
+      return can(module + '.view')
+        && (can(module + '.admin') || data.readers.hasAny(myTokens()));
+    }
+
+    /* --------------------------- organização ------------------------------ */
+
+    // Retrato de autorização: o próprio usuário (para a interface) e quem
+    // administra permissões. Gravado apenas pelo servidor.
+    match /userAccess/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || can('organization.admin'));
+      allow list: if can('organization.admin');
+      allow write: if false;
+    }
+
+    // Dados institucionais do integrante (nome, cargo, departamentos, situação).
+    match /members/{uid} {
+      allow read: if active();
+      allow write: if false;
+    }
+
+    // Dados administrativos do integrante (e-mail de acesso, quem cadastrou).
+    match /memberPrivate/{uid} {
+      allow get: if active() && (request.auth.uid == uid || can('organization.edit'));
+      allow list: if can('organization.edit');
+      allow write: if false;
+    }
+
+    match /roles/{roleId} {
+      allow read: if active();
+      allow write: if false;
+    }
+
+    match /departments/{depId} {
+      allow read: if active();
+      allow write: if false;
+    }
+
+    // Convites: somente quem pode convidar/editar integrantes. O token do convite
+    // nunca é gravado — apenas o seu hash.
+    match /invitations/{id} {
+      allow read: if can('organization.create') || can('organization.edit');
+      allow write: if false;
+    }
+
+    /* ---------------------------- configurações ---------------------------- */
+
+    match /settings/{docId} {
+      allow read: if active();
+      allow write: if false;
+    }
+
+    match /documentCategories/{id} {
+      allow read: if active();
+      allow write: if false;
+    }
+
+    match /financeCategories/{id} {
+      allow read: if active();
+      allow write: if false;
+    }
+
+    /* ------------------------------ campanhas ------------------------------ */
+
+    function campaignVisible(campaignId) {
+      return visible('campaigns', get(/databases/$(database)/documents/campaigns/$(campaignId)).data);
+    }
+
+    match /campaigns/{campaignId} {
+      allow get, list: if visible('campaigns', resource.data);
+      allow write: if false;
+
+      // Parte pública das vendas (números, situação, pagamento) — sem dados pessoais.
+      match /sales/{saleId} {
+        allow read: if campaignVisible(campaignId);
+        allow write: if false;
+      }
+
+      // Dados pessoais do comprador e comprovante. `readers` = público
+      // "dados dos compradores" + criador + quem vendeu/registrou.
+      match /buyers/{saleId} {
+        allow get, list: if can('campaigns.view')
+          && (can('campaigns.admin') || resource.data.readers.hasAny(myTokens()));
+        allow write: if false;
+      }
+
+      // Travas por número (controle de concorrência). Uso exclusivo do servidor.
+      match /numbers/{number} {
+        allow read, write: if false;
+      }
+    }
+
+    /* ------------------------------- eventos ------------------------------- */
+
+    match /events/{eventId} {
+      allow get, list: if visible('events', resource.data);
+      allow write: if false;
+    }
+
+    /* ------------------------------ documentos ----------------------------- */
+
+    match /documents/{docId} {
+      allow get, list: if visible('documents', resource.data);
+      allow write: if false;
+    }
+
+    /* ------------------------------- reuniões ------------------------------ */
+
+    match /meetings/{meetingId} {
+      allow get, list: if visible('meetings', resource.data);
+      allow write: if false;
+    }
+
+    /* ------------------------------ financeiro ----------------------------- */
+
+    // Lançamentos: somente quem tem acesso ao Financeiro. A aba financeira de
+    // um evento, para a diretoria do departamento, é servida pelo servidor
+    // (financeApi.listForEvent), que aplica a política específica.
+    match /financeEntries/{entryId} {
+      allow read: if can('finance.view');
+      allow write: if false;
+    }
+
+    /* ------------------------------- marketing ----------------------------- */
+
+    match /contents/{contentId} {
+      allow get, list: if visible('marketing', resource.data);
+      allow write: if false;
+    }
+
+    /* --------------------------- ensino e extensão ------------------------- */
+
+    match /projects/{projectId} {
+      allow get, list: if visible('extension', resource.data);
+      allow write: if false;
+
+      // Lista de presença (dados pessoais): somente quem pode editar o projeto.
+      // `editors` = criador + responsável; `extension.edit` também pode.
+      match /private/{docId} {
+        allow get: if can('extension.view')
+          && (can('extension.admin') || can('extension.edit') || resource.data.editors.hasAny(myTokens()));
+        allow write: if false;
+      }
+    }
+
+    /* ----------------------------- notificações ---------------------------- */
+
+    match /notifications/{id} {
+      allow get, list: if active() && resource.data.recipientId == request.auth.uid;
+      // Único dado gravado pelo navegador: marcar como lida (uma vez, com o
+      // horário do servidor). Nenhum outro campo pode mudar.
+      allow update: if active()
+        && resource.data.recipientId == request.auth.uid
+        && resource.data.readAt == null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt'])
+        && request.resource.data.readAt == request.time;
+      allow create, delete: if false;
+    }
+
+    /* ------------------------------- auditoria ----------------------------- */
+
+    match /auditLogs/{id} {
+      allow read: if can('audit.view');
+      allow write: if false;
+    }
+
+    /* ------------------------- uso exclusivo do servidor -------------------- */
+
+    // Índice de busca, controle de idempotência, contadores de códigos e
+    // tíquetes de envio de arquivos (lidos pelas regras do Storage).
+    match /searchIndex/{id} {
+      allow read, write: if false;
+    }
+    match /idempotency/{id} {
+      allow read, write: if false;
+    }
+    match /counters/{id} {
+      allow read, write: if false;
+    }
+    match /uploads/{id} {
+      allow read, write: if false;
+    }
+
+    // Qualquer outro caminho: negado.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,11 +1,17 @@
 /**
- * Implementação de dados em uso.
+ * Implementação de dados em uso, escolhida por NEXT_PUBLIC_DATA_SOURCE:
  *
- * ETAPA 1 (atual): serviços locais com dados de demonstração no navegador.
- * ETAPA 2: criar `src/services/firebase/*` implementando os mesmos contratos
- * de `./contracts` e trocar a atribuição abaixo. As telas não precisam mudar.
+ *  - "demo" (padrão): serviços locais com dados fictícios guardados apenas
+ *    neste navegador. Nunca acessa o Firebase.
+ *  - "firebase": Firebase Authentication, Cloud Firestore, Cloud Storage e
+ *    Cloud Functions (ver docs/backend).
+ *
+ * As telas só conhecem os contratos de ./contracts — trocar a implementação
+ * não altera as telas.
  */
+import { APP_MODE } from "@/lib/mode";
 import type { Services } from "./contracts";
+import { localAudit } from "./local/audit";
 import { localAuth } from "./local/auth";
 import { localOrganization } from "./local/organization";
 import { localCampaigns } from "./local/campaigns";
@@ -16,9 +22,10 @@ import { localFinance } from "./local/finance";
 import { localMarketing } from "./local/marketing";
 import { localExtension } from "./local/extension";
 import { localNotifications, localSearch, localSettings } from "./local/system";
-import { getObjectUrl } from "./local/blob-store";
+import { getObjectUrl, isAvailable, loadObjectUrl, openFile } from "./local/blob-store";
+import { firebaseServices } from "./firebase";
 
-export const services: Services = {
+const localServices: Services = {
   auth: localAuth,
   organization: localOrganization,
   campaigns: localCampaigns,
@@ -31,11 +38,14 @@ export const services: Services = {
   settings: localSettings,
   notifications: localNotifications,
   search: localSearch,
-  files: { getObjectUrl },
+  files: { getObjectUrl, isAvailable, open: openFile, loadObjectUrl },
+  audit: localAudit,
 };
 
-/** Identifica a fonte de dados atual — exibido na interface como aviso. */
-export const DATA_SOURCE = "demo-local" as const;
+export const services: Services = APP_MODE === "firebase" ? firebaseServices : localServices;
 
-export { ServiceError } from "./local/context";
+/** Identifica a fonte de dados atual — exibido na interface como aviso. */
+export const DATA_SOURCE = APP_MODE === "firebase" ? ("firebase" as const) : ("demo-local" as const);
+
+export { ServiceError } from "./errors";
 export type * from "./contracts";

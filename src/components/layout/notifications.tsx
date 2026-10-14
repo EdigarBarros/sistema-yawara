@@ -10,6 +10,7 @@ import { useAction } from "@/hooks/use-action";
 import { useSession } from "@/stores/session";
 import { formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { isDemoMode } from "@/lib/mode";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/menu";
 import { Button } from "@/components/ui/button";
 import { EmptyState, InlineLoader } from "@/components/shared/states";
@@ -24,7 +25,7 @@ const ICONS: Record<AppNotification["kind"], React.ReactNode> = {
   report_shared: <FileText />,
 };
 
-/** Notificações internas demonstrativas — nenhum e-mail ou mensagem externa é enviado. */
+/** Notificações internas — nenhum e-mail ou mensagem externa é enviado. */
 export function NotificationsButton() {
   const router = useRouter();
   const userId = useSession((s) => s.userId) ?? "";
@@ -51,7 +52,7 @@ export function NotificationsButton() {
         <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
           <div>
             <p className="text-[14px] font-semibold">Notificações</p>
-            <p className="text-[11.5px] text-fg-subtle">Avisos internos da demonstração</p>
+            <p className="text-[11.5px] text-fg-subtle">{isDemoMode ? "Avisos internos da demonstração" : "Avisos internos da Central"}</p>
           </div>
           {unread > 0 && (
             <Button size="sm" variant="ghost" loading={markAll.pending} onClick={() => markAll.runSafe()}>

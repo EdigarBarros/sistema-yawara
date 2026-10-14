@@ -1,0 +1,84 @@
+/**
+ * Chamadas às Cloud Functions.
+ *
+ * Toda operação de escrita leva um `requestId`. Se a conexão cair depois de o
+ * servidor concluir a operação, o reenvio com o mesmo identificador não
+ * duplica nada: o servidor devolve o resultado já registrado (ver
+ * functions/src/core/dispatch.ts). O hook useAction reaproveita o
+ * identificador ao repetir a mesma ação após uma falha de conexão.
+ *
+ * IMPORTANTE: nos serviços, chame `takeRequestId()` na PRIMEIRA linha do
+ * método (antes de qualquer await).
+ */
+import { FunctionsError, httpsCallable } from "firebase/functions";
+import { ServiceError, type ServiceErrorCode } from "../errors";
+import { firebase } from "./app";
+
+export type ApiName = "auth" | "organization" | "system" | "campaigns" | "events" | "documents" | "meetings" | "finance" | "marketing" | "extension";
+
+let ambientRequestId: string | null = null;
+
+export function newRequestId() {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+/** Executa `fn` com o identificador de requisição informado (consumido de forma síncrona pelo serviço). */
+export function withRequestId<T>(id: string, fn: () => T): T {
+  ambientRequestId = id;
+  try {
+    return fn();
+  } finally {
+    ambientRequestId = null;
+  }
+}
+
+export function takeRequestId() {
+  const id = ambientRequestId ?? newRequestId();
+  ambientRequestId = null;
+  return id;
+}
+
+const GENERIC = "Não foi possível concluir a operação. Tente novamente em instantes.";
+
+const CODE_FROM_FUNCTIONS: Record<string, ServiceErrorCode> = {
+  "functions/unauthenticated": "unauthenticated",
+  "functions/permission-denied": "forbidden",
+  "functions/not-found": "not_found",
+  "functions/failed-precondition": "conflict",
+  "functions/already-exists": "conflict",
+  "functions/aborted": "conflict",
+  "functions/invalid-argument": "invalid",
+  "functions/unavailable": "unavailable",
+  "functions/deadline-exceeded": "unavailable",
+  "functions/resource-exhausted": "unavailable",
+};
+
+export function mapFunctionsError(error: unknown): ServiceError {
+  if (error instanceof ServiceError) return error;
+  if (error instanceof FunctionsError) {
+    const details = (error.details ?? {}) as { code?: ServiceErrorCode };
+    const code = details.code ?? CODE_FROM_FUNCTIONS[error.code] ?? "internal";
+    if (code === "internal") return new ServiceError("internal", GENERIC);
+    if (error.code === "functions/unavailable" && !details.code) {
+      return new ServiceError("unavailable", "Sem conexão com o servidor. Verifique a internet e tente novamente.");
+    }
+    return new ServiceError(code, error.message || GENERIC, details);
+  }
+  return new ServiceError("internal", GENERIC);
+}
+
+export async function callApi<T>(api: ApiName, action: string, payload: unknown = {}, requestId: string = newRequestId()): Promise<T> {
+  const { functions } = firebase();
+  const fn = httpsCallable<{ action: string; payload: unknown; requestId: string }, T>(functions, `${api}Api`, { timeout: 120_000 });
+  try {
+    const res = await fn({ action, payload, requestId });
+    return res.data;
+  } catch (error) {
+    throw mapFunctionsError(error);
+  }
+}
+
+/** Erros em que vale repetir a mesma requisição (falha de conexão ou indisponibilidade momentânea). */
+export function isRetriable(error: unknown) {
+  return error instanceof ServiceError && (error.code === "unavailable" || error.code === "internal");
+}

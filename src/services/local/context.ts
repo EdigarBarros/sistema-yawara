@@ -4,19 +4,10 @@ import { hasPermission, type AccessContext } from "@/lib/permissions";
 import { newId } from "@/lib/utils";
 import type { DemoDB } from "@/data/demo/seed";
 
-export type ServiceErrorCode = "unauthenticated" | "forbidden" | "not_found" | "conflict" | "invalid" | "unavailable";
+import { ServiceError } from "../errors";
 
-/** Erro com mensagem pronta para ser exibida ao usuário. */
-export class ServiceError extends Error {
-  constructor(
-    public code: ServiceErrorCode,
-    message: string,
-    public details?: unknown,
-  ) {
-    super(message);
-    this.name = "ServiceError";
-  }
-}
+export { ServiceError };
+export type { ServiceErrorCode } from "../errors";
 
 let actorOverride: ID | null = null;
 let latencyEnabled = true;

@@ -21,6 +21,10 @@ export interface Meeting {
   mode: MeetingMode;
   location: string;
   participantIds: ID[];
+  /** Participantes externos (convidados sem conta na Central). Apenas nomes. */
+  guests?: string[];
+  /** Evento relacionado, quando a reunião trata de um evento. */
+  eventId?: ID;
   agenda: string[];
   summary: string;
   decisions: string[];

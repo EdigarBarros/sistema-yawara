@@ -114,4 +114,21 @@ export const localOrganization: OrganizationService = {
       return clone(member);
     });
   },
+
+  async listInvitations() {
+    await latency(60, 140);
+    return [];
+  },
+
+  async inviteMember() {
+    throw new ServiceError("unavailable", "Convites dependem do Firebase. Na demonstração, use “Adicionar integrante”.");
+  },
+
+  async renewInvitation() {
+    throw new ServiceError("unavailable", "Convites dependem do Firebase.");
+  },
+
+  async revokeInvitation() {
+    throw new ServiceError("unavailable", "Convites dependem do Firebase.");
+  },
 };

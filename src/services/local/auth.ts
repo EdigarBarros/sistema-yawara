@@ -10,6 +10,8 @@ function toProfile(db: DemoDB, member: Member): DemoProfile {
 }
 
 export const localAuth: AuthService = {
+  mode: "demo",
+
   async listDemoProfiles() {
     await latency(80, 200);
     const db = getDB();
@@ -38,5 +40,17 @@ export const localAuth: AuthService = {
   async requestPasswordReset() {
     await latency(300, 600);
     return { available: false };
+  },
+
+  async signOut() {
+    // A sessão demonstrativa é apenas o perfil escolhido (ver stores/session.ts).
+  },
+
+  async previewInvitation() {
+    throw new ServiceError("unavailable", "Convites só funcionam com o Firebase configurado. Esta é a versão de demonstração.");
+  },
+
+  async acceptInvitation() {
+    throw new ServiceError("unavailable", "Convites só funcionam com o Firebase configurado. Esta é a versão de demonstração.");
   },
 };

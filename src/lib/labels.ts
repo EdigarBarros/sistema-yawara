@@ -46,6 +46,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   extension: "Ensino e Extensão",
   organization: "Diretoria e organização",
   settings: "Configurações",
+  audit: "Auditoria",
 };
 
 export const ACTION_LABELS: Record<PermissionAction, string> = {

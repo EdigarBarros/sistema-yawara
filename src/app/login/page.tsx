@@ -19,6 +19,9 @@ import { Avatar, Skeleton } from "@/components/ui/misc";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DemoNotice } from "@/components/shared/states";
 import { BrandEmblem } from "@/components/layout/brand";
+import { Checkbox } from "@/components/ui/form";
+import { isDemoMode, isFirebaseMode } from "@/lib/mode";
+import { useFirebaseSession, type SessionEndReason } from "@/services/firebase/session";
 
 const loginSchema = z.object({
   email: z.string().trim().min(1, "Informe seu e-mail.").email("Digite um e-mail válido, como nome@example.org."),
@@ -29,12 +32,16 @@ type LoginValues = z.infer<typeof loginSchema>;
 function PasswordResetDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"idle" | "loading" | "done">("idle");
+  const [error, setError] = useState<string>();
   return (
     <Dialog
       open={open}
       onOpenChange={(o) => {
         onOpenChange(o);
-        if (!o) setState("idle");
+        if (!o) {
+          setState("idle");
+          setError(undefined);
+        }
       }}
     >
       <DialogContent
@@ -51,9 +58,19 @@ function PasswordResetDialog({ open, onOpenChange }: { open: boolean; onOpenChan
               variant="primary"
               loading={state === "loading"}
               onClick={async () => {
+                setError(undefined);
+                if (isFirebaseMode && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) {
+                  setError("Informe um e-mail válido.");
+                  return;
+                }
                 setState("loading");
-                await services.auth.requestPasswordReset(email);
-                setState("done");
+                try {
+                  await services.auth.requestPasswordReset(email);
+                  setState("done");
+                } catch (e) {
+                  setError(errorMessage(e));
+                  setState("idle");
+                }
               }}
             >
               Solicitar recuperação
@@ -62,13 +79,20 @@ function PasswordResetDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         }
       >
         {state === "done" ? (
-          <DemoNotice tone="warn">
-            <strong className="text-fg">Recurso indisponível nesta demonstração.</strong> Nenhum e-mail foi enviado. A recuperação de senha depende do
-            Firebase Authentication, que será configurado na Etapa 2 (backend).
-          </DemoNotice>
+          isFirebaseMode ? (
+            <DemoNotice>
+              <strong className="text-fg">Solicitação registrada.</strong> Se houver uma conta com esse e-mail, você receberá um link para criar uma nova senha.
+              Verifique também a caixa de spam.
+            </DemoNotice>
+          ) : (
+            <DemoNotice tone="warn">
+              <strong className="text-fg">Recurso indisponível nesta demonstração.</strong> Nenhum e-mail foi enviado. A recuperação de senha funciona com o
+              Firebase Authentication configurado.
+            </DemoNotice>
+          )
         ) : (
-          <Field label="E-mail">
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nome@example.org" autoComplete="email" />
+          <Field label="E-mail" error={error}>
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nome@exemplo.org" autoComplete="email" />
           </Field>
         )}
       </DialogContent>
@@ -76,8 +100,26 @@ function PasswordResetDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   );
 }
 
+const END_MESSAGES: Record<Exclude<SessionEndReason, null | "manual">, { title: string; text: string }> = {
+  expired: { title: "Sua sessão terminou.", text: "Entre novamente para continuar. Isso acontece quando a sessão expira ou é encerrada por segurança." },
+  disabled: { title: "Sua conta foi desativada.", text: "O acesso à Central foi encerrado. Se acha que é um engano, procure a presidência da Atlética." },
+  not_enabled: { title: "Sua conta não tem acesso à Central.", text: "Ela ainda não foi habilitada ou o convite não foi concluído. Procure a presidência." },
+};
+
+function SessionEndNotice() {
+  const reason = useFirebaseSession((s) => s.endedReason);
+  if (!reason || reason === "manual") return null;
+  const msg = END_MESSAGES[reason];
+  return (
+    <div role="status" className="mb-5 rounded-lg border border-warn/35 bg-warn/10 px-3.5 py-3 text-[13px]">
+      <strong className="text-fg">{msg.title}</strong> <span className="text-fg-muted">{msg.text}</span>
+    </div>
+  );
+}
+
 function LoginForm({ onSuccess }: { onSuccess: (userId: string, label: string) => void }) {
   const [showPassword, setShowPassword] = useState(false);
+  const [remember, setRemember] = useState(true);
   const [serverError, setServerError] = useState<string>();
   const [resetOpen, setResetOpen] = useState(false);
   const {
@@ -89,8 +131,8 @@ function LoginForm({ onSuccess }: { onSuccess: (userId: string, label: string) =
   const onSubmit = async (values: LoginValues) => {
     setServerError(undefined);
     try {
-      const profile = await services.auth.signInWithPassword(values.email, values.password);
-      onSuccess(profile.member.id, profile.member.demoProfile?.label ?? profile.role.name);
+      const profile = await services.auth.signInWithPassword(values.email, values.password, { remember });
+      onSuccess(profile.member.id, isFirebaseMode ? profile.member.name.split(" ")[0] : (profile.member.demoProfile?.label ?? profile.role.name));
     } catch (e) {
       setServerError(errorMessage(e));
     }
@@ -122,8 +164,14 @@ function LoginForm({ onSuccess }: { onSuccess: (userId: string, label: string) =
           {...register("password")}
         />
       </Field>
-      <div className="flex justify-end">
-        <button type="button" onClick={() => setResetOpen(true)} className="text-[13px] font-medium text-gold-fg hover:underline">
+      <div className={cn("flex items-center gap-3", isFirebaseMode ? "justify-between" : "justify-end")}>
+        {isFirebaseMode && (
+          <label className="flex cursor-pointer items-center gap-2 text-[13px] text-fg-muted">
+            <Checkbox checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+            Manter conectado neste dispositivo
+          </label>
+        )}
+        <button type="button" onClick={() => setResetOpen(true)} className="shrink-0 text-[13px] font-medium text-gold-fg hover:underline">
           Esqueci minha senha
         </button>
       </div>
@@ -135,10 +183,17 @@ function LoginForm({ onSuccess }: { onSuccess: (userId: string, label: string) =
       <Button type="submit" variant="primary" size="lg" className="w-full" loading={isSubmitting}>
         {isSubmitting ? "Verificando…" : "Entrar"} {!isSubmitting && <ArrowRight />}
       </Button>
-      <DemoNotice>
-        <strong className="text-fg">O login real ainda não está ativo.</strong> Nesta demonstração, os e-mails dos perfis fictícios (por exemplo,{" "}
-        <code className="font-mono text-[12px] text-fg">rebeca@example.org</code>) entram sem verificação de senha.
-      </DemoNotice>
+      {isDemoMode ? (
+        <DemoNotice>
+          <strong className="text-fg">Versão de demonstração.</strong> Os e-mails dos perfis fictícios (por exemplo,{" "}
+          <code className="font-mono text-[12px] text-fg">rebeca@example.org</code>) entram sem verificação de senha.
+        </DemoNotice>
+      ) : (
+        <p className="text-[12.5px] leading-relaxed text-fg-subtle">
+          O acesso é feito por convite. Se você recebeu um link da presidência, abra-o para criar sua senha. Use “Manter conectado” apenas em
+          dispositivos pessoais.
+        </p>
+      )}
       <PasswordResetDialog open={resetOpen} onOpenChange={setResetOpen} />
     </form>
   );
@@ -203,6 +258,11 @@ export default function LoginPage() {
   }, [hydrated, userId, router]);
 
   const enter = (method: "demo-email" | "demo-profile") => (id: string, label: string) => {
+    if (isFirebaseMode) {
+      // A ponte de sessão (FirebaseSessionBridge) preenche a sessão e o redirecionamento acontece em seguida.
+      notifyInfo(`Bem-vindo(a), ${label}`);
+      return;
+    }
     signIn(id, method);
     notifyInfo(`Entrou no modo demonstração como ${label}`, method === "demo-email" ? "A senha não é verificada nesta etapa." : "Perfil fictício.");
     router.replace("/inicio");
@@ -254,8 +314,10 @@ export default function LoginPage() {
           <div className="w-full max-w-[420px]">
             <h2 className="font-display text-[30px] font-bold tracking-[-0.005em]">Acessar a Central</h2>
             <p className="mt-1.5 mb-6 text-[14px] text-fg-muted">
-              {tab === "login" ? "Entre com seu e-mail institucional e senha." : "Explore a interface com um perfil fictício."}
+              {tab === "login" ? "Entre com seu e-mail e senha." : "Explore a interface com um perfil fictício."}
             </p>
+            {isFirebaseMode && <SessionEndNotice />}
+            {isDemoMode && (
             <Segmented
               ariaLabel="Forma de acesso"
               value={tab}
@@ -266,10 +328,11 @@ export default function LoginPage() {
                 { value: "demo", label: "Modo demonstração", icon: <UserRoundCheck /> },
               ]}
             />
+            )}
             <div className={cn(tab !== "login" && "hidden")}>
               <LoginForm onSuccess={enter("demo-email")} />
             </div>
-            {tab === "demo" && <DemoProfiles onSelect={enter("demo-profile")} />}
+            {isDemoMode && tab === "demo" && <DemoProfiles onSelect={enter("demo-profile")} />}
             <div className="mt-8 flex items-center justify-between border-t border-line pt-5 text-[12px] text-fg-subtle">
               <span>Atlética Yawara · Psicologia</span>
               <button

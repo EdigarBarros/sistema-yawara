@@ -1,18 +1,37 @@
 /**
- * Permissões SIMULADAS.
+ * Regras de permissão compartilhadas.
  *
- * Estas funções decidem o que a interface mostra para cada perfil de
- * demonstração. Elas não oferecem segurança: qualquer pessoa com acesso ao
- * navegador pode alterar os dados locais. A autorização real será feita no
- * backend (regras do Firestore/Cloud Functions) na Etapa 2, reaproveitando
- * esta mesma lógica de públicos.
+ * Na interface, decidem o que mostrar — o que NÃO é segurança. A autorização
+ * efetiva é aplicada pelo servidor (Cloud Functions) e pelas regras do
+ * Firestore/Storage, que usam exatamente esta mesma lógica de públicos
+ * (ver src/lib/access-tokens.ts). No modo demonstração, todas as permissões
+ * são simuladas no navegador.
  */
 import type { Audience, Department, ID, Member, ModuleKey, Permission, Role } from "@/types";
+import { audienceTokens, intersects, userTokens } from "./access-tokens";
 
 export interface AccessContext {
   user: Member;
   role: Role;
   department: Department | undefined;
+}
+
+/**
+ * Permissões privilegiadas: só podem ser concedidas por quem já as possui e
+ * tem `organization.admin`. Protegem a própria estrutura de autorização.
+ */
+export const PRIVILEGED_PERMISSIONS: Permission[] = [
+  "organization.create",
+  "organization.edit",
+  "organization.admin",
+  "settings.edit",
+  "settings.admin",
+  "audit.view",
+  "audit.export",
+];
+
+export function isPrivileged(permission: Permission) {
+  return PRIVILEGED_PERMISSIONS.includes(permission);
 }
 
 export function hasPermission(ctx: AccessContext | null | undefined, permission: Permission) {
@@ -24,28 +43,9 @@ export function canViewModule(ctx: AccessContext | null | undefined, module: Mod
   return hasPermission(ctx, `${module}.view`);
 }
 
-/** Verifica se o usuário pertence ao público informado. */
+/** Verifica se o usuário pertence ao público informado (mesma regra usada no servidor). */
 export function matchesAudience(ctx: AccessContext, audience: Audience, fallbackDepartmentId?: ID): boolean {
-  const { role, user } = ctx;
-  if (user.status !== "active") return false;
-  switch (audience.scope) {
-    case "all":
-      return true;
-    case "board":
-      return role.isBoard;
-    case "directors":
-      return role.level === "presidency" || role.level === "director";
-    case "directors_advisors":
-      return role.level === "presidency" || role.level === "director" || role.level === "advisor";
-    case "department":
-      return role.departmentId === (audience.departmentId ?? fallbackDepartmentId);
-    case "roles":
-      return audience.roleIds.includes(role.id);
-    case "people":
-      return audience.userIds.includes(user.id);
-    default:
-      return false;
-  }
+  return intersects(userTokens(ctx.user, ctx.role), audienceTokens(audience, fallbackDepartmentId));
 }
 
 /**
@@ -68,7 +68,7 @@ export type Ownership = "mine" | "department" | "shared";
 /** Diferencia o que é próprio do usuário/departamento do que foi compartilhado com ele. */
 export function ownershipOf(ctx: AccessContext, record: { createdBy: ID; departmentId?: ID }): Ownership {
   if (record.createdBy === ctx.user.id) return "mine";
-  if (record.departmentId && record.departmentId === ctx.role.departmentId) return "department";
+  if (record.departmentId && (record.departmentId === ctx.role.departmentId || ctx.user.departmentIds?.includes(record.departmentId))) return "department";
   return "shared";
 }
 

@@ -12,6 +12,8 @@ import { DemoFootnote, NavList, Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import { CommandPalette } from "./command-palette";
 import { BrandLockup } from "./brand";
+import { UploadTray } from "@/components/shared/upload-tray";
+import { services } from "@/services";
 
 function MobileNav() {
   const open = useUI((s) => s.mobileNavOpen);
@@ -44,7 +46,7 @@ function MobileNav() {
   );
 }
 
-/** Layout das áreas internas: exige um perfil demonstrativo ativo. */
+/** Layout das áreas internas: exige uma sessão ativa (perfil demonstrativo ou conta real). */
 export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { ready: hydrated, userId } = useSessionReady();
@@ -55,11 +57,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (hydrated && !userId) router.replace("/login");
   }, [hydrated, userId, router]);
 
-  // Perfil removido ou dados restaurados: volta para o login.
+  // Perfil removido, conta sem cadastro ou dados restaurados: volta para o login.
   useEffect(() => {
     if (hydrated && userId && access.ready && !access.user) {
-      signOut();
-      router.replace("/login");
+      void services.auth.signOut().finally(() => {
+        signOut();
+        router.replace("/login");
+      });
     }
   }, [hydrated, userId, access.ready, access.user, signOut, router]);
 
@@ -76,6 +80,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
       <MobileNav />
       <CommandPalette />
+      <UploadTray />
     </div>
   );
 }

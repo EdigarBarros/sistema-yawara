@@ -27,6 +27,8 @@ interface CampaignBase {
   status: CampaignStatus;
   departmentId: ID;
   access: CampaignAccess;
+  /** Evento relacionado (opcional). */
+  eventId?: ID;
   notes?: string;
   startDate?: DateOnly;
   endDate?: DateOnly;
