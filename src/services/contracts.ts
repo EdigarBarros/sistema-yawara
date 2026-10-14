@@ -367,6 +367,8 @@ export interface ContentInput {
   briefing: string;
   notes?: string;
   links: ContentLink[];
+  /** Quem pode ver o conteúdo (padrão: todos os integrantes com acesso ao Marketing). */
+  access?: Audience;
 }
 
 export interface MarketingService {
@@ -456,9 +458,25 @@ export interface FileService {
 
 /* ------------------------------- Auditoria ------------------------------ */
 
+export interface ExportRecordInput {
+  module: ModuleKey;
+  resourceType: string;
+  resourceId: ID;
+  /** Ex.: "PDF interno com dados dos compradores (todos os números)". Sem dados pessoais. */
+  summary: string;
+  /** A exportação incluiu dados pessoais? */
+  personalData: boolean;
+}
+
 export interface AuditService {
   /** Registros de auditoria (mais recentes primeiro), paginados. Exige `audit.view`. */
   list(query: AuditQuery): Promise<AuditPage>;
+  /**
+   * Registra na auditoria que um arquivo foi exportado (PDF/CSV/PNG gerado no
+   * navegador a partir de dados que o perfil já podia ver). Melhor esforço:
+   * falhas não impedem a exportação. Demonstração: não faz nada.
+   */
+  recordExport(input: ExportRecordInput): Promise<void>;
 }
 
 export interface Services {

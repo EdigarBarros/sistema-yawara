@@ -51,4 +51,8 @@ export const localAudit: AuditService = {
     const page = entries.slice(start, start + size);
     return { entries: page, nextCursor: start + size < entries.length ? (page[page.length - 1]?.id ?? null) : null };
   },
+
+  async recordExport() {
+    // Demonstração: não há auditoria oficial.
+  },
 };
