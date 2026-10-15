@@ -13,11 +13,17 @@ import type { Member, Role } from "@/types";
 export const PROJECT = "demo-yawara";
 const NOW = "2026-10-14T12:00:00.000Z";
 
+/** Endereço do emulador (definido pelo `firebase emulators:exec`), com as portas padrão como alternativa. */
+function emulator(envVar: string, fallbackPort: number) {
+  const [host, port] = (process.env[envVar] ?? "").split(":");
+  return { host: host || "127.0.0.1", port: Number(port) || fallbackPort };
+}
+
 export async function createEnv(): Promise<RulesTestEnvironment> {
   return initializeTestEnvironment({
     projectId: PROJECT,
-    firestore: { rules: readFileSync("firestore.rules", "utf8"), host: "127.0.0.1", port: 8080 },
-    storage: { rules: readFileSync("storage.rules", "utf8"), host: "127.0.0.1", port: 9199 },
+    firestore: { rules: readFileSync("firestore.rules", "utf8"), ...emulator("FIRESTORE_EMULATOR_HOST", 8080) },
+    storage: { rules: readFileSync("storage.rules", "utf8"), ...emulator("FIREBASE_STORAGE_EMULATOR_HOST", 9199) },
   });
 }
 
