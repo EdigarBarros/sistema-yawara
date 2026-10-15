@@ -2,7 +2,7 @@
   "name": "central-yawara",
   "version": "0.1.0",
   "private": true,
-  "description": "Central Yawara — front-end demonstrativo (Etapa 1) da plataforma interna da Atlética Yawara de Psicologia",
+  "description": "Central Yawara — plataforma interna da Atlética Yawara de Psicologia (Next.js + Firebase)",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
