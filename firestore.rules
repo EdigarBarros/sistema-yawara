@@ -191,8 +191,9 @@ service cloud.firestore {
 
       // Lista de presença (dados pessoais): somente quem pode editar o projeto.
       // `editors` = criador + responsável; `extension.edit` também pode.
+      // Também exige que o próprio projeto seja visível para quem lê.
       match /private/{docId} {
-        allow get: if can('extension.view')
+        allow get: if visible('extension', get(/databases/$(database)/documents/projects/$(projectId)).data)
           && (can('extension.admin') || can('extension.edit') || resource.data.editors.hasAny(myTokens()));
         allow write: if false;
       }

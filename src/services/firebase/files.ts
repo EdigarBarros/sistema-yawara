@@ -56,7 +56,7 @@ export async function uploadFile(purpose: UploadPurpose, file: File | Blob, opti
     fileName: name,
     size: file.size,
     contentType,
-    targetId: options.targetId,
+    ...(options.targetId ? { targetId: options.targetId } : {}),
   });
   const { storage } = firebase();
   const task = uploadBytesResumable(ref(storage, ticket.path), file, { contentType });

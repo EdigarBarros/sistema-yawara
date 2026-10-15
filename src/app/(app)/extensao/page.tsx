@@ -17,6 +17,7 @@ import { EmptyState, ErrorState, RestrictedState } from "@/components/shared/sta
 import { StatusBadge } from "@/components/shared/badges";
 import { DateChip } from "@/components/shared/list-row";
 import { ProjectFormDialog } from "@/features/extension/project-form-dialog";
+import { attendeeTotal } from "@/features/extension/labels";
 
 export default function ExtensionPage() {
   const router = useRouter();
@@ -68,12 +69,19 @@ export default function ExtensionPage() {
       key: "people",
       header: "Presença",
       hideBelow: "lg",
-      cell: (p) => (
-        <span className="inline-flex items-center gap-1.5 text-fg-muted">
-          <Users className="size-4" />
-          {p.attendees.filter((a) => a.present).length}/{p.attendees.length}
-        </span>
-      ),
+      cell: (p) =>
+        p.attendeesRestricted ? (
+          // A listagem não carrega os nomes (dados pessoais): só a contagem de inscritos.
+          <span className="inline-flex items-center gap-1.5 text-fg-muted" title="Inscritos na lista de presença">
+            <Users className="size-4" />
+            {attendeeTotal(p)} inscrito(s)
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-fg-muted">
+            <Users className="size-4" />
+            {p.attendees.filter((a) => a.present).length}/{p.attendees.length}
+          </span>
+        ),
     },
     { key: "status", header: "Situação", cell: (p) => <StatusBadge meta={PROJECT_STATUS[p.status]} /> },
   ];

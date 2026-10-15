@@ -8,6 +8,7 @@ import { formatDate, formatMoney, formatShortMonth, todayDateOnly } from "@/lib/
 import { entryStatusMeta } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/lib/notify";
+import { isDemoMode } from "@/lib/mode";
 import { ButtonLink } from "@/components/ui/button";
 import { PageHeader, Panel } from "@/components/shared/page";
 import { DemoNotice, EmptyState, ErrorState, InlineLoader, RestrictedState } from "@/components/shared/states";
@@ -47,7 +48,9 @@ export default function FinanceOverviewPage() {
         }
       />
       <FinanceNav />
-      <DemoNotice className="mb-5">Todos os valores são fictícios e servem apenas para demonstrar a interface. Não há integração bancária nem pagamentos reais.</DemoNotice>
+      {isDemoMode && (
+        <DemoNotice className="mb-5">Todos os valores são fictícios e servem apenas para demonstrar a interface. Não há integração bancária nem pagamentos reais.</DemoNotice>
+      )}
       {isError ? (
         <ErrorState message={errorMessage(error)} onRetry={() => refetch()} />
       ) : (

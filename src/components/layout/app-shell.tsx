@@ -7,7 +7,9 @@ import { X } from "lucide-react";
 import { useSession, useSessionReady } from "@/stores/session";
 import { useUI } from "@/stores/ui";
 import { useAccess } from "@/hooks/use-access";
-import { FullPageLoader, PageSkeleton } from "@/components/shared/states";
+import { ErrorState, FullPageLoader, PageSkeleton } from "@/components/shared/states";
+import { useDirectory } from "@/hooks/use-data";
+import { errorMessage } from "@/lib/notify";
 import { DemoFootnote, NavList, Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import { CommandPalette } from "./command-palette";
@@ -52,6 +54,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { ready: hydrated, userId } = useSessionReady();
   const signOut = useSession((s) => s.signOut);
   const access = useAccess();
+  const dir = useDirectory();
 
   useEffect(() => {
     if (hydrated && !userId) router.replace("/login");
@@ -59,14 +62,22 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Perfil removido, conta sem cadastro ou dados restaurados: volta para o login.
   useEffect(() => {
-    if (hydrated && userId && access.ready && !access.user) {
+    // Uma falha momentânea ao carregar a estrutura NÃO encerra a sessão.
+    if (hydrated && userId && access.ready && !access.user && !dir.error) {
       void services.auth.signOut().finally(() => {
         signOut();
         router.replace("/login");
       });
     }
-  }, [hydrated, userId, access.ready, access.user, signOut, router]);
+  }, [hydrated, userId, access.ready, access.user, dir.error, signOut, router]);
 
+  if (hydrated && userId && dir.error) {
+    return (
+      <div className="grid min-h-dvh place-items-center px-6">
+        <ErrorState message={errorMessage(dir.error, "Não foi possível carregar a Central.")} onRetry={() => void dir.refetch()} />
+      </div>
+    );
+  }
   if (!hydrated || !userId || !access.ready || !access.user) return <FullPageLoader />;
 
   return (

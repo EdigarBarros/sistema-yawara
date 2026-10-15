@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Download, ExternalLink, Paperclip, Pencil } from "lucide-react";
+import { ArrowRight, ExternalLink, Paperclip, Pencil } from "lucide-react";
 import type { ContentItem, ContentStatus } from "@/types";
 import { services } from "@/services";
 import { useAccess } from "@/hooks/use-access";
@@ -11,16 +11,20 @@ import { useCampaigns, useDirectory, useEvents } from "@/hooks/use-data";
 import { allowedContentStatuses, canEditContent } from "@/lib/policies";
 import { CHANNEL_LABELS, CONTENT_FLOW, CONTENT_STATUS, CONTENT_TYPE_LABELS } from "@/lib/labels";
 import { formatDate, formatDateTime } from "@/lib/format";
+import { isDemoMode } from "@/lib/mode";
 import { cn } from "@/lib/utils";
+import { MARKETING_ACCEPT } from "@/services/firebase/marketing";
 import { Sheet, SheetContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/misc";
 import { DetailList, SectionTitle } from "@/components/shared/page";
 import { FileRow } from "@/components/shared/pickers";
+import { FileActions } from "@/components/shared/file-actions";
+import { AudienceSummary } from "@/components/shared/audience";
 import { HistoryTimeline } from "@/components/shared/history";
 import { DemoNotice } from "@/components/shared/states";
 import { confirmAction } from "@/components/shared/confirm";
-import { ContentFormDialog } from "./content-form-dialog";
+import { CONTENT_SCOPE_LABELS, ContentFormDialog } from "./content-form-dialog";
 
 /** Linha do tempo das etapas de produção. */
 function FlowTrack({ status }: { status: ContentStatus }) {
@@ -48,7 +52,9 @@ export function ContentSheet({ item, onOpenChange }: { item: ContentItem | null;
   const [editOpen, setEditOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const move = useAction((id: string, s: ContentStatus) => services.marketing.setStatus(id, s), { success: (c) => `Etapa: ${CONTENT_STATUS[c.status].label}` });
-  const attach = useAction((id: string, files: File[]) => services.marketing.addFiles(id, files), { success: "Arquivos anexados (somente neste navegador)" });
+  const attach = useAction((id: string, files: File[]) => services.marketing.addFiles(id, files), {
+    success: isDemoMode ? "Arquivos anexados (somente neste navegador)" : "Arquivos anexados",
+  });
 
   if (!item) return <Sheet open={false} onOpenChange={onOpenChange} />;
   const ctx = access.ctx;
@@ -157,6 +163,7 @@ export function ContentSheet({ item, onOpenChange }: { item: ContentItem | null;
                         ref={fileRef}
                         type="file"
                         multiple
+                        accept={isDemoMode ? undefined : MARKETING_ACCEPT}
                         className="sr-only"
                         tabIndex={-1}
                         onChange={(e) => {
@@ -174,22 +181,9 @@ export function ContentSheet({ item, onOpenChange }: { item: ContentItem | null;
               {item.files.length === 0 && item.links.length === 0 && <p className="text-[13px] text-fg-subtle">Nenhum arquivo ou link.</p>}
               <div className="divide-y divide-line">
                 {item.files.map((f, i) => {
-                  const url = services.files.getObjectUrl(f.blobId);
-                  return (
-                    <FileRow
-                      key={i}
-                      name={f.name}
-                      size={f.size}
-                      meta={url ? "neste navegador" : "exemplo sem arquivo"}
-                      actions={
-                        url && (
-                          <a href={url} download={f.name} aria-label={`Baixar ${f.name}`} className="grid size-8 place-items-center rounded-md text-fg-muted hover:bg-surface-2">
-                            <Download className="size-4" />
-                          </a>
-                        )
-                      }
-                    />
-                  );
+                  const available = services.files.isAvailable(f);
+                  const meta = isDemoMode ? (available ? "neste navegador" : "exemplo sem arquivo") : available ? "download autenticado" : "arquivo indisponível";
+                  return <FileRow key={f.path ?? f.blobId ?? i} name={f.name} size={f.size} meta={meta} actions={<FileActions file={f} label={f.name} />} />;
                 })}
                 {item.links.map((l, i) => (
                   <a key={i} href={l.url} target="_blank" rel="noreferrer" className="flex items-center gap-3 py-2.5 text-[13px] hover:text-gold-fg">
@@ -197,6 +191,13 @@ export function ContentSheet({ item, onOpenChange }: { item: ContentItem | null;
                     <span className="truncate">{l.label || l.url}</span>
                   </a>
                 ))}
+              </div>
+            </div>
+            <div>
+              <SectionTitle>Quem pode ver</SectionTitle>
+              <div className="rounded-lg border border-line bg-sunken px-4 py-3">
+                <AudienceSummary audience={item.access} labels={CONTENT_SCOPE_LABELS} alwaysIncluded={[item.createdBy, item.responsibleId]} />
+                <p className="mt-2 text-[12px] text-fg-subtle">Quem criou e o responsável sempre têm acesso{editable ? ". Para compartilhar com outro departamento, edite o conteúdo." : "."}</p>
               </div>
             </div>
             <DemoNotice>A Central não publica nas redes sociais. “Publicado” é apenas a marcação feita pela equipe.</DemoNotice>

@@ -40,7 +40,7 @@ export default function DocumentsPage() {
   const dir = useDirectory();
   const enabled = access.canModule("documents");
   const { data, isLoading, isError, error, refetch } = useDocuments(enabled);
-  const { data: categories } = useDocumentCategories();
+  const { data: categories, isError: categoriesFailed, refetch: refetchCategories } = useDocumentCategories();
   const [category, setCategory] = useState("");
   const [dep, setDep] = useState("");
   const [status, setStatus] = useState<StatusFilter>("active");
@@ -154,6 +154,14 @@ export default function DocumentsPage() {
               </li>
             ))}
           </ul>
+          {categoriesFailed && (
+            <p role="alert" className="mt-2 px-3 text-[12px] text-danger">
+              Não foi possível carregar as categorias.{" "}
+              <button type="button" onClick={() => refetchCategories()} className="font-semibold underline-offset-2 hover:underline">
+                Tentar novamente
+              </button>
+            </p>
+          )}
         </nav>
 
         <section className="min-w-0 rounded-xl border border-line bg-surface">

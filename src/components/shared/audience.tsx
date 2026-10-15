@@ -27,6 +27,8 @@ interface AudiencePickerProps {
   scopes: AudienceScope[];
   /** Rótulos específicos do contexto (ex.: "Todos os integrantes autorizados"). */
   labels?: Partial<Record<AudienceScope, string>>;
+  /** Descrições específicas do contexto. */
+  hints?: Partial<Record<AudienceScope, string>>;
   /** Departamento usado quando o escopo é "Meu departamento". */
   departmentId?: ID;
   error?: string;
@@ -36,7 +38,7 @@ interface AudiencePickerProps {
  * Seletor de público reutilizado em rifas, eventos, documentos e reuniões.
  * Os campos extras aparecem só quando necessários (cargos ou pessoas).
  */
-export function AudiencePicker({ name, value, onChange, scopes, labels, departmentId, error }: AudiencePickerProps) {
+export function AudiencePicker({ name, value, onChange, scopes, labels, hints, departmentId, error }: AudiencePickerProps) {
   const set = (patch: Partial<Audience>) => onChange({ ...value, ...patch });
   return (
     <div className="space-y-3">
@@ -47,7 +49,7 @@ export function AudiencePicker({ name, value, onChange, scopes, labels, departme
         options={scopes.map((s) => ({
           value: s,
           label: labels?.[s] ?? AUDIENCE_SCOPE_LABELS[s],
-          description: AUDIENCE_SCOPE_HINTS[s],
+          description: hints?.[s] ?? AUDIENCE_SCOPE_HINTS[s],
           icon: ICONS[s],
         }))}
       />

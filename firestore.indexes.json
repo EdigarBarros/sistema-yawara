@@ -516,6 +516,16 @@
           "queryScope": "COLLECTION"
         }
       ]
+    },
+    {
+      "collectionGroup": "financeEntries",
+      "fieldPath": "receiptHistory",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "buyers",
+      "fieldPath": "receiptHistory",
+      "indexes": []
     }
   ]
 }

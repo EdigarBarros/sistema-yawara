@@ -92,7 +92,9 @@ export function sniffMime(head: Buffer, declared: string): string | null {
   // Texto: sem bytes nulos e UTF-8 válido.
   if ((declared === "text/plain" || declared === "text/csv") && !head.includes(0)) {
     try {
-      new TextDecoder("utf-8", { fatal: true }).decode(head.length >= 4096 ? head.subarray(0, 4000) : head);
+      // Trecho parcial: um caractere acentuado partido no fim do trecho não é erro.
+      const partial = head.length >= 4096;
+      new TextDecoder("utf-8", { fatal: true }).decode(partial ? head.subarray(0, 4000) : head, { stream: partial });
       return declared;
     } catch {
       return null;

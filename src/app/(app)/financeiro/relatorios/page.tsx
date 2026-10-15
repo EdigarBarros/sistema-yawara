@@ -14,6 +14,7 @@ import { emptyAudience } from "@/lib/permissions";
 import { cn, normalize } from "@/lib/utils";
 import { downloadBlob, slugify } from "@/lib/export/common";
 import { errorMessage, notifyError, notifySuccess } from "@/lib/notify";
+import { isDemoMode } from "@/lib/mode";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/form";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -27,8 +28,12 @@ import { AudiencePicker, AudienceSummary } from "@/components/shared/audience";
 import { FinanceNav } from "@/features/finance/finance-nav";
 import { byMonth, summarizeFinance } from "@/features/finance/utils";
 import { buildFinancePdf, exportFinanceCsv, groupByCategory, type CategoryRow } from "@/features/finance/report";
+import { RAFFLE_INCOME_HELP } from "@/features/finance/receipt";
 
 type Preset = "month" | "quarter" | "semester" | "year" | "custom";
+
+/** Lançamentos carregados para os relatórios no modo Firebase (os mais recentes por data). */
+const REPORT_LOAD_LIMIT = 2000;
 
 function presetRange(p: Preset): { from: string; to: string } {
   const now = new Date();
@@ -53,7 +58,7 @@ export default function FinanceReportsPage() {
   const access = useAccess();
   const dir = useDirectory();
   const enabled = access.canModule("finance");
-  const { data, isLoading, isError, error } = useFinanceEntries(enabled);
+  const { data, isLoading, isError, error, refetch } = useFinanceEntries(enabled);
   const { data: categories } = useFinanceCategories();
   const { data: events } = useEvents(access.canModule("events"));
   const { data: campaigns } = useCampaigns();
@@ -96,6 +101,18 @@ export default function FinanceReportsPage() {
     .join(" · ");
   const ctx = { title: "Relatório financeiro", filtersLabel, entries, categories: categories ?? [], memberName: dir.memberName, generatedBy: access.user?.name ?? "—" };
   const canExport = access.can("finance.export");
+  /** Registra a exportação na auditoria (melhor esforço; sem dados pessoais). */
+  const recordExport = (format: "CSV" | "PDF") => {
+    void services.audit
+      .recordExport({
+        module: "finance",
+        resourceType: "financeReport",
+        resourceId: "relatorio",
+        summary: `${format} do relatório financeiro: ${entries.length} lançamento(s). ${filtersLabel}`,
+        personalData: false,
+      })
+      .catch(() => undefined);
+  };
 
   const catColumns: Column<CategoryRow>[] = [
     { key: "name", header: "Categoria", cell: (r) => <span className="font-medium">{r.name}</span> },
@@ -121,6 +138,7 @@ export default function FinanceReportsPage() {
                   setBusy("csv");
                   try {
                     exportFinanceCsv(ctx, `relatorio-financeiro-${toDateOnly(new Date())}.csv`);
+                    recordExport("CSV");
                     notifySuccess("CSV gerado", `${entries.length} lançamento(s).`);
                   } finally {
                     setBusy(null);
@@ -136,7 +154,8 @@ export default function FinanceReportsPage() {
                   setBusy("pdf");
                   try {
                     downloadBlob(await buildFinancePdf(ctx), `relatorio-financeiro-${toDateOnly(new Date())}.pdf`);
-                    notifySuccess("PDF gerado", "Relatório gerado neste navegador.");
+                    recordExport("PDF");
+                    notifySuccess("PDF gerado", isDemoMode ? "Relatório gerado neste navegador." : "PDF gerado no navegador a partir dos dados registrados.");
                   } catch (e) {
                     notifyError(e);
                   } finally {
@@ -219,7 +238,7 @@ export default function FinanceReportsPage() {
       {isLoading ? (
         <InlineLoader />
       ) : isError ? (
-        <ErrorState message={errorMessage(error)} />
+        <ErrorState message={errorMessage(error)} onRetry={() => refetch()} />
       ) : entries.length === 0 ? (
         <Panel title="Resultado">
           <EmptyState title="Nenhum lançamento no filtro" description="Amplie o período ou remova algum filtro." />
@@ -275,6 +294,27 @@ export default function FinanceReportsPage() {
           </Panel>
         </div>
       )}
+      <Panel title="Como os valores são calculados" className="mt-4">
+        <ul className="list-disc space-y-1.5 pl-5 text-[13px] text-fg-muted">
+          <li>
+            <b className="font-medium text-fg">Realizado</b>: receitas recebidas e despesas pagas. O saldo considera somente valores realizados (receitas recebidas − despesas pagas).
+          </li>
+          <li>
+            <b className="font-medium text-fg">Pendente</b>: valores a receber e a pagar, mostrados à parte — ainda não entram no saldo.
+          </li>
+          <li>
+            <b className="font-medium text-fg">Cancelados</b> ficam fora de todos os totais, mas continuam listados (e no histórico) para conferência.
+          </li>
+          <li>{RAFFLE_INCOME_HELP}</li>
+          <li>Os totais são calculados a partir dos lançamentos que o seu perfil pode consultar, com os filtros acima; o arquivo exportado traz exatamente o que aparece nesta página.</li>
+          {!isDemoMode && <li>São considerados os {REPORT_LOAD_LIMIT.toLocaleString("pt-BR")} lançamentos mais recentes (por data).</li>}
+        </ul>
+        {!isDemoMode && (data?.length ?? 0) >= REPORT_LOAD_LIMIT && (
+          <p role="status" className="mt-3 rounded-lg border border-warn/30 bg-warn/[0.08] px-3.5 py-2.5 text-[12.5px] text-fg-muted">
+            O limite de {REPORT_LOAD_LIMIT.toLocaleString("pt-BR")} lançamentos foi atingido: lançamentos mais antigos podem não estar incluídos. Filtre por um período recente para relatórios completos.
+          </p>
+        )}
+      </Panel>
       <ShareReportDialog open={shareOpen} onOpenChange={setShareOpen} buildBlob={() => buildFinancePdf(ctx)} filtersLabel={filtersLabel} />
     </>
   );
@@ -297,10 +337,11 @@ function ShareReportBody({ onOpenChange, buildBlob, filtersLabel }: { onOpenChan
   const [title, setTitle] = useState(`Relatório financeiro — ${new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(new Date())}`);
   const [audience, setAudience] = useState<Audience>(emptyAudience("board"));
   const [error, setError] = useState<string>();
+  // O PDF é gerado ANTES da ação: assim o identificador de requisição chega ao
+  // serviço e um reenvio após falha de conexão não duplica o documento.
   const share = useAction(
-    async () => {
-      const blob = await buildBlob();
-      return services.documents.create(
+    (blob: Blob) =>
+      services.documents.create(
         {
           name: title,
           description: `Gerado no módulo Financeiro. ${filtersLabel}.`,
@@ -311,9 +352,12 @@ function ShareReportBody({ onOpenChange, buildBlob, filtersLabel }: { onOpenChan
         },
         blob,
         `${slugify(title)}.pdf`,
-      );
+      ),
+    {
+      success: "Relatório compartilhado",
+      successDescription: isDemoMode ? "Salvo em Documentos › Relatórios financeiros (somente neste navegador)." : "Salvo em Documentos › Relatórios financeiros, visível para o público escolhido.",
+      silentError: true,
     },
-    { success: "Relatório compartilhado", successDescription: "Salvo em Documentos › Relatórios financeiros (somente neste navegador).", silentError: true },
   );
   return (
     <DialogContent
@@ -332,7 +376,7 @@ function ShareReportBody({ onOpenChange, buildBlob, filtersLabel }: { onOpenChan
               if (title.trim().length < 3) return setError("Informe um título.");
               setError(undefined);
               try {
-                const doc = await share.run();
+                const doc = await share.run(await buildBlob());
                 onOpenChange(false);
                 router.push(`/documentos/${doc.id}`);
               } catch (e) {
@@ -354,7 +398,11 @@ function ShareReportBody({ onOpenChange, buildBlob, filtersLabel }: { onOpenChan
         <div className="rounded-lg border border-line bg-sunken px-4 py-3">
           <AudienceSummary audience={audience} departmentId={access.role?.departmentId} alwaysIncluded={access.user ? [access.user.id] : []} />
         </div>
-        <DemoNotice>Compartilhamento simulado: o arquivo fica neste navegador. No backend, ele será salvo no armazenamento da Atlética.</DemoNotice>
+        {isDemoMode ? (
+          <DemoNotice>Compartilhamento simulado: o arquivo fica neste navegador. No backend, ele será salvo no armazenamento da Atlética.</DemoNotice>
+        ) : (
+          <p className="text-[12.5px] text-fg-muted">O PDF é gerado no navegador a partir dos dados registrados e salvo em Documentos com acesso restrito ao público escolhido.</p>
+        )}
         {error && <p className="text-[13px] text-danger">{error}</p>}
       </div>
     </DialogContent>

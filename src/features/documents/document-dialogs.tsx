@@ -12,7 +12,8 @@ import { Field, Input, Select, Textarea } from "@/components/ui/form";
 import { FilePicker } from "@/components/shared/pickers";
 import { AudiencePicker, AudienceSummary } from "@/components/shared/audience";
 import { DemoNotice } from "@/components/shared/states";
-import { DOC_SCOPE_LABELS, DOC_SCOPES } from "./document-form-dialog";
+import { isDemoMode } from "@/lib/mode";
+import { DOC_SCOPE_LABELS, DOC_SCOPES, DOCUMENT_FILE_ACCEPT, DOCUMENT_FILE_HINT, documentFileError } from "./document-form-dialog";
 
 interface Props {
   open: boolean;
@@ -42,7 +43,7 @@ function ErrorLine({ error }: { error?: string }) {
 
 export const EditDocumentDialog = wrap(function EditBody({ onOpenChange, doc }: Props) {
   const dir = useDirectory();
-  const { data: categories } = useDocumentCategories();
+  const { data: categories, isError: categoriesFailed } = useDocumentCategories();
   const [form, setForm] = useState({
     name: doc.name,
     description: doc.description,
@@ -51,7 +52,15 @@ export const EditDocumentDialog = wrap(function EditBody({ onOpenChange, doc }: 
     status: doc.status === "archived" ? "current" : doc.status,
   });
   const [error, setError] = useState<string>();
-  const save = useAction(() => services.documents.update(doc.id, form as never), { success: "Informações atualizadas", silentError: true });
+  // Documento arquivado: a situação não aparece no formulário e não é enviada (só muda restaurando).
+  // Os valores vão como argumentos: um reenvio após falha de conexão só reaproveita a requisição se nada mudou.
+  const save = useAction(
+    (values: typeof form) => {
+      const { status, ...rest } = values;
+      return services.documents.update(doc.id, doc.status === "archived" ? rest : { ...rest, status: status as "current" | "draft" });
+    },
+    { success: "Informações atualizadas", silentError: true },
+  );
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
   return (
     <DialogContent
@@ -68,7 +77,7 @@ export const EditDocumentDialog = wrap(function EditBody({ onOpenChange, doc }: 
             onClick={async () => {
               setError(undefined);
               try {
-                await save.run();
+                await save.run(form);
                 onOpenChange(false);
               } catch (e) {
                 setError(errorMessage(e));
@@ -87,7 +96,7 @@ export const EditDocumentDialog = wrap(function EditBody({ onOpenChange, doc }: 
         <Field label="Descrição" optional className="sm:col-span-2">
           <Textarea rows={3} value={form.description} onChange={set("description")} />
         </Field>
-        <Field label="Categoria" required>
+        <Field label="Categoria" required error={categoriesFailed ? "Não foi possível carregar as categorias. Feche e abra o formulário para tentar de novo." : undefined}>
           <Select value={form.categoryId} onChange={set("categoryId")}>
             {categories?.map((c) => (
               <option key={c.id} value={c.id}>
@@ -124,7 +133,7 @@ export const EditDocumentDialog = wrap(function EditBody({ onOpenChange, doc }: 
 export const ShareDocumentDialog = wrap(function ShareBody({ onOpenChange, doc }: Props) {
   const [audience, setAudience] = useState<Audience>(doc.access.scope === "department" ? { ...doc.access, departmentId: doc.departmentId } : doc.access);
   const [error, setError] = useState<string>();
-  const save = useAction(() => services.documents.setAccess(doc.id, audience), { success: "Compartilhamento atualizado", silentError: true });
+  const save = useAction((value: Audience) => services.documents.setAccess(doc.id, value), { success: "Compartilhamento atualizado", silentError: true });
   return (
     <DialogContent
       size="lg"
@@ -141,7 +150,7 @@ export const ShareDocumentDialog = wrap(function ShareBody({ onOpenChange, doc }
             onClick={async () => {
               setError(undefined);
               try {
-                await save.run();
+                await save.run(audience);
                 onOpenChange(false);
               } catch (e) {
                 setError(errorMessage(e));
@@ -159,7 +168,11 @@ export const ShareDocumentDialog = wrap(function ShareBody({ onOpenChange, doc }
           <AudienceSummary audience={audience} departmentId={doc.departmentId} labels={DOC_SCOPE_LABELS} alwaysIncluded={[doc.createdBy]} />
           <p className="mt-2 text-[12px] text-fg-subtle">Quem enviou o documento e quem administra Documentos sempre têm acesso.</p>
         </div>
-        <DemoNotice>Compartilhamento simulado. A autorização efetiva será aplicada pelo backend na Etapa 2.</DemoNotice>
+        {isDemoMode ? (
+          <DemoNotice>Compartilhamento simulado. A autorização efetiva será aplicada pelo backend na Etapa 2.</DemoNotice>
+        ) : (
+          <p className="text-[12px] text-fg-subtle">A mudança vale na hora, inclusive para os arquivos de todas as versões. O novo público recebe um aviso na Central.</p>
+        )}
       </div>
       <ErrorLine error={error} />
     </DialogContent>
@@ -172,7 +185,7 @@ export const NewVersionDialog = wrap(function VersionBody({ onOpenChange, doc }:
   const [file, setFile] = useState<File | null>(null);
   const [note, setNote] = useState("");
   const [error, setError] = useState<string>();
-  const save = useAction(() => services.documents.addVersion(doc.id, file!, note), {
+  const save = useAction((chosen: File, text: string) => services.documents.addVersion(doc.id, chosen, text), {
     success: (d) => `Versão ${d.versions.length} enviada`,
     successDescription: "As versões anteriores continuam disponíveis no histórico.",
     silentError: true,
@@ -191,9 +204,11 @@ export const NewVersionDialog = wrap(function VersionBody({ onOpenChange, doc }:
             loading={save.pending}
             onClick={async () => {
               if (!file) return setError("Escolha o arquivo da nova versão.");
+              const problem = documentFileError(file);
+              if (problem) return setError(problem);
               setError(undefined);
               try {
-                await save.run();
+                await save.run(file, note);
                 onOpenChange(false);
               } catch (e) {
                 setError(errorMessage(e));
@@ -206,7 +221,15 @@ export const NewVersionDialog = wrap(function VersionBody({ onOpenChange, doc }:
       }
     >
       <div className="space-y-4">
-        <FilePicker file={file} onChange={setFile} hint="Fica apenas neste navegador nesta etapa." />
+        <FilePicker
+          file={file}
+          onChange={(f) => {
+            setFile(f);
+            setError(documentFileError(f));
+          }}
+          accept={DOCUMENT_FILE_ACCEPT}
+          hint={isDemoMode ? "Fica apenas neste navegador nesta etapa." : DOCUMENT_FILE_HINT}
+        />
         <Field label="O que mudou?" optional>
           <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex.: correção do artigo 5º aprovada em reunião" />
         </Field>

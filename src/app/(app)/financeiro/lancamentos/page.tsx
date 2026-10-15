@@ -10,6 +10,7 @@ import { ENTRY_TYPE_LABELS, entryStatusMeta } from "@/lib/labels";
 import { formatDate, formatMoney } from "@/lib/format";
 import { cn, matchesQuery } from "@/lib/utils";
 import { errorMessage } from "@/lib/notify";
+import { isDemoMode } from "@/lib/mode";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page";
 import { DataTable, type Column } from "@/components/shared/data-table";
@@ -97,7 +98,11 @@ export default function EntriesPage() {
       <PageHeader
         eyebrow="Financeiro"
         title="Lançamentos"
-        description="Receitas e despesas de demonstração. Clique em um lançamento para consultar, editar ou confirmar."
+        description={
+          isDemoMode
+            ? "Receitas e despesas de demonstração. Clique em um lançamento para consultar, editar ou confirmar."
+            : "Receitas e despesas registradas pelo Financeiro. Clique em um lançamento para consultar, editar ou confirmar."
+        }
         actions={
           access.can("finance.register") && (
             <>

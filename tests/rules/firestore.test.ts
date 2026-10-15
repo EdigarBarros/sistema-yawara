@@ -44,6 +44,9 @@ beforeEach(async () => {
     await setDoc(doc(db, "invitations/i1"), { email: "x@example.org", status: "pending" });
     await setDoc(doc(db, "projects/p1"), { name: "Palestra", readers: ["all"], updatedAt: NOW });
     await setDoc(doc(db, "projects/p1/private/attendance"), { attendees: [{ id: "a", name: "Participante", present: true }], editors: projectEditors({ createdBy: "ext", responsibleId: "ext" }) });
+    // Projeto restrito à pessoa responsável (ext): a lista de presença também fica restrita.
+    await setDoc(doc(db, "projects/p2"), { name: "Projeto restrito", readers: ["u:ext"], updatedAt: NOW });
+    await setDoc(doc(db, "projects/p2/private/attendance"), { attendees: [{ id: "b", name: "Participante", present: false }], editors: projectEditors({ createdBy: "ext", responsibleId: "ext" }) });
     await setDoc(doc(db, "searchIndex/campaign__c-evt"), { terms: ["rifa"] });
     await setDoc(doc(db, "uploads/u1"), { uid: "ass" });
   });
@@ -138,6 +141,9 @@ describe("financeiro, auditoria, extensão e coleções internas", () => {
     await assertSucceeds(getDoc(doc(fs("ext"), "projects/p1/private/attendance")));
     await assertSucceeds(getDoc(doc(fs("assext"), "projects/p1/private/attendance")));
     await assertFails(getDoc(doc(fs("sec"), "projects/p1/private/attendance")));
+    // Quem pode editar projetos, mas não vê este projeto, não lê a presença dele.
+    await assertSucceeds(getDoc(doc(fs("ext"), "projects/p2/private/attendance")));
+    await assertFails(getDoc(doc(fs("assext"), "projects/p2/private/attendance")));
   });
   it("índice de busca, tíquetes, idempotência e contadores são inacessíveis", async () => {
     await assertFails(getDoc(doc(fs("pres"), "searchIndex/campaign__c-evt")));

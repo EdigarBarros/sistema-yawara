@@ -3,16 +3,17 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Archive, ArchiveRestore, CalendarDays, CheckCircle2, Clock, FileDown, FileText, MapPin, Pencil, Send, Undo2 } from "lucide-react";
+import { Archive, ArchiveRestore, CalendarDays, CalendarRange, CheckCircle2, Clock, FileDown, FileText, MapPin, Pencil, Send, Undo2, UserRound } from "lucide-react";
 import type { MeetingStatus } from "@/types";
 import { services } from "@/services";
 import { useAccess } from "@/hooks/use-access";
 import { useAction } from "@/hooks/use-action";
-import { useDirectory, useDocuments, useMeeting } from "@/hooks/use-data";
+import { useDirectory, useDocuments, useEvents, useMeeting } from "@/hooks/use-data";
 import { useBreadcrumbTitle } from "@/stores/breadcrumb";
 import { allowedMeetingTransitions, canEditMeeting } from "@/lib/policies";
 import { MEETING_MODE_LABELS, MEETING_STATUS } from "@/lib/labels";
-import { formatDate, formatTime } from "@/lib/format";
+import { formatDate, formatDateTime, formatTime } from "@/lib/format";
+import { isDemoMode } from "@/lib/mode";
 import { errorMessage, notifyError, notifySuccess } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -23,10 +24,18 @@ import { StatusBadge } from "@/components/shared/badges";
 import { AudienceSummary } from "@/components/shared/audience";
 import { HistoryTimeline } from "@/components/shared/history";
 import { confirmAction } from "@/components/shared/confirm";
-import { exportMeetingPdf } from "@/features/meetings/meeting-pdf";
+import { approvalEntry, exportMeetingPdf } from "@/features/meetings/meeting-pdf";
 
 const TRANSITION_UI: Record<MeetingStatus, { label: string; icon: React.ReactNode; title: string; description: string; primary?: boolean; danger?: boolean }> = {
-  pending_approval: { label: "Enviar para aprovação", icon: <Send />, title: "Enviar ata para aprovação?", description: "A diretoria será avisada. A ata ainda pode ser editada até ser aprovada.", primary: true },
+  pending_approval: {
+    label: "Enviar para aprovação",
+    icon: <Send />,
+    title: "Enviar ata para aprovação?",
+    description: isDemoMode
+      ? "A diretoria será avisada. A ata ainda pode ser editada até ser aprovada."
+      : "Quem pode aprovar atas e tem acesso a esta reunião será avisado. A ata ainda pode ser editada até ser aprovada.",
+    primary: true,
+  },
   approved: { label: "Aprovar ata", icon: <CheckCircle2 />, title: "Aprovar esta ata?", description: "Atas aprovadas ficam bloqueadas para edição.", primary: true },
   draft: { label: "Devolver para rascunho", icon: <Undo2 />, title: "Devolver para rascunho?", description: "A ata volta a poder ser editada e precisará ser aprovada novamente." },
   archived: { label: "Arquivar ata", icon: <Archive />, title: "Arquivar esta ata?", description: "Ela continua disponível para consulta.", danger: true },
@@ -64,7 +73,9 @@ export default function MeetingDetailPage() {
   const access = useAccess();
   const dir = useDirectory();
   const { data: m, isLoading, isError, error, refetch } = useMeeting(id);
-  const { data: documents } = useDocuments(access.canModule("documents"));
+  const docsQuery = useDocuments(access.canModule("documents"));
+  const documents = docsQuery.data;
+  const eventsQuery = useEvents(access.canModule("events") && !!m?.eventId);
   useBreadcrumbTitle(`/secretaria/${id}`, m?.title);
   const [generating, setGenerating] = useState(false);
   const transition = useAction((s: MeetingStatus) => services.meetings.setStatus(id, s), { success: (r) => `Ata: ${MEETING_STATUS[r.status].label}` });
@@ -76,12 +87,25 @@ export default function MeetingDetailPage() {
   const transitions = ctx ? allowedMeetingTransitions(ctx, m) : [];
   const editable = !!ctx && canEditMeeting(ctx, m);
   const docName = (docId: string) => documents?.find((d) => d.id === docId)?.name;
+  const relatedEvent = m.eventId ? eventsQuery.data?.find((e) => e.id === m.eventId) : undefined;
+  const eventName = (eventId: string) => eventsQuery.data?.find((e) => e.id === eventId)?.name;
+  const guests = m.guests ?? [];
+  const approval = approvalEntry(m);
 
   const pdf = async () => {
     setGenerating(true);
     try {
-      await exportMeetingPdf({ meeting: m, memberName: dir.memberName, roleName: (mid) => dir.roleOf(mid)?.name, documentName: docName, generatedBy: access.user?.name ?? "—" });
-      notifySuccess("PDF da ata gerado", "Gerado neste navegador a partir dos dados da demonstração.");
+      await exportMeetingPdf({
+        meeting: m,
+        memberName: dir.memberName,
+        roleName: (mid) => dir.roleOf(mid)?.name,
+        documentName: docName,
+        eventName,
+        generatedBy: access.user?.name ?? "—",
+      });
+      // Registro na auditoria (melhor esforço: não impede a exportação). Sem dados pessoais no resumo.
+      void services.audit.recordExport({ module: "meetings", resourceType: "meeting", resourceId: m.id, summary: "PDF da ata", personalData: false }).catch(() => undefined);
+      notifySuccess("PDF da ata gerado", isDemoMode ? "Gerado neste navegador a partir dos dados da demonstração." : "PDF gerado no navegador a partir dos dados registrados.");
     } catch (e) {
       notifyError(e, "Não foi possível gerar o PDF.");
     } finally {
@@ -108,6 +132,11 @@ export default function MeetingDetailPage() {
             <MetaItem icon={<MapPin />}>
               {MEETING_MODE_LABELS[m.mode]} · {m.location}
             </MetaItem>
+            {approval && (
+              <MetaItem icon={<CheckCircle2 />}>
+                Aprovada por {dir.memberName(approval.actorId)} em {formatDateTime(approval.at)}
+              </MetaItem>
+            )}
           </>
         }
         actions={
@@ -209,6 +238,37 @@ export default function MeetingDetailPage() {
               ))}
             </ul>
           </Panel>
+          {guests.length > 0 && (
+            <Panel title={`Convidados externos (${guests.length})`} description="Sem conta na Central" bodyClassName="py-1.5">
+              <ul className="divide-y divide-line">
+                {guests.map((g, i) => (
+                  <li key={`${g}-${i}`} className="flex items-center gap-3 px-5 py-2">
+                    <span className="grid size-7 shrink-0 place-items-center rounded-full border border-line bg-sunken text-fg-subtle" aria-hidden>
+                      <UserRound className="size-3.5" />
+                    </span>
+                    <p className="min-w-0 truncate text-[13px] font-medium">{g}</p>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          )}
+          {m.eventId && (
+            <Panel title="Evento relacionado">
+              {relatedEvent ? (
+                <Link href={`/eventos/${relatedEvent.id}`} className="-mx-2 flex items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] hover:bg-surface-2">
+                  <CalendarRange className="size-4 shrink-0 text-fg-subtle" />
+                  <span className="min-w-0 truncate font-medium">{relatedEvent.name}</span>
+                  <span className="ml-auto shrink-0 text-[12px] text-fg-subtle">{formatDate(relatedEvent.date)}</span>
+                </Link>
+              ) : eventsQuery.isLoading ? (
+                <p className="text-[13px] text-fg-subtle">Carregando evento…</p>
+              ) : eventsQuery.isError ? (
+                <p className="text-[13px] text-danger">Não foi possível carregar o evento relacionado.</p>
+              ) : (
+                <p className="text-[13px] text-fg-subtle">Evento restrito ao seu perfil</p>
+              )}
+            </Panel>
+          )}
           <Panel title="Documentos relacionados" bodyClassName={m.documentIds.length ? "py-1.5" : undefined}>
             {m.documentIds.length ? (
               <ul className="divide-y divide-line">
@@ -219,6 +279,10 @@ export default function MeetingDetailPage() {
                         <FileText className="size-4 shrink-0 text-fg-subtle" />
                         <span className="truncate">{docName(docId)}</span>
                       </Link>
+                    ) : docsQuery.isLoading ? (
+                      <p className="px-5 py-2.5 text-[13px] text-fg-subtle">Carregando documento…</p>
+                    ) : docsQuery.isError ? (
+                      <p className="px-5 py-2.5 text-[13px] text-danger">Não foi possível carregar o documento.</p>
                     ) : (
                       <p className="px-5 py-2.5 text-[13px] text-fg-subtle">Documento restrito ao seu perfil</p>
                     )}
@@ -237,7 +301,11 @@ export default function MeetingDetailPage() {
           </Panel>
         </div>
       </div>
-      <DemoNotice className="mt-5">Registro demonstrativo. O PDF é gerado neste navegador e não substitui a ata oficial assinada.</DemoNotice>
+      <DemoNotice className="mt-5">
+        {isDemoMode
+          ? "Registro demonstrativo. O PDF é gerado neste navegador e não substitui a ata oficial assinada."
+          : "O PDF é gerado no navegador a partir dos dados registrados e não substitui a ata oficial assinada."}
+      </DemoNotice>
     </>
   );
 }

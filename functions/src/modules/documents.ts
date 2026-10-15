@@ -335,17 +335,28 @@ function scheduleShareNotice(ctx: RunContext, actor: Actor, doc: InstitutionalDo
   });
 }
 
-/** Monta a resposta: o documento completo, se o autor ainda pode vê-lo. */
-async function presentDocument(id: string, actor: Actor | null): Promise<InstitutionalDocument> {
-  const snap = await db.doc(`documents/${id}`).get();
+/**
+ * Monta a resposta: o documento completo, se o autor ainda pode vê-lo.
+ *
+ * Quem edita por ter documents.edit no departamento pode, ao mudar o público
+ * ou o departamento, deixar de ver o documento. Nesse caso a resposta é o
+ * estado que a PRÓPRIA operação acabou de gravar (mesmo horário e mesmo autor
+ * na última entrada do histórico) — nada além do que a pessoa via e alterou.
+ * As leituras seguintes já seguem o novo público.
+ */
+async function presentDocument(result: DocumentRefResult, actor: Actor | null): Promise<InstitutionalDocument> {
+  const snap = await db.doc(`documents/${result.id}`).get();
   if (!snap.exists) fail("not_found", "Documento não encontrado.");
   const doc = documentFromSnap(snap);
-  if (!actor || !canSeeDocument(actor.ctx, doc)) fail("forbidden", "A operação foi concluída, mas este documento não está mais disponível para o seu perfil.");
-  return doc;
+  if (actor && canSeeDocument(actor.ctx, doc)) return doc;
+  if (actor && result.at && doc.updatedAt === result.at && doc.history.at(-1)?.actorId === actor.uid) return doc;
+  fail("forbidden", "A operação foi concluída, mas este documento não está mais disponível para o seu perfil.");
 }
 
 interface DocumentRefResult {
   id: string;
+  /** Horário da operação (ctx.now), usado para reconhecer o estado gravado por ela. */
+  at: string;
 }
 
 interface CreatePrepared {
@@ -432,10 +443,10 @@ export const documentsActions = {
         ...fileDetails(file),
       });
       scheduleShareNotice(ctx, actor, doc, "Documento compartilhado", `${actor.name} compartilhou “${doc.name}” (${AUDIENCE_SCOPE_LABELS[doc.access.scope].toLowerCase()}).`);
-      return { id };
+      return { id, at: ctx.now };
     },
     async present(result, actor) {
-      return presentDocument(result.id, actor);
+      return presentDocument(result, actor);
     },
   }),
 
@@ -494,10 +505,10 @@ export const documentsActions = {
         categoryId: next.categoryId,
         departmentId: next.departmentId,
       });
-      return { id };
+      return { id, at: ctx.now };
     },
     async present(result, actor) {
-      return presentDocument(result.id, actor);
+      return presentDocument(result, actor);
     },
   }),
 
@@ -534,10 +545,10 @@ export const documentsActions = {
         people: access.userIds.length,
       });
       scheduleShareNotice(ctx, actor, next, "Documento compartilhado com você", `${actor.name} alterou o acesso de “${next.name}”.`);
-      return { id };
+      return { id, at: ctx.now };
     },
     async present(result, actor) {
-      return presentDocument(result.id, actor);
+      return presentDocument(result, actor);
     },
   }),
 
@@ -589,10 +600,10 @@ export const documentsActions = {
       writeDocument(tx, ref, next, categoryName(catSnap));
       markAttached(tx, uploadId, `documents/${id}`);
       audit(tx, actor, ctx, "addVersion", id, `Versão ${version} enviada para o documento ${next.name}`, { version, ...fileDetails(prepared.file) });
-      return { id };
+      return { id, at: ctx.now };
     },
     async present(result, actor) {
-      return presentDocument(result.id, actor);
+      return presentDocument(result, actor);
     },
   }),
 
@@ -617,10 +628,10 @@ export const documentsActions = {
       // Arquivar não apaga nada: versões e arquivos continuam disponíveis para quem pode ver.
       writeDocument(tx, ref, next, categoryName(catSnap));
       audit(tx, actor, ctx, "archive", id, `Documento arquivado: ${next.name}`, { from: current.status, versions: next.versions.length });
-      return { id };
+      return { id, at: ctx.now };
     },
     async present(result, actor) {
-      return presentDocument(result.id, actor);
+      return presentDocument(result, actor);
     },
   }),
 
@@ -646,10 +657,10 @@ export const documentsActions = {
       };
       writeDocument(tx, ref, next, categoryName(catSnap));
       audit(tx, actor, ctx, "restore", id, `Documento restaurado: ${next.name}`, { to: status });
-      return { id };
+      return { id, at: ctx.now };
     },
     async present(result, actor) {
-      return presentDocument(result.id, actor);
+      return presentDocument(result, actor);
     },
   }),
 };

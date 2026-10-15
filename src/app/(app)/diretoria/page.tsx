@@ -2,14 +2,17 @@
 
 import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Building2, KeyRound, Pencil, Plus, ShieldCheck, Undo2, UserPlus, Users } from "lucide-react";
+import { Building2, KeyRound, MailPlus, Pencil, Plus, ShieldCheck, Undo2, UserPlus, Users } from "lucide-react";
 import type { Department, Member, Permission, Role } from "@/types";
 import { services } from "@/services";
 import { useAccess } from "@/hooks/use-access";
 import { useAction } from "@/hooks/use-action";
-import { useDirectory } from "@/hooks/use-data";
+import { useDirectory, useOrganization } from "@/hooks/use-data";
 import { ROLE_LEVEL_LABELS } from "@/lib/labels";
 import { formatDate } from "@/lib/format";
+import { allPermissions } from "@/lib/modules";
+import { isDemoMode, isFirebaseMode } from "@/lib/mode";
+import { errorMessage } from "@/lib/notify";
 import { cn, matchesQuery } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Avatar, Badge } from "@/components/ui/misc";
@@ -18,12 +21,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/menu";
 import { DetailList, PageHeader, Panel, SectionTitle } from "@/components/shared/page";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { FilterChips, FilterSelect, SearchInput, Toolbar } from "@/components/shared/filters";
-import { DemoNotice, EmptyState, InlineLoader, RestrictedState } from "@/components/shared/states";
+import { DemoNotice, EmptyState, ErrorState, InlineLoader, RestrictedState } from "@/components/shared/states";
 import { confirmAction } from "@/components/shared/confirm";
-import { DepartmentDialog, MemberDialog, RoleDialog } from "@/features/organization/org-dialogs";
+import { DepartmentDialog, MemberDialog, Notice, RoleDialog } from "@/features/organization/org-dialogs";
+import { InvitationsTab, InviteDialog, useInvitations } from "@/features/organization/invitations";
+import { memberEditRules, missingPermissions, permissionLock, roleAccessLock } from "@/features/organization/org-rules";
 import { PermissionMatrix, PermissionSummary } from "@/features/organization/permission-matrix";
 
-const TABS = ["integrantes", "cargos", "departamentos", "permissoes"] as const;
+const TABS = ["integrantes", "convites", "cargos", "departamentos", "permissoes"] as const;
 type Tab = (typeof TABS)[number];
 
 function StatusPill({ active }: { active: boolean }) {
@@ -31,6 +36,29 @@ function StatusPill({ active }: { active: boolean }) {
     <Badge tone={active ? "ok" : "neutral"} dot>
       {active ? "Ativo" : "Inativo"}
     </Badge>
+  );
+}
+
+/** Situação da conta do integrante: no ambiente real, "Ativa" ou "Desativada" (login bloqueado). */
+function MemberStatusPill({ active }: { active: boolean }) {
+  if (isDemoMode) return <StatusPill active={active} />;
+  return (
+    <Badge tone={active ? "ok" : "danger"} dot>
+      {active ? "Ativa" : "Desativada"}
+    </Badge>
+  );
+}
+
+/** Aviso que depende do modo: demonstração (ícone de laboratório) ou ambiente real. */
+function ModeNotice({ children, className, tone }: { children: React.ReactNode; className?: string; tone?: "info" | "warn" }) {
+  return isFirebaseMode ? (
+    <Notice className={className} tone={tone}>
+      {children}
+    </Notice>
+  ) : (
+    <DemoNotice className={className} tone={tone}>
+      {children}
+    </DemoNotice>
   );
 }
 
@@ -43,6 +71,7 @@ function MembersTab({ onOpenMember }: { onOpenMember: (id: string) => void }) {
   const [dep, setDep] = useState("");
   const [query, setQuery] = useState("");
   const [dialog, setDialog] = useState<{ member?: Member } | null>(null);
+  const [inviting, setInviting] = useState(false);
 
   const rows = dir.members
     .filter((m) => status === "all" || m.status === status)
@@ -62,7 +91,7 @@ function MembersTab({ onOpenMember }: { onOpenMember: (id: string) => void }) {
               {m.name}
               {m.id === access.user?.id && <Badge tone="gold">Você</Badge>}
             </p>
-            <p className="truncate text-[12px] text-fg-subtle">{m.email}</p>
+            {m.email && <p className="truncate text-[12px] text-fg-subtle">{m.email}</p>}
           </div>
         </div>
       ),
@@ -70,24 +99,31 @@ function MembersTab({ onOpenMember }: { onOpenMember: (id: string) => void }) {
     { key: "role", header: "Cargo", cell: (m) => <span>{dir.role(m.roleId)?.name}</span> },
     { key: "dep", header: "Departamento", hideBelow: "lg", cell: (m) => <span className="text-fg-muted">{dir.departmentOf(m.id)?.name}</span> },
     { key: "since", header: "Desde", hideBelow: "xl", cell: (m) => <span className="tnum font-mono text-[12.5px] text-fg-muted">{formatDate(m.joinedAt)}</span> },
-    { key: "status", header: "Situação", cell: (m) => <StatusPill active={m.status === "active"} /> },
+    { key: "status", header: "Situação", cell: (m) => <MemberStatusPill active={m.status === "active"} /> },
     {
       key: "actions",
       header: <span className="sr-only">Ações</span>,
       align: "right",
-      cell: (m) =>
-        access.can("organization.edit") ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={(e) => {
-              e.stopPropagation();
-              setDialog({ member: m });
-            }}
-          >
-            <Pencil /> Editar
-          </Button>
-        ) : null,
+      cell: (m) => {
+        if (!access.can("organization.edit")) return null;
+        // Ambiente real: não oferece a edição de quem tem um cargo acima do seu (o servidor recusaria).
+        const rules = isFirebaseMode ? memberEditRules(access.ctx, m, dir.roles) : null;
+        return (
+          <span title={rules && !rules.canEdit ? rules.reason : undefined}>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={!!rules && !rules.canEdit}
+              onClick={(e) => {
+                e.stopPropagation();
+                setDialog({ member: m });
+              }}
+            >
+              <Pencil /> Editar
+            </Button>
+          </span>
+        );
+      },
     },
   ];
 
@@ -100,18 +136,23 @@ function MembersTab({ onOpenMember }: { onOpenMember: (id: string) => void }) {
           onChange={setStatus}
           options={[
             { value: "active", label: "Ativos", count: dir.members.filter((m) => m.status === "active").length },
-            { value: "inactive", label: "Inativos", count: dir.members.filter((m) => m.status === "inactive").length },
+            { value: "inactive", label: isFirebaseMode ? "Desativados" : "Inativos", count: dir.members.filter((m) => m.status === "inactive").length },
             { value: "all", label: "Todos", count: dir.members.length },
           ]}
         />
         <div className="flex flex-wrap gap-2">
           <FilterSelect label="Departamento" value={dep} onChange={setDep} options={[{ value: "", label: "Todos os departamentos" }, ...dir.departments.map((d) => ({ value: d.id, label: d.name }))]} />
           <SearchInput value={query} onChange={setQuery} placeholder="Buscar nome ou cargo" className="w-full sm:w-56" />
-          {access.can("organization.create") && (
-            <Button variant="primary" onClick={() => setDialog({})}>
-              <UserPlus /> Adicionar
-            </Button>
-          )}
+          {access.can("organization.create") &&
+            (isFirebaseMode ? (
+              <Button variant="primary" onClick={() => setInviting(true)}>
+                <MailPlus /> Convidar integrante
+              </Button>
+            ) : (
+              <Button variant="primary" onClick={() => setDialog({})}>
+                <UserPlus /> Adicionar
+              </Button>
+            ))}
         </div>
       </Toolbar>
       <DataTable
@@ -128,12 +169,13 @@ function MembersTab({ onOpenMember }: { onOpenMember: (id: string) => void }) {
               <p className="truncate font-semibold">{m.name}</p>
               <p className="truncate text-[12px] text-fg-subtle">{dir.role(m.roleId)?.name}</p>
             </div>
-            <StatusPill active={m.status === "active"} />
+            <MemberStatusPill active={m.status === "active"} />
           </div>
         )}
         empty={<EmptyState compact icon={<Users />} title="Ninguém encontrado" />}
       />
       {dialog && <MemberDialog open onOpenChange={(o) => !o && setDialog(null)} member={dialog.member} />}
+      {isFirebaseMode && <InviteDialog open={inviting} onOpenChange={setInviting} />}
     </section>
   );
 }
@@ -259,17 +301,21 @@ function DepartmentsTab() {
 function PermissionsTab() {
   const access = useAccess();
   const dir = useDirectory();
-  const canAdmin = access.can("organization.admin");
   const [roleId, setRoleId] = useState(dir.roles[0]?.id ?? "");
   const [draft, setDraft] = useState<Record<string, Permission[]>>({});
   const role = dir.role(roleId);
+  // Ambiente real: espelha o servidor (exige organization.admin e que o cargo não tenha permissões que você não tem).
+  const lock = isFirebaseMode ? roleAccessLock(access.ctx, role) : access.can("organization.admin") ? undefined : "Seu perfil pode consultar, mas não alterar permissões.";
+  const canAdmin = !lock;
   const current = draft[roleId] ?? role?.permissions ?? [];
   const dirty = !!draft[roleId] && JSON.stringify([...draft[roleId]].sort()) !== JSON.stringify([...(role?.permissions ?? [])].sort());
-  const save = useAction(() => services.organization.updateRole(roleId, { permissions: current }), {
+  // Cargo e permissões vão como argumento: um reenvio só reaproveita o identificador da requisição se forem os mesmos.
+  const save = useAction((id: string, permissions: Permission[]) => services.organization.updateRole(id, { permissions }), {
     success: "Permissões salvas",
-    successDescription: "Troque para um perfil com este cargo para ver o efeito.",
-    onSuccess: () => setDraft((d) => ({ ...d, [roleId]: undefined as never })),
+    successDescription: isDemoMode ? "Troque para um perfil com este cargo para ver o efeito." : "Os integrantes com este cargo já recebem o novo acesso.",
+    onSuccess: (saved) => setDraft((d) => ({ ...d, [saved.id]: undefined as never })),
   });
+  const ownMissing = isFirebaseMode && canAdmin ? missingPermissions(access.ctx, allPermissions()).length : 0;
 
   if (!role) return <InlineLoader />;
   return (
@@ -321,8 +367,14 @@ function PermissionsTab() {
                 disabled={!dirty}
                 loading={save.pending}
                 onClick={async () => {
-                  if (await confirmAction({ title: `Salvar permissões de ${role.name}?`, description: `${dir.members.filter((m) => m.roleId === roleId).length} integrante(s) com este cargo serão afetados.`, confirmLabel: "Salvar" }))
-                    save.runSafe();
+                  if (
+                    await confirmAction({
+                      title: `Salvar permissões de ${role.name}?`,
+                      description: `${dir.members.filter((m) => m.roleId === roleId).length} integrante(s) com este cargo serão afetados.${isFirebaseMode ? " O acesso deles muda imediatamente." : ""}`,
+                      confirmLabel: "Salvar",
+                    })
+                  )
+                    save.runSafe(roleId, current);
                 }}
               >
                 <ShieldCheck /> Salvar permissões
@@ -331,11 +383,27 @@ function PermissionsTab() {
           )
         }
       >
-        {!canAdmin && <DemoNotice tone="warn" className="mb-4">Seu perfil pode consultar, mas não alterar permissões.</DemoNotice>}
-        <PermissionMatrix value={current} onChange={canAdmin ? (v) => setDraft((d) => ({ ...d, [roleId]: v })) : undefined} readOnly={!canAdmin} />
-        <DemoNotice className="mt-4">
-          Permissões simuladas para a demonstração. Elas mudam menus e botões nesta interface, mas não são segurança real — a autorização efetiva será implementada no backend.
-        </DemoNotice>
+        {lock && (
+          <ModeNotice tone="warn" className="mb-4">
+            {lock}
+          </ModeNotice>
+        )}
+        {ownMissing > 0 && <Notice className="mb-4">Permissões que o seu cargo não tem aparecem bloqueadas: você só pode conceder ou retirar permissões que o seu cargo tem.</Notice>}
+        <PermissionMatrix
+          value={current}
+          onChange={canAdmin ? (v) => setDraft((d) => ({ ...d, [roleId]: v })) : undefined}
+          readOnly={!canAdmin}
+          lockReason={isFirebaseMode ? (p, checked) => permissionLock(access.ctx, role, p, checked) : undefined}
+        />
+        {isDemoMode ? (
+          <DemoNotice className="mt-4">
+            Permissões simuladas para a demonstração. Elas mudam menus e botões nesta interface, mas não são segurança real — a autorização efetiva será implementada no backend.
+          </DemoNotice>
+        ) : (
+          <Notice className="mt-4">
+            As permissões são aplicadas pelo servidor em cada operação e pelas regras de acesso aos dados. Esconder um botão não basta: o que o cargo não tem é recusado no servidor.
+          </Notice>
+        )}
       </Panel>
     </div>
   );
@@ -348,9 +416,13 @@ export default function OrganizationPage() {
   const pathname = usePathname();
   const params = useSearchParams();
   const access = useAccess();
+  const org = useOrganization();
   const dir = useDirectory();
+  const showInvites = isFirebaseMode && (access.can("organization.create") || access.can("organization.edit"));
+  const invitations = useInvitations(showInvites);
+  const [inviting, setInviting] = useState(false);
   const requested = params.get("aba") as Tab | null;
-  const tab: Tab = requested && TABS.includes(requested) ? requested : "integrantes";
+  const tab: Tab = requested && TABS.includes(requested) && (requested !== "convites" || showInvites) ? requested : "integrantes";
   const memberId = params.get("integrante");
   const member = dir.member(memberId ?? undefined);
   const memberRole = dir.role(member?.roleId);
@@ -364,16 +436,36 @@ export default function OrganizationPage() {
     router.replace(next.size ? `${pathname}?${next}` : pathname, { scroll: false });
   };
 
+  const header = (
+    <PageHeader
+      eyebrow="Administração"
+      title="Diretoria e organização"
+      description={isDemoMode ? "Integrantes, cargos, departamentos e permissões da Atlética. Todos os nomes são fictícios." : "Integrantes, convites, cargos, departamentos e permissões da Atlética."}
+    />
+  );
+  // Falha ao carregar a estrutura: mostra o erro (e não "sem acesso" ou listas vazias).
+  if (org.isError && !org.data)
+    return (
+      <>
+        {header}
+        <ErrorState message={errorMessage(org.error, "Não foi possível carregar a estrutura da Atlética.")} onRetry={() => void org.refetch()} />
+      </>
+    );
   if (!access.canModule("organization")) return <RestrictedState />;
 
   return (
     <>
-      <PageHeader eyebrow="Administração" title="Diretoria e organização" description="Integrantes, cargos, departamentos e permissões da Atlética. Todos os nomes são fictícios." />
+      {header}
       <Tabs value={tab} onValueChange={(v) => setParams({ aba: v })}>
         <TabsList>
           <TabsTrigger value="integrantes" count={dir.members.length}>
             <Users /> Integrantes
           </TabsTrigger>
+          {showInvites && (
+            <TabsTrigger value="convites" count={invitations.data?.filter((i) => i.status === "pending").length}>
+              <MailPlus /> Convites
+            </TabsTrigger>
+          )}
           <TabsTrigger value="cargos" count={dir.roles.length}>
             <ShieldCheck /> Cargos
           </TabsTrigger>
@@ -387,6 +479,12 @@ export default function OrganizationPage() {
         <TabsContent value="integrantes" className="mt-5">
           <MembersTab onOpenMember={(id) => setParams({ integrante: id })} />
         </TabsContent>
+        {showInvites && (
+          <TabsContent value="convites" className="mt-5">
+            <InvitationsTab onInvite={() => setInviting(true)} />
+            <InviteDialog open={inviting} onOpenChange={setInviting} />
+          </TabsContent>
+        )}
         <TabsContent value="cargos" className="mt-5">
           <RolesTab />
         </TabsContent>
@@ -400,15 +498,15 @@ export default function OrganizationPage() {
 
       <Sheet open={!!member} onOpenChange={(o) => !o && setParams({ integrante: null })}>
         {member && (
-          <SheetContent eyebrow="Integrante (fictício)" title={member.name} description={memberRole?.name}>
+          <SheetContent eyebrow={isDemoMode ? "Integrante (fictício)" : "Integrante"} title={member.name} description={memberRole?.name}>
             <div className="space-y-6">
               <div className="flex items-center gap-4">
                 <Avatar name={member.name} id={member.id} size={56} />
                 <div>
                   <p className="text-[15px] font-semibold">{member.name}</p>
-                  <p className="text-[13px] text-fg-muted">{member.email}</p>
+                  {member.email && <p className="text-[13px] text-fg-muted">{member.email}</p>}
                   <div className="mt-1.5">
-                    <StatusPill active={member.status === "active"} />
+                    <MemberStatusPill active={member.status === "active"} />
                   </div>
                 </div>
               </div>
@@ -417,15 +515,20 @@ export default function OrganizationPage() {
                   { label: "Cargo", value: memberRole?.name ?? "—" },
                   { label: "Departamento", value: dir.departmentOf(member.id)?.name ?? "—" },
                   { label: "Nível", value: memberRole ? ROLE_LEVEL_LABELS[memberRole.level] : "—" },
+                  {
+                    label: "Departamentos adicionais",
+                    value: (member.departmentIds ?? []).map((d) => dir.department(d)?.name).filter(Boolean).join(", "),
+                    hidden: !(member.departmentIds ?? []).length,
+                  },
                   { label: "Na Atlética desde", value: formatDate(member.joinedAt) },
-                  { label: "Perfil de demonstração", value: member.demoProfile ? member.demoProfile.label : "Não" },
+                  { label: "Perfil de demonstração", value: member.demoProfile ? member.demoProfile.label : "Não", hidden: !isDemoMode },
                 ]}
               />
               <div>
                 <SectionTitle>O que este cargo pode fazer</SectionTitle>
                 <PermissionSummary value={memberRole?.permissions ?? []} />
               </div>
-              <DemoNotice>Não há módulo de avaliação ou acompanhamento de desempenho na Central: esse controle ocorre fora do sistema.</DemoNotice>
+              <ModeNotice>Não há módulo de avaliação ou acompanhamento de desempenho na Central: esse controle ocorre fora do sistema.</ModeNotice>
             </div>
           </SheetContent>
         )}

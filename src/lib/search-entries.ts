@@ -69,7 +69,7 @@ export const searchEntryFor = {
     subtitle: `${formatDate(m.date)} · ${MEETING_STATUS[m.status].label}`,
     href: `/secretaria/${m.id}`,
     at: m.updatedAt,
-    text: [m.code, m.agenda.join(" ")],
+    text: [m.code, m.agenda.join(" "), m.summary],
     readers: meetingReaders(m),
     archived: m.status === "archived",
   }),

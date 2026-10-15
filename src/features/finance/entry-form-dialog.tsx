@@ -14,16 +14,22 @@ import { centsToInput, parseMoney } from "@/lib/format";
 import { dateField, moneyField, requiredText } from "@/lib/validation";
 import { liveRegister } from "@/lib/forms";
 import { errorMessage } from "@/lib/notify";
+import { isDemoMode } from "@/lib/mode";
+import { normalize } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ChoiceCards, Field, Input, Segmented, Select, Textarea } from "@/components/ui/form";
 import { FilePicker, MemberSelect } from "@/components/shared/pickers";
+import { RAFFLE_INCOME_HELP, RECEIPT_ACCEPT, RECEIPT_HINT } from "./receipt";
+
+/** Maior valor aceito pelo servidor: R$ 10.000.000,00 (em centavos). */
+const MAX_AMOUNT = 1_000_000_000;
 
 const schema = z.object({
   type: z.enum(["income", "expense"]),
-  description: requiredText("a descrição", 3),
+  description: requiredText("a descrição", 3).max(200, "A descrição pode ter no máximo 200 caracteres."),
   categoryId: z.string().min(1, "Escolha a categoria."),
-  amount: moneyField("o valor"),
+  amount: moneyField("o valor").refine((v) => (parseMoney(v) ?? 0) <= MAX_AMOUNT, "O valor informado é alto demais (máximo de R$ 10.000.000,00)."),
   date: dateField("a data"),
   responsibleId: z.string().min(1, "Escolha o responsável."),
   departmentId: z.string().min(1, "Escolha o departamento."),
@@ -31,7 +37,7 @@ const schema = z.object({
   campaignId: z.string().optional(),
   paymentMethod: z.string().optional(),
   status: z.enum(["pending", "settled"]),
-  notes: z.string().trim().max(500).optional(),
+  notes: z.string().trim().max(500, "As observações podem ter no máximo 500 caracteres.").optional(),
 });
 type Values = z.infer<typeof schema>;
 
@@ -96,6 +102,11 @@ function EntryFormBody({ onOpenChange, type = "income", entry, onSaved }: Props)
   const register = liveRegister(form);
   const { control, handleSubmit, formState, setValue } = form;
   const currentType = useWatch({ control, name: "type" });
+  const currentCategoryId = useWatch({ control, name: "categoryId" });
+  const currentCampaignId = useWatch({ control, name: "campaignId" });
+  const currentCategory = categories?.find((c) => c.id === currentCategoryId);
+  // Dinheiro de rifas: orientação para não contar o mesmo valor duas vezes.
+  const raffleHelp = currentType === "income" && (!!currentCampaignId || (!!currentCategory && normalize(currentCategory.name).includes("rifa")));
 
   const save = useAction(
     (v: Values) => {
@@ -141,7 +152,7 @@ function EntryFormBody({ onOpenChange, type = "income", entry, onSaved }: Props)
       size="lg"
       modal
       title={entry ? `Editar lançamento ${entry.code}` : `Nova ${label}`}
-      description="Valores de demonstração. Nenhuma transação real é processada."
+      description={isDemoMode ? "Valores de demonstração. Nenhuma transação real é processada." : "Registro interno do Financeiro. Nenhuma transação bancária é processada pela Central."}
       footer={
         <>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
@@ -172,7 +183,7 @@ function EntryFormBody({ onOpenChange, type = "income", entry, onSaved }: Props)
           <Field label="Descrição" required className="sm:col-span-2" error={formState.errors.description?.message}>
             <Input placeholder={currentType === "income" ? "Ex.: Ingressos do 1º lote" : "Ex.: Locação do espaço"} {...register("description")} />
           </Field>
-          <Field label="Categoria" required error={formState.errors.categoryId?.message}>
+          <Field label="Categoria" required error={formState.errors.categoryId?.message} hint={raffleHelp ? RAFFLE_INCOME_HELP : undefined}>
             <Select {...register("categoryId")}>
               <option value="">Selecione…</option>
               {categories
@@ -265,7 +276,7 @@ function EntryFormBody({ onOpenChange, type = "income", entry, onSaved }: Props)
             <p className="mb-2 text-[13px] font-medium">
               Comprovante <span className="text-xs font-normal text-fg-subtle">(opcional)</span>
             </p>
-            <FilePicker file={receipt} onChange={setReceipt} accept="image/*,application/pdf" hint="Fica apenas neste navegador nesta etapa." />
+            <FilePicker file={receipt} onChange={setReceipt} accept={RECEIPT_ACCEPT} hint={RECEIPT_HINT} />
           </div>
         )}
 

@@ -3,8 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Archive, ArchiveRestore, CalendarDays, ClipboardList, Download, ExternalLink, FileText, FileUp, GraduationCap, Pencil, Share2, Tag } from "lucide-react";
-import type { DocumentVersion } from "@/types";
+import { Archive, ArchiveRestore, CalendarDays, ClipboardList, Download, ExternalLink, FileText, FileUp, GraduationCap, Loader2, Pencil, Share2, Tag } from "lucide-react";
+import type { FileRef } from "@/types";
 import { services } from "@/services";
 import { useAccess } from "@/hooks/use-access";
 import { useAction } from "@/hooks/use-action";
@@ -13,11 +13,13 @@ import { useBreadcrumbTitle } from "@/stores/breadcrumb";
 import { canArchiveDocument, canEditDocument } from "@/lib/policies";
 import { DOCUMENT_STATUS } from "@/lib/labels";
 import { fileExtension, formatBytes, formatDateTime, formatDateTimeShort } from "@/lib/format";
-import { errorMessage } from "@/lib/notify";
+import { errorMessage, notifyError } from "@/lib/notify";
+import { isDemoMode } from "@/lib/mode";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/misc";
 import { DetailList, MetaItem, PageHeader, Panel } from "@/components/shared/page";
 import { ErrorState, PageSkeleton, DemoNotice } from "@/components/shared/states";
+import { FileActions, useFileObjectUrl } from "@/components/shared/file-actions";
 import { DemoTag, OwnershipBadge, StatusBadge } from "@/components/shared/badges";
 import { AudienceSummary } from "@/components/shared/audience";
 import { HistoryTimeline } from "@/components/shared/history";
@@ -25,11 +27,17 @@ import { confirmAction } from "@/components/shared/confirm";
 import { EditDocumentDialog, NewVersionDialog, ShareDocumentDialog } from "@/features/documents/document-dialogs";
 import { DOC_SCOPE_LABELS } from "@/features/documents/document-form-dialog";
 
-function Preview({ version, sample }: { version: DocumentVersion; sample: boolean }) {
-  const file = version.file;
-  const url = services.files.getObjectUrl(file?.blobId);
+/** Tipos que a página consegue mostrar (o restante só é aberto ou baixado). */
+function isPreviewable(file: FileRef | null | undefined) {
+  return !!file && (file.mimeType.startsWith("image/") || file.mimeType === "application/pdf" || file.mimeType.startsWith("text/"));
+}
+
+type FilePreviewState = ReturnType<typeof useFileObjectUrl>;
+
+function Preview({ file, sample, preview }: { file: FileRef | null; sample: boolean; preview: FilePreviewState }) {
   if (!file) return <Placeholder text="Este registro não tem arquivo anexado." />;
-  if (!url)
+  if (!services.files.isAvailable(file)) {
+    if (!isDemoMode) return <Placeholder text="O arquivo desta versão não está disponível no armazenamento." />;
     return (
       <Placeholder
         text={
@@ -39,17 +47,68 @@ function Preview({ version, sample }: { version: DocumentVersion; sample: boolea
         }
       />
     );
+  }
+  if (!isPreviewable(file)) return <Placeholder text={`Pré-visualização indisponível para ${fileExtension(file.name)}. Use “Baixar”.`} />;
+  if (preview.error) return <Placeholder text={preview.error} />;
+  const url = preview.url;
+  if (!url) {
+    return (
+      <div role="status" className="grid place-items-center rounded-lg border border-dashed border-line-strong bg-sunken px-6 py-14 text-center">
+        <Loader2 className="mb-3 size-6 animate-spin text-gold" aria-hidden />
+        <p className="text-[13px] text-fg-muted">Carregando a pré-visualização…</p>
+      </div>
+    );
+  }
   if (file.mimeType.startsWith("image/")) {
-    // eslint-disable-next-line @next/next/no-img-element -- arquivo local (blob) escolhido pela pessoa
+    // eslint-disable-next-line @next/next/no-img-element -- arquivo local (blob) carregado com autorização
     return <img src={url} alt={`Pré-visualização de ${file.name}`} className="max-h-[520px] w-full rounded-lg border border-line object-contain" />;
   }
   if (file.mimeType === "application/pdf") {
     return <iframe src={url} title={`Pré-visualização de ${file.name}`} className="h-[560px] w-full rounded-lg border border-line bg-white" />;
   }
-  if (file.mimeType.startsWith("text/")) {
-    return <iframe src={url} title={`Pré-visualização de ${file.name}`} className="h-[400px] w-full rounded-lg border border-line bg-white" />;
+  return <iframe src={url} title={`Pré-visualização de ${file.name}`} className="h-[400px] w-full rounded-lg border border-line bg-white" />;
+}
+
+/**
+ * "Visualizar" e "Baixar" do arquivo atual. Com a pré-visualização já
+ * carregada, usa a mesma URL local; senão, baixa o arquivo no clique
+ * (Firebase: download autenticado, conferido pelas regras do Storage).
+ */
+function CurrentFileButtons({ file, url }: { file: FileRef | null; url: string | null }) {
+  const [busy, setBusy] = useState<"view" | "download" | null>(null);
+  if (!file) return null;
+  const outline = "inline-flex h-[38px] items-center gap-2 rounded-lg border border-line-strong px-4 text-[13.5px] font-semibold hover:bg-surface-2";
+  const primary = "inline-flex h-[38px] items-center gap-2 rounded-lg bg-gold px-4 text-[13.5px] font-semibold text-gold-ink hover:bg-gold-hover";
+  if (url) {
+    return (
+      <>
+        <a href={url} target="_blank" rel="noreferrer" className={outline}>
+          <ExternalLink className="size-4" /> Visualizar
+        </a>
+        <a href={url} download={file.name} className={primary}>
+          <Download className="size-4" /> Baixar
+        </a>
+      </>
+    );
   }
-  return <Placeholder text={`Pré-visualização indisponível para ${fileExtension(file.name)}. Use “Baixar”.`} />;
+  if (isDemoMode || !services.files.isAvailable(file)) return null;
+  const run = (mode: "view" | "download") => {
+    setBusy(mode);
+    services.files
+      .open(file, { download: mode === "download" })
+      .catch((e) => notifyError(e))
+      .finally(() => setBusy(null));
+  };
+  return (
+    <>
+      <Button onClick={() => run("view")} loading={busy === "view"} disabled={!!busy}>
+        {busy !== "view" && <ExternalLink />} Visualizar
+      </Button>
+      <Button variant="primary" onClick={() => run("download")} loading={busy === "download"} disabled={!!busy}>
+        {busy !== "download" && <Download />} Baixar
+      </Button>
+    </>
+  );
 }
 
 function Placeholder({ text }: { text: string }) {
@@ -71,12 +130,14 @@ export default function DocumentDetailPage() {
   const [dialog, setDialog] = useState<"edit" | "share" | "version" | null>(null);
   const archive = useAction(() => services.documents.archive(id), { success: "Documento arquivado", successDescription: "Continua disponível para consulta em “Arquivados”." });
   const restore = useAction(() => services.documents.restore(id), { success: "Documento restaurado" });
+  // Firebase: só baixa automaticamente o que a página consegue mostrar; o restante é baixado no clique.
+  const currentFile = doc?.versions.at(-1)?.file ?? null;
+  const preview = useFileObjectUrl(isDemoMode || isPreviewable(currentFile) ? currentFile : null);
 
   if (isLoading) return <PageSkeleton />;
   if (isError || !doc) return <ErrorState message={errorMessage(error, "Documento não encontrado.")} onRetry={() => refetch()} />;
 
   const current = doc.versions[doc.versions.length - 1];
-  const url = services.files.getObjectUrl(current.file?.blobId);
   const ctx = access.ctx;
   const canEdit = !!ctx && canEditDocument(ctx, doc);
   const canArchive = !!ctx && canArchiveDocument(ctx, doc);
@@ -104,16 +165,7 @@ export default function DocumentDetailPage() {
         }
         actions={
           <>
-            {url && (
-              <>
-                <a href={url} target="_blank" rel="noreferrer" className="inline-flex h-[38px] items-center gap-2 rounded-lg border border-line-strong px-4 text-[13.5px] font-semibold hover:bg-surface-2">
-                  <ExternalLink className="size-4" /> Visualizar
-                </a>
-                <a href={url} download={current.file?.name} className="inline-flex h-[38px] items-center gap-2 rounded-lg bg-gold px-4 text-[13.5px] font-semibold text-gold-ink hover:bg-gold-hover">
-                  <Download className="size-4" /> Baixar
-                </a>
-              </>
-            )}
+            <CurrentFileButtons file={current.file} url={preview.url} />
             {canEdit && (
               <Button onClick={() => setDialog("share")}>
                 <Share2 /> Compartilhar
@@ -130,7 +182,7 @@ export default function DocumentDetailPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-4">
           <Panel title="Pré-visualização" description={current.file ? `${current.file.name} · ${formatBytes(current.file.size)}` : undefined}>
-            <Preview version={current} sample={doc.sample} />
+            <Preview file={current.file} sample={doc.sample} preview={preview} />
           </Panel>
           {doc.description && (
             <Panel title="Descrição">
@@ -152,7 +204,6 @@ export default function DocumentDetailPage() {
           >
             <ul className="divide-y divide-line">
               {[...doc.versions].reverse().map((v) => {
-                const vurl = services.files.getObjectUrl(v.file?.blobId);
                 return (
                   <li key={v.version} className="flex items-center gap-3 px-5 py-3">
                     <span className="grid size-9 shrink-0 place-items-center rounded-lg border border-line bg-surface-2 font-mono text-[12px] font-semibold">v{v.version}</span>
@@ -166,11 +217,9 @@ export default function DocumentDetailPage() {
                         {v.note && ` · ${v.note}`}
                       </p>
                     </div>
-                    {vurl && (
-                      <a href={vurl} download={v.file?.name} className="grid size-8 place-items-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg" aria-label={`Baixar versão ${v.version}`}>
-                        <Download className="size-4" />
-                      </a>
-                    )}
+                    <div className="flex shrink-0 items-center">
+                      <FileActions file={v.file} label={`versão ${v.version}`} />
+                    </div>
                   </li>
                 );
               })}

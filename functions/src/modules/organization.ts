@@ -45,7 +45,7 @@ const roleInput = z.object({
   active: z.boolean(),
   homePreset: z.enum(["presidency", "secretary", "finance", "marketing", "events", "extension", "advisor"]),
   permissions: z.array(z.enum(ALL_PERMISSIONS)).max(200),
-});
+}).strict();
 
 const departmentInput = z.object({
   name: name("O nome do departamento"),
@@ -57,7 +57,7 @@ const departmentInput = z.object({
     .transform((s) => s.toUpperCase()),
   description: z.string().trim().max(400).default(""),
   active: z.boolean(),
-});
+}).strict();
 
 const email = z
   .string()
@@ -71,7 +71,7 @@ const inviteInput = z.object({
   email,
   roleId: id,
   departmentIds: z.array(id).max(MAX_EXTRA_DEPARTMENTS, `Escolha no máximo ${MAX_EXTRA_DEPARTMENTS} departamentos adicionais.`).default([]),
-});
+}).strict();
 
 const memberUpdate = z.object({
   id,
@@ -80,7 +80,7 @@ const memberUpdate = z.object({
       name: name("O nome").optional(),
       email: email.optional(),
       roleId: id.optional(),
-      departmentIds: z.array(id).max(MAX_EXTRA_DEPARTMENTS).optional(),
+      departmentIds: z.array(id).max(MAX_EXTRA_DEPARTMENTS, `Escolha no máximo ${MAX_EXTRA_DEPARTMENTS} departamentos adicionais.`).optional(),
       status: z.enum(["active", "inactive"]).optional(),
     })
     .strict(),
@@ -332,6 +332,10 @@ export const organizationActions = {
       const role = state.roles.get(input.roleId);
       ensure(role && role.active, "invalid", "Escolha um cargo ativo.");
       assertCanAssignRole(actor, role);
+      if (input.departmentIds.length > 0) {
+        // Departamentos adicionais ampliam o acesso: mesma exigência de updateMember.
+        requirePermission(actor, "organization.admin", "Somente quem administra permissões pode definir departamentos adicionais.");
+      }
       validateDepartments(input.departmentIds, state);
       const [existing, pending] = await Promise.all([
         tx.get(db.collection("memberPrivate").where("email", "==", input.email).limit(1)),

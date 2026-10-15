@@ -167,7 +167,12 @@ export const systemActions = {
       fileName: z.string().trim().min(1).max(300),
       size: z.number().int().positive(),
       contentType: z.string().trim().min(3).max(150),
-      targetId: z.string().min(1).max(128).optional(),
+      targetId: z
+        .string()
+        .min(1)
+        .max(128)
+        .nullish()
+        .transform((v) => v ?? undefined),
     }),
     async run(actor, input) {
       actor = actor!;

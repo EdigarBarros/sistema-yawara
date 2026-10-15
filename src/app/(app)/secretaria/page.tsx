@@ -10,6 +10,7 @@ import { MEETING_MODE_LABELS, MEETING_STATUS } from "@/lib/labels";
 import { formatDate, formatRelative, formatTime, todayDateOnly } from "@/lib/format";
 import { matchesQuery } from "@/lib/utils";
 import { errorMessage } from "@/lib/notify";
+import { isDemoMode } from "@/lib/mode";
 import { ButtonLink } from "@/components/ui/button";
 import { PageHeader, Panel } from "@/components/shared/page";
 import { DataTable, type Column } from "@/components/shared/data-table";
@@ -29,7 +30,18 @@ export default function MeetingsPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [mode, setMode] = useState("");
   const [query, setQuery] = useState("");
-  if (!enabled) return <RestrictedState />;
+  if (!enabled)
+    return (
+      <RestrictedState
+        description={
+          access.moduleEnabled("meetings")
+            ? isDemoMode
+              ? undefined
+              : "Seu cargo não tem acesso à Secretaria e reuniões. Se precisar, fale com a presidência."
+            : "O módulo de Secretaria e reuniões está desativado nas configurações."
+        }
+      />
+    );
 
   const today = todayDateOnly();
   const upcoming = (data ?? []).filter((m) => m.date >= today).sort((a, b) => a.date.localeCompare(b.date));
@@ -90,6 +102,8 @@ export default function MeetingsPage() {
         <Panel title="Próximas reuniões" description="Agendadas a partir de hoje" bodyClassName="py-1.5">
           {isLoading ? (
             <InlineLoader />
+          ) : isError ? (
+            <ErrorState message={errorMessage(error)} onRetry={() => refetch()} />
           ) : upcoming.length === 0 ? (
             <EmptyState compact icon={<CalendarClock />} title="Nenhuma reunião agendada" />
           ) : (
