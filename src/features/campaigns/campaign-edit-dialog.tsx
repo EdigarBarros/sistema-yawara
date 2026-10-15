@@ -7,9 +7,10 @@ import { useAction } from "@/hooks/use-action";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Segmented, Textarea } from "@/components/ui/form";
-import { DemoNotice } from "@/components/shared/states";
 import { errorMessage } from "@/lib/notify";
 import { CampaignAccessConfig } from "./access-config";
+import { RelatedEventField } from "./event-field";
+import { CampaignNotice } from "./notice";
 
 /** Edita dados gerais e acesso. Quantidade e valor não mudam depois das vendas. */
 interface CampaignEditDialogProps {
@@ -37,6 +38,7 @@ function CampaignEditBody({ onOpenChange, campaign, initialTab = "dados" }: Camp
     startDate: campaign.startDate ?? "",
     endDate: campaign.endDate ?? "",
     drawDate: campaign.drawDate ?? "",
+    eventId: campaign.eventId ?? "",
   });
   const [access, setAccess] = useState<CampaignAccess>(campaign.access);
   const [error, setError] = useState<string>();
@@ -48,6 +50,7 @@ function CampaignEditBody({ onOpenChange, campaign, initialTab = "dados" }: Camp
         startDate: form.startDate || undefined,
         endDate: form.endDate || undefined,
         drawDate: form.drawDate || undefined,
+        eventId: form.eventId || undefined,
         access,
       }),
     { success: "Campanha atualizada", silentError: true },
@@ -117,11 +120,15 @@ function CampaignEditBody({ onOpenChange, campaign, initialTab = "dados" }: Camp
             <Field label="Observações" optional className="sm:col-span-2">
               <Textarea rows={2} value={form.notes} onChange={set("notes")} />
             </Field>
+            <RelatedEventField className="sm:col-span-2" value={form.eventId} onChange={(eventId) => setForm((f) => ({ ...f, eventId }))} />
           </div>
         ) : (
           <div className="space-y-4">
             <CampaignAccessConfig value={access} onChange={setAccess} />
-            <DemoNotice>A alteração fica registrada no histórico. Permissões simuladas: o controle real será feito pelo backend.</DemoNotice>
+            <CampaignNotice
+              demo="A alteração fica registrada no histórico. Permissões simuladas: o controle real será feito pelo backend."
+              live="A alteração fica registrada no histórico e na auditoria e vale imediatamente: quem sair do público deixa de ver a campanha (ou os dados dos compradores) na hora."
+            />
           </div>
         )}
         {error && (

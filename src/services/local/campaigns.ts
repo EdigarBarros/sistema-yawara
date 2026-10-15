@@ -81,6 +81,13 @@ function validateCampaignInput(input: Partial<CampaignInput>, creating: boolean)
   }
 }
 
+/** Evento relacionado (opcional): precisa existir. */
+function validateEventLink(db: DemoDB, eventId: string | undefined) {
+  if (eventId && !db.events.some((e) => e.id === eventId)) {
+    throw new ServiceError("invalid", "O evento relacionado não foi encontrado ou não está disponível para o seu perfil.");
+  }
+}
+
 function validateSaleInput(db: DemoDB, campaign: Campaign, input: SaleInput, sales: Sale[]) {
   if (input.numbers.length === 0) throw new ServiceError("invalid", "Selecione pelo menos um número.");
   const blocked = unavailableNumbers(campaign, sales, input.numbers);
@@ -144,6 +151,7 @@ export const localCampaigns: CampaignService = {
       const ctx = accessContext(db);
       requirePermission(ctx, "campaigns.create", "Seu perfil não pode criar campanhas.");
       validateCampaignInput(input, true);
+      validateEventLink(db, input.eventId);
       const at = now();
       const campaign: Campaign = {
         id: newId("cmp"),
@@ -160,6 +168,7 @@ export const localCampaigns: CampaignService = {
         startDate: input.startDate || undefined,
         endDate: input.endDate || undefined,
         notes: input.notes?.trim() || undefined,
+        eventId: input.eventId || undefined,
         access: {
           view: sanitizeAudience(input.access.view),
           sell: sanitizeAudience(input.access.sell),
@@ -191,6 +200,7 @@ export const localCampaigns: CampaignService = {
       const campaign = visibleCampaign(db, ctx, id);
       if (!canManageCampaign(ctx, campaign)) throw new ServiceError("forbidden", "Seu perfil não pode editar esta campanha.");
       validateCampaignInput({ ...input }, false);
+      if (input.eventId !== campaign.eventId) validateEventLink(db, input.eventId);
       const accessChanged = input.access && JSON.stringify(input.access) !== JSON.stringify(campaign.access);
       Object.assign(campaign, {
         ...input,

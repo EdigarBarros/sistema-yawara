@@ -57,9 +57,9 @@ export function useSettings() {
   return useQuery({ queryKey: [uid, "settings"], queryFn: () => services.settings.get(), enabled: uid !== "anon" });
 }
 
-export function useCampaigns() {
+export function useCampaigns(enabled = true) {
   const uid = useUid();
-  return useQuery({ queryKey: [uid, "campaigns"], queryFn: () => services.campaigns.list() });
+  return useQuery({ queryKey: [uid, "campaigns"], queryFn: () => services.campaigns.list(), enabled });
 }
 export function useCampaign(id: ID) {
   const uid = useUid();

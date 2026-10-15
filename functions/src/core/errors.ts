@@ -44,6 +44,7 @@ export const GENERIC_ERROR = "Não foi possível concluir a operação. Tente no
 /** Primeira mensagem de validação do Zod (os esquemas usam mensagens em português). */
 export function zodMessage(error: ZodError) {
   const issue = error.issues[0];
+  if (issue?.code === "unrecognized_keys") return "A requisição contém campos não permitidos.";
   return issue?.message && !issue.message.startsWith("Invalid") && !issue.message.startsWith("Expected")
     ? issue.message
     : "Alguns dados enviados são inválidos. Revise o formulário e tente novamente.";

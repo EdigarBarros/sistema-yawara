@@ -106,10 +106,13 @@ Regras obrigatórias:
     conteúdo real e move para `destDir`); na `run`, grave o `FileRef` e chame
     `markAttached(tx, uploadId, recurso)`. Se a transação falhar, o arquivo
     definitivo é apagado automaticamente.
-11. **Erros**: `fail(code, mensagem)` com texto em português, sem detalhes
+11. **Campos opcionais**: o SDK de funções chamáveis envia `undefined` como
+    `null`. Nos esquemas do servidor, campos opcionais aceitam `null`
+    (`.nullish()`); convenção: chave ausente = "não alterar", `null` = "limpar".
+12. **Erros**: `fail(code, mensagem)` com texto em português, sem detalhes
     internos. Erros inesperados viram mensagem genérica (o log não inclui o
     payload).
-12. **Idempotência**: automática por `requestId` (o despachante grava
+13. **Idempotência**: automática por `requestId` (o despachante grava
     `idempotency/{uid}__{requestId}`). A `run` deve retornar só referências.
 
 ## Convenções do cliente (src/services/firebase)

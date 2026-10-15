@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Ticket } from "lucide-react";
+import { AlertTriangle, Plus, RotateCcw, Ticket } from "lucide-react";
 import type { Campaign } from "@/types";
 import { useAccess } from "@/hooks/use-access";
 import { useAllSales, useCampaigns, useDirectory } from "@/hooks/use-data";
@@ -12,7 +12,8 @@ import { CAMPAIGN_STATUS } from "@/lib/labels";
 import { formatDate, formatMoney } from "@/lib/format";
 import { matchesQuery } from "@/lib/utils";
 import { errorMessage } from "@/lib/notify";
-import { ButtonLink } from "@/components/ui/button";
+import { isDemoMode } from "@/lib/mode";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { Progress } from "@/components/ui/misc";
 import { PageHeader } from "@/components/shared/page";
 import { DataTable, type Column } from "@/components/shared/data-table";
@@ -28,13 +29,15 @@ export default function CampaignsPage() {
   const dir = useDirectory();
   const enabled = access.canModule("campaigns");
   const { data: campaigns, isLoading, isError, error, refetch } = useCampaigns();
-  const { data: sales } = useAllSales(enabled);
+  const { data: sales, isError: salesFailed, error: salesError, refetch: refetchSales } = useAllSales(enabled);
   const [filter, setFilter] = useState<Filter>("active");
   const [query, setQuery] = useState("");
 
   const summaries = useMemo(() => {
     const map = new Map<string, ReturnType<typeof summarize>>();
-    for (const c of campaigns ?? []) map.set(c.id, summarize(c, (sales ?? []).filter((s) => s.campaignId === c.id)));
+    // Sem as vendas (ainda carregando ou com erro) não há como calcular o progresso: nada de "0 vendidos" falso.
+    if (!sales) return map;
+    for (const c of campaigns ?? []) map.set(c.id, summarize(c, sales.filter((s) => s.campaignId === c.id)));
     return map;
   }, [campaigns, sales]);
 
@@ -52,7 +55,12 @@ export default function CampaignsPage() {
     .filter((c) => matchesQuery(query, c.name, c.prize, c.code, dir.memberName(c.createdBy)))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-  if (!enabled) return <RestrictedState />;
+  if (!enabled)
+    return (
+      <RestrictedState
+        description={isDemoMode ? undefined : "Seu cargo não tem acesso às campanhas, ou o módulo está desativado nas configurações. Se precisar, procure a presidência."}
+      />
+    );
 
   const columns: Column<Campaign>[] = [
     {
@@ -100,6 +108,8 @@ export default function CampaignsPage() {
               {s.sold}/{s.total} · {Math.round((s.sold / s.total) * 100)}%
             </p>
           </div>
+        ) : salesFailed ? (
+          <span className="text-[12px] text-fg-subtle">Indisponível</span>
         ) : null;
       },
     },
@@ -138,6 +148,15 @@ export default function CampaignsPage() {
           />
           <SearchInput value={query} onChange={setQuery} placeholder="Buscar por nome, prêmio ou código" className="lg:w-72" />
         </Toolbar>
+        {!isError && salesFailed && (
+          <div role="alert" className="flex flex-wrap items-center gap-3 border-b border-line bg-danger/[0.06] px-4 py-3 text-[13px] text-fg-muted sm:px-5">
+            <AlertTriangle className="size-4 shrink-0 text-danger" aria-hidden />
+            <span className="min-w-0 flex-1">Não foi possível carregar as vendas para calcular o progresso. {errorMessage(salesError)}</span>
+            <Button size="sm" onClick={() => refetchSales()}>
+              <RotateCcw /> Tentar novamente
+            </Button>
+          </div>
+        )}
         {isError ? (
           <ErrorState message={errorMessage(error)} onRetry={() => refetch()} />
         ) : (

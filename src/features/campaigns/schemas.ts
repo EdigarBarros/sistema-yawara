@@ -15,6 +15,8 @@ export const campaignSchema = z
     endDate: optionalDate,
     drawDate: optionalDate,
     access: z.object({ view: audienceSchema, sell: audienceSchema, buyerData: audienceSchema }),
+    /** Evento relacionado (opcional; "" = nenhum). */
+    eventId: z.string().optional(),
   })
   .superRefine((v, ctx) => {
     if (v.startDate && v.endDate && v.endDate < v.startDate) {
@@ -32,7 +34,7 @@ export type CampaignFormValues = z.infer<typeof campaignSchema>;
 
 /** Campos validados em cada etapa do formulário de nova rifa. */
 export const CAMPAIGN_STEPS: { key: string; title: string; description: string; fields: Path<CampaignFormValues>[] }[] = [
-  { key: "dados", title: "Campanha", description: "Nome, prêmio e descrição", fields: ["name", "prize", "description", "notes"] },
+  { key: "dados", title: "Campanha", description: "Nome, prêmio e descrição", fields: ["name", "prize", "description", "notes", "eventId"] },
   { key: "numeros", title: "Números e datas", description: "Quantidade, valor e prazos", fields: ["quantity", "unitPrice", "startDate", "endDate", "drawDate"] },
   { key: "acesso", title: "Acesso e permissões", description: "Quem vê, vende e consulta dados", fields: ["access.view", "access.sell", "access.buyerData"] },
   { key: "revisao", title: "Revisão", description: "Confira antes de criar", fields: [] },

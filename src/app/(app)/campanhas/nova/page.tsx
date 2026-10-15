@@ -1,6 +1,7 @@
 "use client";
 
 import { useAccess } from "@/hooks/use-access";
+import { isDemoMode } from "@/lib/mode";
 import { PageHeader } from "@/components/shared/page";
 import { RestrictedState } from "@/components/shared/states";
 import { CampaignWizard } from "@/features/campaigns/campaign-wizard";
@@ -18,7 +19,13 @@ export default function NewCampaignPage() {
       {access.can("campaigns.create") && access.canModule("campaigns") ? (
         <CampaignWizard />
       ) : (
-        <RestrictedState description="Seu perfil de demonstração não pode criar campanhas. Troque para Presidência, Financeiro, Eventos ou Marketing." />
+        <RestrictedState
+          description={
+            isDemoMode
+              ? "Seu perfil de demonstração não pode criar campanhas. Troque para Presidência, Financeiro, Eventos ou Marketing."
+              : "Seu cargo não tem permissão para criar campanhas. Se precisar, peça a quem administra cargos e permissões."
+          }
+        />
       )}
     </>
   );

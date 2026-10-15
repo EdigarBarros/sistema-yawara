@@ -1,7 +1,8 @@
 /**
  * Utilitários de exportação local. Todos os arquivos são gerados no próprio
- * navegador, a partir dos dados de demonstração — nada é enviado a servidores.
+ * navegador, a partir dos dados já carregados — nada é enviado a servidores.
  */
+import { isDemoMode } from "@/lib/mode";
 import type { jsPDF } from "jspdf";
 import { formatDateTimeShort } from "@/lib/format";
 
@@ -72,7 +73,7 @@ export async function createPdf(orientation: "portrait" | "landscape" = "portrai
   return new jsPDF({ orientation, unit: "mm", format: "a4" });
 }
 
-/** Cabeçalho institucional com escudo e aviso de demonstração. Retorna o Y onde o conteúdo começa. */
+/** Cabeçalho institucional com escudo (e aviso de demonstração, no modo demo). Retorna o Y onde o conteúdo começa. */
 export async function drawPdfHeader(doc: jsPDF, title: string, subtitle?: string) {
   const width = doc.internal.pageSize.getWidth();
   doc.setFillColor(...PDF_COLORS.navy);
@@ -92,7 +93,7 @@ export async function drawPdfHeader(doc: jsPDF, title: string, subtitle?: string
   doc.setTextColor(...PDF_COLORS.gold);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7.5);
-  doc.text("DOCUMENTO DE DEMONSTRAÇÃO · DADOS FICTÍCIOS", width - 12, 13, { align: "right" });
+  doc.text(isDemoMode ? "DOCUMENTO DE DEMONSTRAÇÃO · DADOS FICTÍCIOS" : "DOCUMENTO INTERNO", width - 12, 13, { align: "right" });
 
   doc.setTextColor(...PDF_COLORS.text);
   doc.setFont("helvetica", "bold");
@@ -123,7 +124,8 @@ export function drawPdfFooters(doc: jsPDF, generatedBy: string) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7.5);
     doc.setTextColor(...PDF_COLORS.muted);
-    doc.text(`Gerado em ${formatDateTimeShort(new Date().toISOString())} por ${generatedBy} · Ambiente de demonstração da Central Yawara`, 12, height - 9);
+    const origin = isDemoMode ? "Ambiente de demonstração da Central Yawara" : "Gerado no navegador a partir dos dados registrados na Central Yawara";
+    doc.text(`Gerado em ${formatDateTimeShort(new Date().toISOString())} por ${generatedBy} · ${origin}`, 12, height - 9);
     doc.text(`Página ${i} de ${pages}`, width - 12, height - 9, { align: "right" });
   }
 }

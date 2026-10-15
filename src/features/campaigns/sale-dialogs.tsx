@@ -5,7 +5,7 @@ import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertTriangle, BadgeCheck, Clock3, Hourglass, Plus, X } from "lucide-react";
 import type { Campaign, NumberSlot, PaymentMethod, Sale } from "@/types";
-import { services } from "@/services";
+import { services, ServiceError } from "@/services";
 import { useAccess } from "@/hooks/use-access";
 import { useAction } from "@/hooks/use-action";
 import { canSeeBuyer } from "@/lib/policies";
@@ -13,12 +13,16 @@ import { PAYMENT_METHOD_LABELS } from "@/lib/labels";
 import { formatMoney } from "@/lib/format";
 import { formatNumberRanges, padNumber, parseNumberList } from "@/lib/raffle";
 import { errorMessage } from "@/lib/notify";
+import { isDemoMode, isFirebaseMode } from "@/lib/mode";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ChoiceCards, Field, Input, Select, Textarea } from "@/components/ui/form";
 import { MemberSelect, FilePicker } from "@/components/shared/pickers";
-import { DemoNotice } from "@/components/shared/states";
 import { editSaleSchema, saleSchema, type EditSaleFormValues, type SaleFormValues } from "./schemas";
+import { CampaignNotice } from "./notice";
+
+/** Limite do servidor por operação (ver functions/src/modules/campaigns.ts). */
+const MAX_NUMBERS_PER_SALE = 100;
 
 const METHODS = Object.entries(PAYMENT_METHOD_LABELS) as [PaymentMethod, string][];
 
@@ -45,6 +49,8 @@ interface RegisterSaleDialogProps {
   slots: NumberSlot[];
   initialNumbers: number[];
   onRegistered: () => void;
+  /** Outra pessoa ocupou algum número: a tela recarrega a grade na hora. */
+  onConflict?: () => void;
 }
 
 export function RegisterSaleDialog(props: RegisterSaleDialogProps) {
@@ -55,7 +61,7 @@ export function RegisterSaleDialog(props: RegisterSaleDialogProps) {
   );
 }
 
-function RegisterSaleBody({ onOpenChange, campaign, slots, initialNumbers, onRegistered }: RegisterSaleDialogProps) {
+function RegisterSaleBody({ onOpenChange, campaign, slots, initialNumbers, onRegistered, onConflict }: RegisterSaleDialogProps) {
   const access = useAccess();
   const canConfirm = access.can("campaigns.approve");
   const [numbers, setNumbers] = useState<number[]>(() => [...initialNumbers].sort((a, b) => a - b));
@@ -117,12 +123,24 @@ function RegisterSaleBody({ onOpenChange, campaign, slots, initialNumbers, onReg
       setNumbersError("Selecione pelo menos um número.");
       return;
     }
+    if (isFirebaseMode && numbers.length > MAX_NUMBERS_PER_SALE) {
+      setNumbersError(
+        `Uma venda pode ter no máximo ${MAX_NUMBERS_PER_SALE} números por operação (${numbers.length} selecionados). Divida a seleção em vendas separadas.`,
+      );
+      return;
+    }
     try {
       await sale.run(v);
       onRegistered();
       onOpenChange(false);
     } catch (e) {
       setServerError(errorMessage(e));
+      if (e instanceof ServiceError && e.code === "conflict") {
+        // Atualiza a grade e tira da seleção os números que outra pessoa ocupou.
+        onConflict?.();
+        const taken = (e.details as { numbers?: unknown } | undefined)?.numbers;
+        if (Array.isArray(taken)) setNumbers((prev) => prev.filter((n) => !taken.includes(n)));
+      }
     }
   });
 
@@ -257,9 +275,10 @@ function RegisterSaleBody({ onOpenChange, campaign, slots, initialNumbers, onReg
               {serverError}
             </div>
           )}
-          <DemoNotice>
-            A demonstração impede vender o mesmo número duas vezes neste navegador. O bloqueio entre pessoas e celulares diferentes será feito pelo backend.
-          </DemoNotice>
+          <CampaignNotice
+            demo="A demonstração impede vender o mesmo número duas vezes neste navegador. O bloqueio entre pessoas e celulares diferentes será feito pelo backend."
+            live={`Os números são conferidos no servidor no momento do registro: se alguém ocupar um deles antes, a venda inteira é recusada (nada é registrado pela metade) e a grade é atualizada. Até ${MAX_NUMBERS_PER_SALE} números por venda.`}
+          />
         </form>
       </DialogContent>
   );
@@ -285,6 +304,8 @@ export function EditSaleDialog(props: SaleDialogProps) {
 function EditSaleBody({ onOpenChange, campaign, sale }: SaleDialogProps) {
   const access = useAccess();
   const buyerVisible = !!access.ctx && canSeeBuyer(access.ctx, campaign, sale) && !!sale.buyer;
+  // Firebase: observações ficam junto dos dados pessoais; sem acesso a eles, o campo não aparece nem é enviado.
+  const notesEditable = isDemoMode || buyerVisible;
   const form = useForm<EditSaleFormValues>({
     resolver: zodResolver(editSaleSchema),
     defaultValues: {
@@ -304,7 +325,7 @@ function EditSaleBody({ onOpenChange, campaign, sale }: SaleDialogProps) {
         buyerContact: buyerVisible ? v.buyerContact : undefined,
         sellerId: v.sellerId,
         paymentMethod: v.paymentMethod ? (v.paymentMethod as PaymentMethod) : undefined,
-        notes: v.notes,
+        notes: notesEditable ? v.notes : undefined,
       }),
     { success: "Dados da venda atualizados" },
   );
@@ -342,7 +363,11 @@ function EditSaleBody({ onOpenChange, campaign, sale }: SaleDialogProps) {
               </Field>
             </>
           ) : (
-            <DemoNotice className="sm:col-span-2">Os dados pessoais deste comprador são restritos para o seu perfil e não podem ser editados.</DemoNotice>
+            <CampaignNotice
+              className="sm:col-span-2"
+              demo="Os dados pessoais deste comprador são restritos para o seu perfil e não podem ser editados."
+              live="Os dados pessoais e as observações deste comprador são restritos para o seu perfil e não podem ser editados."
+            />
           )}
           <Field label="Responsável pela venda" required className="sm:col-span-2" error={formState.errors.sellerId?.message}>
             <Controller control={control} name="sellerId" render={({ field }) => <MemberSelect value={field.value} onChange={field.onChange} />} />
@@ -352,9 +377,11 @@ function EditSaleBody({ onOpenChange, campaign, sale }: SaleDialogProps) {
               <PaymentMethodSelect allowEmpty {...register("paymentMethod")} />
             </Field>
           )}
-          <Field label="Observações" optional className="sm:col-span-2">
-            <Textarea rows={2} {...register("notes")} />
-          </Field>
+          {notesEditable && (
+            <Field label="Observações" optional className="sm:col-span-2">
+              <Textarea rows={2} {...register("notes")} />
+            </Field>
+          )}
         </div>
       </DialogContent>
   );
@@ -409,7 +436,16 @@ function ConfirmPaymentBody({ onOpenChange, campaign, sale }: SaleDialogProps) {
             <p className="mb-1.5 text-[13px] font-medium">
               Comprovante <span className="text-xs font-normal text-fg-subtle">(opcional)</span>
             </p>
-            <FilePicker file={file} onChange={setFile} accept="image/*,application/pdf" hint="PDF ou imagem. Fica apenas neste navegador nesta etapa." />
+            <FilePicker
+              file={file}
+              onChange={setFile}
+              accept="image/*,application/pdf"
+              hint={
+                isDemoMode
+                  ? "PDF ou imagem. Fica apenas neste navegador nesta etapa."
+                  : "PDF ou imagem, até 10 MB. Visível apenas para quem pode consultar os dados deste comprador."
+              }
+            />
           </div>
           <p className="text-[12.5px] text-fg-muted">Confirme apenas valores que você conferiu. A confirmação fica registrada no histórico com seu nome.</p>
         </div>

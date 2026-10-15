@@ -1,3 +1,4 @@
+import { isDemoMode } from "@/lib/mode";
 import type { ReactNode } from "react";
 import { AlertTriangle, FlaskConical, Inbox, Loader2, Lock, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -55,7 +56,10 @@ export function RestrictedState({ title = "Área não disponível para este perf
       icon={<Lock />}
       title={title}
       description={
-        description ?? "O perfil de demonstração em uso não tem permissão para esta área. Troque de perfil no topo da tela para experimentar outras visões."
+        description ??
+        (isDemoMode
+          ? "O perfil de demonstração em uso não tem permissão para esta área. Troque de perfil no topo da tela para experimentar outras visões."
+          : "Seu cargo não tem permissão para esta área. Se precisar de acesso, fale com a presidência.")
       }
     />
   );

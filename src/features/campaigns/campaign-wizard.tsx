@@ -17,9 +17,10 @@ import { Button } from "@/components/ui/button";
 import { ChoiceCards, Field, Input, Textarea } from "@/components/ui/form";
 import { Panel, DetailList } from "@/components/shared/page";
 import { Stepper } from "@/components/shared/stepper";
-import { DemoNotice } from "@/components/shared/states";
 import { CAMPAIGN_STEPS, campaignSchema, type CampaignFormValues } from "./schemas";
 import { CampaignAccessConfig, CampaignAccessSummary } from "./access-config";
+import { RelatedEventField, useRelatedEventName } from "./event-field";
+import { CampaignNotice } from "./notice";
 
 export function CampaignWizard() {
   const router = useRouter();
@@ -37,6 +38,7 @@ export function CampaignWizard() {
       endDate: v.endDate || undefined,
       drawDate: v.drawDate || undefined,
       access: v.access,
+      eventId: v.eventId || undefined,
     }),
   );
 
@@ -55,12 +57,14 @@ export function CampaignWizard() {
       endDate: "",
       drawDate: "",
       access: { view: emptyAudience("all"), sell: emptyAudience("directors_advisors"), buyerData: emptyAudience("board") },
+      eventId: "",
     },
   });
   const { control, formState, trigger, handleSubmit } = form;
   const register = liveRegister(form);
   const errors = formState.errors;
   const values = useWatch({ control }) as CampaignFormValues;
+  const eventName = useRelatedEventName(values.eventId || undefined);
 
   const quantity = /^\d+$/.test(values.quantity) ? Number(values.quantity) : 0;
   const price = parseMoney(values.unitPrice ?? "") ?? 0;
@@ -132,6 +136,11 @@ export function CampaignWizard() {
               <Field label="Observações" optional error={errors.notes?.message}>
                 <Textarea rows={2} placeholder="Regras internas, combinações com o fornecedor do prêmio…" {...register("notes")} />
               </Field>
+              <Controller
+                control={control}
+                name="eventId"
+                render={({ field }) => <RelatedEventField value={field.value ?? ""} onChange={field.onChange} />}
+              />
             </div>
           </Panel>
         )}
@@ -170,7 +179,10 @@ export function CampaignWizard() {
                   <Input type="date" {...register("drawDate")} />
                 </Field>
               </div>
-              <DemoNotice>A Central não realiza sorteios. A data serve apenas para organização e divulgação.</DemoNotice>
+              <CampaignNotice
+                demo="A Central não realiza sorteios. A data serve apenas para organização e divulgação."
+                live="A Central não realiza sorteios. A data serve apenas para organização e divulgação."
+              />
             </div>
           </Panel>
         )}
@@ -192,9 +204,11 @@ export function CampaignWizard() {
                 />
               )}
             />
-            <DemoNotice className="mt-4">
-              Nesta etapa as permissões são simuladas no navegador para demonstrar a experiência. O controle real será aplicado pelo backend.
-            </DemoNotice>
+            <CampaignNotice
+              className="mt-4"
+              demo="Nesta etapa as permissões são simuladas no navegador para demonstrar a experiência. O controle real será aplicado pelo backend."
+              live="O servidor aplica estas regras em cada operação: cada pessoa só vê a campanha, registra vendas ou consulta compradores se a configuração e o cargo dela permitirem."
+            />
           </Panel>
         )}
 
@@ -212,6 +226,7 @@ export function CampaignWizard() {
                   { label: "Início", value: values.startDate ? formatDate(values.startDate) : "Não definido" },
                   { label: "Encerramento", value: values.endDate ? formatDate(values.endDate) : "Não definido" },
                   { label: "Sorteio", value: values.drawDate ? formatDate(values.drawDate) : "Não definido" },
+                  { label: "Evento relacionado", value: values.eventId ? (eventName ?? "Evento selecionado") : "Nenhum" },
                 ]}
               />
             </Panel>
