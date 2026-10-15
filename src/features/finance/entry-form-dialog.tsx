@@ -10,7 +10,7 @@ import { useAccess } from "@/hooks/use-access";
 import { useAction } from "@/hooks/use-action";
 import { useCampaigns, useDirectory, useEvents, useFinanceCategories } from "@/hooks/use-data";
 import { PAYMENT_METHOD_LABELS } from "@/lib/labels";
-import { centsToInput, parseMoney } from "@/lib/format";
+import { centsToInput, parseMoney, todayDateOnly } from "@/lib/format";
 import { dateField, moneyField, requiredText } from "@/lib/validation";
 import { liveRegister } from "@/lib/forms";
 import { errorMessage } from "@/lib/notify";
@@ -89,7 +89,7 @@ function EntryFormBody({ onOpenChange, type = "income", entry, onSaved }: Props)
           description: "",
           categoryId: "",
           amount: "",
-          date: new Date().toISOString().slice(0, 10),
+          date: todayDateOnly(),
           responsibleId: access.user?.id ?? "",
           departmentId: access.role?.departmentId ?? "",
           eventId: "",

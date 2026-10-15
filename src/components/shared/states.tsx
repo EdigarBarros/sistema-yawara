@@ -1,7 +1,8 @@
 import { isDemoMode } from "@/lib/mode";
 import type { ReactNode } from "react";
-import { AlertTriangle, FlaskConical, Inbox, Loader2, Lock, RotateCcw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { AlertTriangle, FlaskConical, Inbox, Loader2, Lock, RotateCcw, SearchX } from "lucide-react";
+import { Button, ButtonLink } from "@/components/ui/button";
+import { ServiceError } from "@/services/errors";
 import { Skeleton } from "@/components/ui/misc";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +48,49 @@ export function ErrorState({ message, onRetry, className }: { message: string; o
       )}
     </div>
   );
+}
+
+/**
+ * Falha ao abrir um registro (página de detalhe). Sem permissão e "não
+ * encontrado" não oferecem "Tentar novamente" — repetir não muda o resultado.
+ */
+export function RecordErrorState({
+  error,
+  notFound,
+  backHref,
+  backLabel = "Voltar à lista",
+  onRetry,
+}: {
+  error: unknown;
+  notFound: string;
+  backHref?: string;
+  backLabel?: string;
+  onRetry?: () => void;
+}) {
+  const code = error instanceof ServiceError ? error.code : null;
+  const back = backHref ? <ButtonLink href={backHref}>{backLabel}</ButtonLink> : undefined;
+  if (!error || code === "not_found") {
+    return (
+      <EmptyState
+        icon={<SearchX />}
+        title={notFound}
+        description={error instanceof ServiceError ? error.message : "O registro pode ter sido removido ou o link está incorreto."}
+        action={back}
+      />
+    );
+  }
+  if (code === "forbidden") {
+    return (
+      <EmptyState
+        icon={<Lock />}
+        title="Registro não disponível para o seu perfil"
+        description={`${(error as ServiceError).message} Se precisar de acesso, fale com quem criou o registro ou com a presidência.`}
+        action={back}
+      />
+    );
+  }
+  const message = error instanceof Error && error.message ? error.message : "Não foi possível carregar os dados agora. Tente novamente.";
+  return <ErrorState message={message} onRetry={onRetry} />;
 }
 
 /** Exibido quando o perfil demonstrativo não tem acesso à área. */

@@ -236,7 +236,7 @@ function AddDocumentBody({ onOpenChange, links, defaultCategoryId, stay, onCreat
             )}
           />
           <div className="rounded-lg border border-line bg-sunken px-4 py-3">
-            <AudienceSummary audience={accessValue} departmentId={departmentId} labels={DOC_SCOPE_LABELS} alwaysIncluded={access.user ? [access.user.id] : []} />
+            <AudienceSummary module="documents" audience={accessValue} departmentId={departmentId} labels={DOC_SCOPE_LABELS} alwaysIncluded={access.user ? [access.user.id] : []} />
           </div>
         </section>
 

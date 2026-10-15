@@ -402,7 +402,7 @@ export function MeetingForm({ meeting }: { meeting?: Meeting }) {
               )}
             />
             <div className="mt-4 rounded-lg border border-line bg-sunken px-4 py-3">
-              <AudienceSummary audience={accessValue} alwaysIncluded={participants} />
+              <AudienceSummary module="meetings" audience={accessValue} alwaysIncluded={participants} />
               <p className="mt-2 text-[12px] text-fg-subtle">Participantes com acesso à Secretaria também podem consultar.</p>
             </div>
             <DemoNotice className="mt-4">{meeting ? "As alterações ficam registradas no histórico." : "A reunião será salva como rascunho. Depois, envie a ata para aprovação."}</DemoNotice>

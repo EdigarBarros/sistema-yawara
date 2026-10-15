@@ -165,7 +165,7 @@ export const ShareDocumentDialog = wrap(function ShareBody({ onOpenChange, doc }
       <div className="space-y-4">
         <AudiencePicker name="share" value={audience} onChange={setAudience} scopes={[...DOC_SCOPES]} labels={DOC_SCOPE_LABELS} departmentId={doc.departmentId} />
         <div className="rounded-lg border border-line bg-sunken px-4 py-3">
-          <AudienceSummary audience={audience} departmentId={doc.departmentId} labels={DOC_SCOPE_LABELS} alwaysIncluded={[doc.createdBy]} />
+          <AudienceSummary module="documents" audience={audience} departmentId={doc.departmentId} labels={DOC_SCOPE_LABELS} alwaysIncluded={[doc.createdBy]} />
           <p className="mt-2 text-[12px] text-fg-subtle">Quem enviou o documento e quem administra Documentos sempre têm acesso.</p>
         </div>
         {isDemoMode ? (

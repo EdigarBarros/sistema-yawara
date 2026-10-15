@@ -13,12 +13,12 @@ import { useBreadcrumbTitle } from "@/stores/breadcrumb";
 import { canArchiveDocument, canEditDocument } from "@/lib/policies";
 import { DOCUMENT_STATUS } from "@/lib/labels";
 import { fileExtension, formatBytes, formatDateTime, formatDateTimeShort } from "@/lib/format";
-import { errorMessage, notifyError } from "@/lib/notify";
+import { notifyError } from "@/lib/notify";
 import { isDemoMode } from "@/lib/mode";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/misc";
 import { DetailList, MetaItem, PageHeader, Panel } from "@/components/shared/page";
-import { ErrorState, PageSkeleton, DemoNotice } from "@/components/shared/states";
+import { RecordErrorState, PageSkeleton, DemoNotice } from "@/components/shared/states";
 import { FileActions, useFileObjectUrl } from "@/components/shared/file-actions";
 import { DemoTag, OwnershipBadge, StatusBadge } from "@/components/shared/badges";
 import { AudienceSummary } from "@/components/shared/audience";
@@ -135,7 +135,7 @@ export default function DocumentDetailPage() {
   const preview = useFileObjectUrl(isDemoMode || isPreviewable(currentFile) ? currentFile : null);
 
   if (isLoading) return <PageSkeleton />;
-  if (isError || !doc) return <ErrorState message={errorMessage(error, "Documento não encontrado.")} onRetry={() => refetch()} />;
+  if (isError || !doc) return <RecordErrorState error={error} notFound="Documento não encontrado" backHref="/documentos" onRetry={() => refetch()} />;
 
   const current = doc.versions[doc.versions.length - 1];
   const ctx = access.ctx;
@@ -280,7 +280,7 @@ export default function DocumentDetailPage() {
               )
             }
           >
-            <AudienceSummary audience={doc.access} departmentId={doc.departmentId} labels={DOC_SCOPE_LABELS} alwaysIncluded={[doc.createdBy]} />
+            <AudienceSummary module="documents" audience={doc.access} departmentId={doc.departmentId} labels={DOC_SCOPE_LABELS} alwaysIncluded={[doc.createdBy]} />
           </Panel>
           {canArchive && (
             <Panel title={doc.status === "archived" ? "Documento arquivado" : "Arquivar"}>

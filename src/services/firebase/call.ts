@@ -10,7 +10,7 @@
  * IMPORTANTE: nos serviços, chame `takeRequestId()` na PRIMEIRA linha do
  * método (antes de qualquer await).
  */
-import { FunctionsError, httpsCallable } from "firebase/functions";
+import { httpsCallable } from "firebase/functions";
 import { ServiceError, type ServiceErrorCode } from "../errors";
 import { firebase } from "./app";
 
@@ -55,14 +55,19 @@ const CODE_FROM_FUNCTIONS: Record<string, ServiceErrorCode> = {
 
 export function mapFunctionsError(error: unknown): ServiceError {
   if (error instanceof ServiceError) return error;
-  if (error instanceof FunctionsError) {
-    const details = (error.details ?? {}) as { code?: ServiceErrorCode };
-    const code = details.code ?? CODE_FROM_FUNCTIONS[error.code] ?? "internal";
+  // Verificação pelo código (não por `instanceof`, que é frágil nas classes de erro do SDK).
+  const fnCode = (error as { code?: unknown } | null)?.code;
+  if (typeof fnCode === "string" && fnCode.startsWith("functions/")) {
+    const err = error as { details?: unknown; message?: string };
+    const details = (err.details ?? {}) as { code?: ServiceErrorCode };
+    const code = details.code ?? CODE_FROM_FUNCTIONS[fnCode] ?? "internal";
     if (code === "internal") return new ServiceError("internal", GENERIC);
-    if (error.code === "functions/unavailable" && !details.code) {
+    if (fnCode === "functions/unavailable" && !details.code) {
       return new ServiceError("unavailable", "Sem conexão com o servidor. Verifique a internet e tente novamente.");
     }
-    return new ServiceError(code, error.message || GENERIC, details);
+    // O SDK acrescenta o status HTTP ao fim da mensagem ("… [400]"): não é para o usuário.
+    const message = (err.message ?? "").replace(/\s*\[\d{3}\]$/, "").trim();
+    return new ServiceError(code, message || GENERIC, details);
   }
   return new ServiceError("internal", GENERIC);
 }

@@ -13,14 +13,14 @@
  * responsável, evento e documento vinculados, grava histórico, auditoria e
  * índice de busca, e devolve o projeto já filtrado para quem chamou.
  */
-import { doc, FirestoreError, getDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import type { Attendee, ExtensionProject } from "@/types";
 import { projectFromDocs, type ProjectDoc } from "@/lib/firestore-model";
 import type { ExtensionService, ProjectInput } from "../contracts";
 import { ServiceError } from "../errors";
 import { firebase } from "./app";
 import { callApi, takeRequestId } from "./call";
-import { mapFirestoreError } from "./convert";
+import { firebaseErrorCode, mapFirestoreError } from "./convert";
 import { getVisible, listVisible } from "./queries";
 import { whenAccess } from "./session";
 
@@ -85,7 +85,7 @@ async function readAttendance(projectId: string): Promise<{ attendees: Attendee[
     if (!snap.exists()) return { attendees: [] };
     return { attendees: ((snap.data() as { attendees?: Attendee[] }).attendees ?? []).map((a) => ({ id: a.id, name: a.name, present: !!a.present })) };
   } catch (error) {
-    if (error instanceof FirestoreError && error.code === "permission-denied") return null;
+    if (firebaseErrorCode(error) === "permission-denied") return null;
     throw mapFirestoreError(error, "Não foi possível carregar a lista de presença.");
   }
 }

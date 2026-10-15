@@ -15,14 +15,14 @@ import { ACTIVITY_TYPE_LABELS, CERTIFICATE_STATUS, PROJECT_STATUS } from "@/lib/
 import { isDemoMode } from "@/lib/mode";
 import { formatDate, formatTime } from "@/lib/format";
 import { downloadCsv, slugify } from "@/lib/export/common";
-import { errorMessage, notifyError, notifySuccess } from "@/lib/notify";
+import { notifyError, notifySuccess } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/form";
 import { Progress } from "@/components/ui/misc";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/menu";
 import { DetailList, MetaItem, PageHeader, Panel } from "@/components/shared/page";
-import { DemoNotice, EmptyState, ErrorState, PageSkeleton } from "@/components/shared/states";
+import { DemoNotice, EmptyState, RecordErrorState, PageSkeleton } from "@/components/shared/states";
 import { OwnershipBadge, StatusBadge } from "@/components/shared/badges";
 import { HistoryTimeline } from "@/components/shared/history";
 import { ListRow } from "@/components/shared/list-row";
@@ -72,7 +72,7 @@ export default function ProjectDetailPage() {
   const linkDoc = useAction((docId: string) => services.extension.linkDocument(id, docId), { success: "Documento vinculado ao projeto" });
 
   if (isLoading) return <PageSkeleton />;
-  if (isError || !p) return <ErrorState message={errorMessage(error, "Projeto não encontrado.")} onRetry={() => refetch()} />;
+  if (isError || !p) return <RecordErrorState error={error} notFound="Projeto não encontrado" backHref="/extensao" onRetry={() => refetch()} />;
 
   const ctx = access.ctx;
   const editable = !!ctx && canEditProject(ctx, p);

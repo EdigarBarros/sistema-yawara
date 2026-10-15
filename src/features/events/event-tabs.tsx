@@ -104,7 +104,7 @@ export function OverviewTab({ event }: { event: AtleticaEvent }) {
           </p>
         </Panel>
         <Panel title="Quem tem acesso">
-          <AudienceSummary audience={event.access} departmentId={event.departmentId} alwaysIncluded={[...event.responsibleIds, event.createdBy]} />
+          <AudienceSummary module="events" audience={event.access} departmentId={event.departmentId} alwaysIncluded={[...event.responsibleIds, event.createdBy]} />
         </Panel>
       </div>
     </div>

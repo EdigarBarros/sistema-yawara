@@ -396,7 +396,7 @@ function ShareReportBody({ onOpenChange, buildBlob, filtersLabel }: { onOpenChan
         <p className="text-[12.5px] text-fg-muted">Filtros aplicados: {filtersLabel}</p>
         <AudiencePicker name="report-access" value={audience} onChange={setAudience} scopes={["department", "board", "all", "roles", "people"]} departmentId={access.role?.departmentId} />
         <div className="rounded-lg border border-line bg-sunken px-4 py-3">
-          <AudienceSummary audience={audience} departmentId={access.role?.departmentId} alwaysIncluded={access.user ? [access.user.id] : []} />
+          <AudienceSummary module="documents" audience={audience} departmentId={access.role?.departmentId} alwaysIncluded={access.user ? [access.user.id] : []} />
         </div>
         {isDemoMode ? (
           <DemoNotice>Compartilhamento simulado: o arquivo fica neste navegador. No backend, ele será salvo no armazenamento da Atlética.</DemoNotice>

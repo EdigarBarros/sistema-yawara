@@ -259,11 +259,15 @@ describe("edição e público", () => {
 });
 
 describe("etapas", () => {
-  it("só quem tem marketing.approve aprova; depois de aprovado, quem não aprova só marca como publicado", async () => {
+  it("só quem tem marketing.approve aprova; publicar exige aprovação; depois de aprovado, quem não aprova só marca como publicado", async () => {
     const c = await createContent("assmkt", { responsibleId: "assmkt" });
     const prod = await marketing<ContentItem>("setStatus", "assmkt", { id: c.id, status: "production" });
     expect(prod.status).toBe("production");
     await marketing("setStatus", "assmkt", { id: c.id, status: "review" });
+    // A aprovação não pode ser pulada: sem "Aprovado", ninguém marca como publicado.
+    const skipped = await expectCode(marketing("setStatus", "assmkt", { id: c.id, status: "published" }), "forbidden");
+    expect(skipped.message).toMatch(/Publicado/);
+    await expectCode(marketing("setStatus", "mkt", { id: c.id, status: "published" }), "forbidden");
     const denied = await expectCode(marketing("setStatus", "assmkt", { id: c.id, status: "approved" }), "forbidden");
     expect(denied.message).toMatch(/Aprovado/);
     await expectCode(marketing("setStatus", "ext", { id: c.id, status: "approved" }), "forbidden");

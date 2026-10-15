@@ -293,7 +293,7 @@ function ContentFormBody({ onOpenChange, item, onSaved }: Props) {
             )}
           />
           <div className="rounded-lg border border-line bg-sunken px-4 py-3">
-            <AudienceSummary audience={accessValue} labels={CONTENT_SCOPE_LABELS} alwaysIncluded={[creatorId, responsibleId].filter((id): id is string => !!id)} />
+            <AudienceSummary module="marketing" audience={accessValue} labels={CONTENT_SCOPE_LABELS} alwaysIncluded={[creatorId, responsibleId].filter((id): id is string => !!id)} />
             <p className="mt-2 text-[12px] text-fg-subtle">Quem criou e o responsável sempre têm acesso.</p>
           </div>
         </div>

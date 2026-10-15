@@ -14,12 +14,12 @@ import { allowedMeetingTransitions, canEditMeeting } from "@/lib/policies";
 import { MEETING_MODE_LABELS, MEETING_STATUS } from "@/lib/labels";
 import { formatDate, formatDateTime, formatTime } from "@/lib/format";
 import { isDemoMode } from "@/lib/mode";
-import { errorMessage, notifyError, notifySuccess } from "@/lib/notify";
+import { notifyError, notifySuccess } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/misc";
 import { MetaItem, PageHeader, Panel } from "@/components/shared/page";
-import { DemoNotice, ErrorState, PageSkeleton } from "@/components/shared/states";
+import { DemoNotice, RecordErrorState, PageSkeleton } from "@/components/shared/states";
 import { StatusBadge } from "@/components/shared/badges";
 import { AudienceSummary } from "@/components/shared/audience";
 import { HistoryTimeline } from "@/components/shared/history";
@@ -81,7 +81,7 @@ export default function MeetingDetailPage() {
   const transition = useAction((s: MeetingStatus) => services.meetings.setStatus(id, s), { success: (r) => `Ata: ${MEETING_STATUS[r.status].label}` });
 
   if (isLoading) return <PageSkeleton />;
-  if (isError || !m) return <ErrorState message={errorMessage(error, "Reunião não encontrada.")} onRetry={() => refetch()} />;
+  if (isError || !m) return <RecordErrorState error={error} notFound="Reunião não encontrada" backHref="/secretaria" onRetry={() => refetch()} />;
 
   const ctx = access.ctx;
   const transitions = ctx ? allowedMeetingTransitions(ctx, m) : [];
@@ -294,7 +294,7 @@ export default function MeetingDetailPage() {
             )}
           </Panel>
           <Panel title="Quem pode consultar">
-            <AudienceSummary audience={m.access} alwaysIncluded={m.participantIds} />
+            <AudienceSummary module="meetings" audience={m.access} alwaysIncluded={m.participantIds} />
           </Panel>
           <Panel title="Histórico">
             <HistoryTimeline entries={m.history} />

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, Coins, Download, Gift, Lock, LockOpen, MoreHorizontal, Pencil, ShieldCheck, ShoppingCart, UserRound } from "lucide-react";
 import { services } from "@/services";
@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/misc";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/menu";
 import { DetailList, MetaItem, PageHeader, Panel, Stat } from "@/components/shared/page";
-import { ErrorState, PageSkeleton } from "@/components/shared/states";
+import { ErrorState, RecordErrorState, PageSkeleton } from "@/components/shared/states";
 import { StatusBadge, OwnershipBadge } from "@/components/shared/badges";
 import { HistoryTimeline } from "@/components/shared/history";
 import { confirmAction } from "@/components/shared/confirm";
@@ -36,7 +36,6 @@ import { CampaignNotice } from "@/features/campaigns/notice";
 
 export default function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
   const access = useAccess();
   const dir = useDirectory();
   const { data: campaign, isLoading, isError, error, refetch } = useCampaign(id);
@@ -74,10 +73,7 @@ export default function CampaignDetailPage() {
   if (isLoading || salesLoading) return <PageSkeleton />;
   if (isError || !campaign || !summary)
     return (
-      <ErrorState
-        message={errorMessage(error, "Campanha não encontrada.")}
-        onRetry={() => (error ? refetch() : router.push("/campanhas"))}
-      />
+      <RecordErrorState error={error} notFound="Campanha não encontrada" backHref="/campanhas" onRetry={() => refetch()} />
     );
 
   const ctx = access.ctx;

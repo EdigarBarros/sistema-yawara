@@ -144,14 +144,20 @@ export function canEditContent(ctx: AccessContext, c: ContentItem) {
   return hasPermission(ctx, "marketing.edit") || c.createdBy === ctx.user.id || c.responsibleId === ctx.user.id;
 }
 
-/** Quais etapas o perfil pode escolher a partir da etapa atual. */
+/**
+ * Quais etapas o perfil pode escolher a partir da etapa atual.
+ * "Publicado" só vem depois de "Aprovado" (para todos os perfis): a aprovação
+ * não pode ser pulada, fica no histórico e avisa a diretoria.
+ */
 export function allowedContentStatuses(ctx: AccessContext, c: ContentItem): ContentStatus[] {
   const all: ContentStatus[] = ["briefing", "production", "review", "approved", "published", "cancelled"];
+  const approver = hasPermission(ctx, "marketing.approve");
   return all.filter((s) => {
     if (s === c.status) return false;
-    if (s === "approved") return hasPermission(ctx, "marketing.approve");
+    if (s === "approved") return approver;
     if (s === "cancelled") return hasPermission(ctx, "marketing.archive");
-    if (c.status === "approved" && !hasPermission(ctx, "marketing.approve")) return s === "published" && canEditContent(ctx, c);
+    if (s === "published") return c.status === "approved" && (approver || canEditContent(ctx, c));
+    if (c.status === "approved" && !approver) return false;
     return canEditContent(ctx, c);
   });
 }

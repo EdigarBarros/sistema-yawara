@@ -196,7 +196,7 @@ export function ContentSheet({ item, onOpenChange }: { item: ContentItem | null;
             <div>
               <SectionTitle>Quem pode ver</SectionTitle>
               <div className="rounded-lg border border-line bg-sunken px-4 py-3">
-                <AudienceSummary audience={item.access} labels={CONTENT_SCOPE_LABELS} alwaysIncluded={[item.createdBy, item.responsibleId]} />
+                <AudienceSummary module="marketing" audience={item.access} labels={CONTENT_SCOPE_LABELS} alwaysIncluded={[item.createdBy, item.responsibleId]} />
                 <p className="mt-2 text-[12px] text-fg-subtle">Quem criou e o responsável sempre têm acesso{editable ? ". Para compartilhar com outro departamento, edite o conteúdo." : "."}</p>
               </div>
             </div>

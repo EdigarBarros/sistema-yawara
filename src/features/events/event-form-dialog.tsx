@@ -209,7 +209,7 @@ function EventFormBody({ onOpenChange, event }: Props) {
             )}
           />
           <div className="rounded-lg border border-line bg-sunken px-4 py-3">
-            <AudienceSummary audience={accessValue} departmentId={departmentId} alwaysIncluded={responsibleIds} />
+            <AudienceSummary module="events" audience={accessValue} departmentId={departmentId} alwaysIncluded={responsibleIds} />
             <p className="mt-2 text-[12px] text-fg-subtle">Os responsáveis designados sempre têm acesso.</p>
           </div>
         </Section>
