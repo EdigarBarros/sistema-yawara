@@ -139,6 +139,15 @@ export const firebaseX: XService = {
   vê-los, vêm `null`/vazios — nunca "mascarados" no cliente.
 - Tempo real só onde ajuda (grade da rifa, notificações), com cancelamento da
   assinatura ao sair da tela.
+- Erros do SDK: identifique pelo **código** (`firebaseErrorCode(error)` em
+  `convert.ts`, ou `error.code` para Auth/Storage), nunca com `instanceof
+  FirestoreError`/`FunctionsError` — o SDK fixa o protótipo na classe base e a
+  verificação falha em tempo de execução. `mapFunctionsError` remove o status
+  HTTP (" [400]") que o SDK acrescenta à mensagem do servidor.
+- Páginas de detalhe usam `RecordErrorState` (sem permissão / não encontrado
+  não oferecem "Tentar novamente").
+- `AudienceSummary` recebe o `module` do registro: só conta quem pode abrir o
+  módulo e inclui quem administra o módulo, como fazem as regras.
 
 ## Interface
 

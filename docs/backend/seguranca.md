@@ -108,7 +108,9 @@ verifica identidade, permissões, validação e integridade por conta própria.
   requisição devolve o resultado já registrado (sem duplicar venda,
   lançamento, convite ou notificação).
 - **Transições de estado** validadas no servidor (vendas, atas, conteúdos,
-  lançamentos, projetos).
+  lançamentos, projetos). Etapas de aprovação não podem ser puladas: a ata só
+  é aprovada por quem tem `meetings.approve`, e um conteúdo de Marketing só
+  chega a "Publicado" depois de "Aprovado" (por quem tem `marketing.approve`).
 - **Arquivos:** tamanho exato, tipo real conferido pela assinatura binária,
   cópia definitiva sem token público, compensação se a operação falhar e
   limpeza diária de envios abandonados.
