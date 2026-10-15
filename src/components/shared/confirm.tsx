@@ -1,5 +1,6 @@
 "use client";
 
+import { isDemoMode } from "@/lib/mode";
 import { useState } from "react";
 import { create } from "zustand";
 import { AlertTriangle } from "lucide-react";
@@ -104,7 +105,9 @@ export function ConfirmHost() {
               />
             </Field>
           ) : (
-            <p className="text-[13px] text-fg-muted">Esta ação fica registrada no histórico da demonstração.</p>
+            <p className="text-[13px] text-fg-muted">
+              {isDemoMode ? "Esta ação fica registrada no histórico da demonstração." : "Esta ação fica registrada no histórico e na auditoria."}
+            </p>
           )}
         </DialogContent>
       )}
