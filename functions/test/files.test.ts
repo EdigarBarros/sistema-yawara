@@ -103,9 +103,10 @@ async function newEntry() {
 }
 
 /** Contexto de preparação de teste (registra as compensações sem rodá-las). */
-function prepareContext(): PrepareContext & { aborts: (() => Promise<void>)[] } {
+function prepareContext(requestId: string = randomUUID()): PrepareContext & { aborts: (() => Promise<void>)[]; commits: (() => Promise<void>)[] } {
   const aborts: (() => Promise<void>)[] = [];
-  return { requestId: randomUUID(), now: new Date().toISOString(), onAbort: (fn) => aborts.push(fn), aborts };
+  const commits: (() => Promise<void>)[] = [];
+  return { requestId, now: new Date().toISOString(), onAbort: (fn) => aborts.push(fn), afterCommit: (fn) => commits.push(fn), aborts, commits };
 }
 
 beforeEach(async () => {
@@ -250,7 +251,7 @@ describe("reserva atômica do tíquete", () => {
     expect((await ticketOf(ticket.uploadId)).status).toBe("finalizing");
   });
 
-  it("falha na cópia: a compensação registrada ANTES de copiar descarta o tíquete e não deixa arquivo definitivo", async () => {
+  it("falha na cópia: a compensação registrada ANTES de copiar libera o tíquete, não deixa arquivo definitivo e a operação pode ser repetida", async () => {
     const e = await newEntry();
     const ticket = await stage("fin", "financeReceipt", PDF, "comprovante.pdf", "application/pdf");
     const fileProto = Object.getPrototypeOf(bucket().file("qualquer")) as { copy: (...args: unknown[]) => Promise<unknown> };
@@ -261,9 +262,36 @@ describe("reserva atômica do tíquete", () => {
       throw new Error("falha simulada na cópia");
     });
     await expectCode(finance("attachReceipt", "fin", { id: e.id, uploadId: ticket.uploadId }), "internal");
-    expect((await ticketOf(ticket.uploadId)).status).toBe("discarded");
+    // A cópia temporária continua lá: o tíquete volta a "pending" (falha momentânea não "queima" o envio).
+    expect((await ticketOf(ticket.uploadId)).status).toBe("pending");
+    expect(await exists(ticket.path)).toBe(true);
     expect(await objectsUnder(`finance/${e.id}/`)).toEqual([]);
     expect((await db.doc(`financeEntries/${e.id}`).get()).data()!.receipt ?? null).toBeNull();
+
+    // Repetir a operação funciona; depois da confirmação a cópia temporária é apagada.
+    const ok = await finance<StoredEntry>("attachReceipt", "fin", { id: e.id, uploadId: ticket.uploadId });
+    expect(ok.receipt?.path).toBe(`finance/${e.id}/${ticket.uploadId}-comprovante.pdf`);
+    expect((await ticketOf(ticket.uploadId)).status).toBe("attached");
+    expect(await exists(ticket.path)).toBe(false);
+  });
+
+  it("mesmo envio e mesmo destino, requisições diferentes: só quem reservou reaproveita o arquivo conferido", async () => {
+    const actor = await loadActorOutsideTx("fin");
+    const ticket = await stage("fin", "financeReceipt", PDF, "comprovante.pdf", "application/pdf");
+    const first = prepareContext("req-dona-da-reserva");
+    const file = await finalizeUpload(actor, ticket.uploadId, "financeReceipt", "finance/mesmo-destino", first);
+    expect((await ticketOf(ticket.uploadId)).status).toBe("finalized");
+
+    // Outra requisição (ex.: segunda aba) não recebe o arquivo de quem ainda pode desistir dele.
+    const err = await expectCode(finalizeUpload(actor, ticket.uploadId, "financeReceipt", "finance/mesmo-destino", prepareContext("req-intrusa")), "conflict");
+    expect(err.message).toMatch(/^Este arquivo já está sendo anexado em outra operação/);
+    // A repetição da própria requisição devolve o mesmo arquivo.
+    expect(await finalizeUpload(actor, ticket.uploadId, "financeReceipt", "finance/mesmo-destino", prepareContext("req-dona-da-reserva"))).toEqual(file);
+
+    // Se a dona desistir, a compensação apaga a cópia definitiva e libera o envio.
+    await Promise.all(first.aborts.map((fn) => fn()));
+    expect(await exists(file.path!)).toBe(false);
+    expect((await ticketOf(ticket.uploadId)).status).toBe("pending");
   });
 });
 
@@ -350,7 +378,7 @@ describe("prazo do tíquete × limpeza diária", () => {
 });
 
 describe("compensação quando a preparação falha no meio", () => {
-  it("marketing.addFiles [boa.jpg, falsa.jpg]: nenhum arquivo órfão e o tíquete bom não fica 'finalized'", async () => {
+  it("marketing.addFiles [boa.jpg, falsa.jpg]: nenhum arquivo órfão e o tíquete bom volta a 'pending' (pode ser reenviado)", async () => {
     const c = await marketing<ContentItem>("create", "mkt", {
       title: "Arte de teste",
       type: "arte",
@@ -364,10 +392,15 @@ describe("compensação quando a preparação falha no meio", () => {
     await expectCode(marketing("addFiles", "mkt", { id: c.id, uploadIds: [good.uploadId, fake.uploadId] }), "invalid");
 
     expect(await objectsUnder(`marketing/${c.id}/`)).toEqual([]);
-    expect((await ticketOf(good.uploadId)).status).toBe("discarded");
+    expect((await ticketOf(good.uploadId)).status).toBe("pending");
     expect((await ticketOf(fake.uploadId)).status).toBe("rejected");
     expect((await db.doc(`contents/${c.id}`).get()).data()!.files ?? []).toEqual([]);
-    // Nada sobra para a limpeza diária.
+    // Nenhum arquivo definitivo órfão para a limpeza diária.
     expect((await cleanupUploadsOnce(Date.now() + 3 * HOUR)).orphans).toBe(0);
+
+    // O arquivo bom pode ser enviado de novo sozinho.
+    const again = await marketing<ContentItem>("addFiles", "mkt", { id: c.id, uploadIds: [good.uploadId] });
+    expect(again.files).toHaveLength(1);
+    expect((await ticketOf(good.uploadId)).status).toBe("attached");
   });
 });

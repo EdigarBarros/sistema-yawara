@@ -50,7 +50,7 @@ function redact(ctx: AccessContext, campaign: Campaign, sale: Sale): Sale {
   return copy;
 }
 
-/** Novo responsável pela venda: ativo e autorizado a vender nesta campanha (mesma regra do servidor). */
+/** Responsável pela venda (novo ou trocado): ativo e autorizado a vender nesta campanha (mesma regra do servidor). */
 function requireEligibleSeller(db: DemoDB, campaign: Campaign, sellerId: string) {
   const user = db.members.find((m) => m.id === sellerId);
   if (!user || user.status !== "active") throw new ServiceError("invalid", "Escolha um responsável pela venda que esteja ativo.");
@@ -121,8 +121,7 @@ function validateSaleInput(db: DemoDB, campaign: Campaign, input: SaleInput, sal
   }
   if (!input.buyerName || input.buyerName.trim().length < 2) throw new ServiceError("invalid", "Informe o nome do comprador.");
   if (!input.buyerContact || input.buyerContact.trim().length < 5) throw new ServiceError("invalid", "Informe um contato do comprador (telefone ou e-mail).");
-  const seller = db.members.find((m) => m.id === input.sellerId);
-  if (!seller || seller.status !== "active") throw new ServiceError("invalid", "Escolha um responsável pela venda que esteja ativo.");
+  requireEligibleSeller(db, campaign, input.sellerId);
   if (input.status === "paid" && !input.paymentMethod) throw new ServiceError("invalid", "Informe a forma de pagamento.");
 }
 

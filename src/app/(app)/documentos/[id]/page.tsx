@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { Archive, ArchiveRestore, CalendarDays, ClipboardList, Download, ExternalLink, FileText, FileUp, GraduationCap, Loader2, Pencil, Share2, Tag } from "lucide-react";
 import type { FileRef } from "@/types";
 import { services } from "@/services";
+import { downloadName } from "@/services/firebase/files";
 import { useAccess } from "@/hooks/use-access";
 import { useAction } from "@/hooks/use-action";
 import { useDirectory, useDocument, useDocumentCategories } from "@/hooks/use-data";
@@ -85,7 +86,7 @@ function CurrentFileButtons({ file, url }: { file: FileRef | null; url: string |
         <a href={url} target="_blank" rel="noreferrer" className={outline}>
           <ExternalLink className="size-4" /> Visualizar
         </a>
-        <a href={url} download={file.name} className={primary}>
+        <a href={url} download={downloadName(file)} className={primary}>
           <Download className="size-4" /> Baixar
         </a>
       </>

@@ -16,6 +16,7 @@ import { AudiencePicker, AudienceSummary } from "@/components/shared/audience";
 import { DemoNotice } from "@/components/shared/states";
 import { isDemoMode } from "@/lib/mode";
 import { DOC_SCOPE_LABELS, DOC_SCOPES, DOCUMENT_FILE_ACCEPT, DOCUMENT_FILE_HINT, documentFileError } from "./document-form-dialog";
+import { FormAlert } from "@/components/shared/form-alert";
 
 interface Props {
   open: boolean;
@@ -34,11 +35,7 @@ function wrap(Body: (p: Props) => React.ReactNode) {
 }
 
 function ErrorLine({ error }: { error?: string }) {
-  return error ? (
-    <p role="alert" className="mt-4 rounded-lg border border-danger/35 bg-danger/10 px-3.5 py-2.5 text-[13px] text-danger">
-      {error}
-    </p>
-  ) : null;
+  return <FormAlert message={error} className="mt-4" />;
 }
 
 /* ----------------------------- Editar metadados ----------------------------- */

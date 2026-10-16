@@ -44,7 +44,7 @@ import { db } from "../core/admin";
 import { requireModuleEnabled, requirePermission, type Actor } from "../core/actor";
 import { auditInTx } from "../core/audit";
 import { nextCode } from "../core/counters";
-import { mutation, query, type RunContext } from "../core/dispatch";
+import { alreadyCompleted, mutation, query, type RunContext } from "../core/dispatch";
 import { fail } from "../core/errors";
 import { finalizeUpload, markAttached } from "../core/files";
 import { appendHistory, historyEntry } from "../core/history";
@@ -152,11 +152,6 @@ export type StoredEntry = FinanceEntry & { receiptHistory?: FileRef[] };
  */
 export function newEntryId(uid: string, requestId: string) {
   return createHash("sha256").update(`${uid}:${requestId}`).digest("hex").slice(0, 20);
-}
-
-/** A requisição já foi concluída antes? (evita mover outro arquivo num reenvio). */
-async function alreadyCompleted(uid: string, requestId: string) {
-  return (await db.doc(`idempotency/${uid}__${requestId}`).get()).exists;
 }
 
 function normalizeEntry(e: StoredEntry): StoredEntry {

@@ -156,13 +156,20 @@ describe("criação", () => {
     expect(files).toHaveLength(0);
   });
 
-  it("falha de regra depois de mover o arquivo: o arquivo definitivo é apagado (compensação)", async () => {
+  it("falha de regra depois de mover o arquivo: o arquivo definitivo é apagado (compensação) e o envio pode ser reaproveitado", async () => {
     const ticket = await stage("sec", PDF);
     await expectCode(createDoc("sec", { categoryId: "nao-existe" }, ticket.uploadId), "invalid");
     const [files] = await bucket().getFiles({ prefix: "documents/" });
     expect(files).toHaveLength(0);
-    expect((await db.doc(`uploads/${ticket.uploadId}`).get()).data()!.status).toBe("discarded");
+    // A cópia temporária só sai depois da confirmação: o tíquete volta a "pending".
+    expect((await db.doc(`uploads/${ticket.uploadId}`).get()).data()!.status).toBe("pending");
+    expect(await exists(ticket.path)).toBe(true);
     expect((await db.collection("documents").get()).size).toBe(0);
+
+    // Corrigida a categoria, o mesmo envio é usado sem mandar o arquivo de novo.
+    await createDoc("sec", {}, ticket.uploadId);
+    expect((await db.doc(`uploads/${ticket.uploadId}`).get()).data()!.status).toBe("attached");
+    expect(await exists(ticket.path)).toBe(false);
   });
 
   it("perfis sem documents.create não criam nem recebem tíquete de envio", async () => {

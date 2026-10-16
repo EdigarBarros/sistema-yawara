@@ -65,7 +65,14 @@ export function RegisterSaleDialog(props: RegisterSaleDialogProps) {
 
 function RegisterSaleBody({ onOpenChange, campaign, slots, initialNumbers, onRegistered, onConflict }: RegisterSaleDialogProps) {
   const access = useAccess();
+  const dir = useDirectory();
   const canConfirm = access.can("campaigns.approve");
+  /** Mesma regra do servidor: o responsável pela venda precisa poder registrar vendas nesta campanha. */
+  const canBeSeller = (memberId: string) => {
+    const user = dir.member(memberId);
+    const role = dir.roleOf(memberId);
+    return !!user && !!role && canSellIn({ user, role, department: dir.department(role.departmentId) }, campaign);
+  };
   const [numbers, setNumbers] = useState<number[]>(() => [...initialNumbers].sort((a, b) => a - b));
   const [typed, setTyped] = useState("");
   const [numbersError, setNumbersError] = useState<string>();
@@ -230,7 +237,7 @@ function RegisterSaleBody({ onOpenChange, campaign, slots, initialNumbers, onReg
               <Input autoComplete="off" placeholder="(00) 90000-0000" {...register("buyerContact")} />
             </Field>
             <Field label="Responsável pela venda" required error={formState.errors.sellerId?.message} className="sm:col-span-2">
-              <Controller control={control} name="sellerId" render={({ field }) => <MemberSelect value={field.value} onChange={field.onChange} />} />
+              <Controller control={control} name="sellerId" render={({ field }) => <MemberSelect value={field.value} onChange={field.onChange} filter={canBeSeller} />} />
             </Field>
           </section>
 

@@ -560,6 +560,19 @@ export async function syncBuyerReaders(campaignId: string): Promise<{ updated: n
   return { updated, completed };
 }
 
+/**
+ * Responsável pela venda: integrante ativo que pode registrar vendas nesta
+ * campanha (ele passa a ver os dados do comprador). Só leituras: chame na fase
+ * de leitura da transação.
+ */
+async function requireEligibleSeller(tx: Transaction, sellerSnap: DocumentSnapshot, campaign: Campaign) {
+  if (!sellerSnap.exists || sellerSnap.data()!.status !== "active") fail("invalid", "Escolha um responsável pela venda que esteja ativo.");
+  const seller = memberFromDoc(sellerSnap.id, sellerSnap.data()!);
+  const roleSnap = await tx.get(db.doc(`roles/${seller.roleId}`));
+  const sellerCtx = roleSnap.exists ? { user: seller, role: roleFromDoc(roleSnap.id, roleSnap.data()!), department: undefined } : null;
+  if (!sellerCtx || !canSellIn(sellerCtx, campaign)) fail("invalid", "Escolha um responsável que possa registrar vendas nesta campanha.");
+}
+
 export const campaignsActions = {
   create: mutation({
     module: "campaigns",
@@ -812,7 +825,7 @@ export const campaignsActions = {
 
       // Leituras: responsável pela venda + travas de TODOS os números pedidos.
       const [sellerSnap, ...lockSnaps] = await tx.getAll(db.doc(`members/${input.sellerId}`), ...numbers.map((n) => ref.lock(campaign.id, n)));
-      if (!sellerSnap.exists || sellerSnap.data()!.status !== "active") fail("invalid", "Escolha um responsável pela venda que esteja ativo.");
+      await requireEligibleSeller(tx, sellerSnap, campaign);
       const blocked = numbers.filter((_, i) => lockSnaps[i].exists);
       if (blocked.length) {
         fail("conflict", `Estes números já não estão disponíveis: ${label(campaign, blocked)}. Atualize a seleção e tente novamente.`, { numbers: blocked });
@@ -890,12 +903,7 @@ export const campaignsActions = {
       if (sellerChanged) {
         // O novo responsável passa a ver os dados do comprador (buyerReaders): só quem já os vê transfere a venda.
         if (!canChangeSeller(actor.ctx, s.campaign, current)) fail("forbidden", "Seu perfil não pode transferir esta venda para outro responsável.");
-        const sellerSnap = await tx.get(db.doc(`members/${input.sellerId}`));
-        if (!sellerSnap.exists || sellerSnap.data()!.status !== "active") fail("invalid", "Escolha um responsável pela venda que esteja ativo.");
-        const seller = memberFromDoc(sellerSnap.id, sellerSnap.data()!);
-        const roleSnap = await tx.get(db.doc(`roles/${seller.roleId}`));
-        const sellerCtx = roleSnap.exists ? { user: seller, role: roleFromDoc(roleSnap.id, roleSnap.data()!), department: undefined } : null;
-        if (!sellerCtx || !canSellIn(sellerCtx, s.campaign)) fail("invalid", "Escolha um responsável que possa registrar vendas nesta campanha.");
+        await requireEligibleSeller(tx, await tx.get(db.doc(`members/${input.sellerId}`)), s.campaign);
       }
 
       const next: Sale = { ...current, buyer: current.buyer ? { ...current.buyer } : null, history: [...current.history] };

@@ -11,6 +11,7 @@ import { errorMessage } from "@/lib/notify";
 import { CampaignAccessConfig } from "./access-config";
 import { RelatedEventField } from "./event-field";
 import { CampaignNotice } from "./notice";
+import { FormAlert } from "@/components/shared/form-alert";
 
 /** Edita dados gerais e acesso. Quantidade e valor não mudam depois das vendas. */
 interface CampaignEditDialogProps {
@@ -131,11 +132,7 @@ function CampaignEditBody({ onOpenChange, campaign, initialTab = "dados" }: Camp
             />
           </div>
         )}
-        {error && (
-          <p role="alert" className="mt-4 rounded-lg border border-danger/35 bg-danger/10 px-3.5 py-2.5 text-[13px] text-danger">
-            {error}
-          </p>
-        )}
+        <FormAlert message={error} className="mt-4" />
       </DialogContent>
   );
 }

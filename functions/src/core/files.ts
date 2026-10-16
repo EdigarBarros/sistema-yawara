@@ -22,7 +22,7 @@
  * `cleanupUploads` (ver modules/maintenance.ts).
  */
 import { createHash, randomUUID } from "node:crypto";
-import type { DocumentData, DocumentReference, Transaction } from "firebase-admin/firestore";
+import { FieldValue, type DocumentData, type DocumentReference, type Transaction } from "firebase-admin/firestore";
 import type { FileRef } from "@/types";
 import type { Actor } from "./actor";
 import { bucket, db, nowISO, Timestamp, timestampInDays } from "./admin";
@@ -251,17 +251,26 @@ export function ticketExpired(ticket: DocumentData, now = Date.now()) {
 }
 
 /**
- * Compensação: descarta o tíquete reservado por esta operação e, só então,
- * apaga o arquivo definitivo. Um tíquete já anexado (ou recusado) não é tocado.
+ * Compensação: libera o tíquete reservado por esta operação e, só então, apaga
+ * o arquivo definitivo. A cópia temporária só é apagada depois da confirmação;
+ * enquanto ela existir, o tíquete volta a "pending" e a mesma operação pode ser
+ * repetida (ex.: falha momentânea do Storage). Sem a cópia, o tíquete é
+ * descartado. Um tíquete já anexado (ou recusado) não é tocado.
  */
-async function discardClaim(ticketRef: DocumentReference, destDir: string, dest: StorageFile | null) {
-  const discarded = await db.runTransaction(async (tx) => {
+async function discardClaim(ticketRef: DocumentReference, destDir: string, dest: StorageFile | null, staged: StorageFile) {
+  const [stagedExists] = await staged.exists().catch(() => [false] as [boolean]);
+  const released = await db.runTransaction(async (tx) => {
     const ticket = (await tx.get(ticketRef)).data();
     if (!ticket || ticket.destDir !== destDir || (ticket.status !== "finalizing" && ticket.status !== "finalized")) return false;
-    tx.update(ticketRef, { status: "discarded", discardedAt: nowISO() });
+    tx.update(
+      ticketRef,
+      stagedExists
+        ? { status: "pending", destDir: FieldValue.delete(), file: FieldValue.delete(), claimedAt: FieldValue.delete(), claimRequestId: FieldValue.delete(), finalizedAt: FieldValue.delete(), releasedAt: nowISO() }
+        : { status: "discarded", discardedAt: nowISO() },
+    );
     return true;
   });
-  if (discarded && dest) await dest.delete({ ignoreNotFound: true });
+  if (released && dest) await dest.delete({ ignoreNotFound: true });
 }
 
 /**
@@ -280,18 +289,22 @@ export async function finalizeUpload(actor: Actor, uploadId: string, purpose: Up
     if (!snap.exists) fail("invalid", "O envio do arquivo expirou ou não foi encontrado. Envie o arquivo novamente.");
     const ticket = snap.data()!;
     if (ticket.uid !== actor.uid || ticket.purpose !== purpose) fail("forbidden", "Este envio de arquivo pertence a outra operação.");
+    // Arquivo já anexado neste mesmo destino: devolve-o sem copiar de novo (a
+    // operação ignora o arquivo repetido). Arquivo só conferido ("finalized"):
+    // apenas a requisição que o reservou o reaproveita — outra requisição para o
+    // mesmo destino não pega o arquivo de quem ainda pode desistir e apagá-lo.
+    const sameRequest = !ticket.claimRequestId || ticket.claimRequestId === ctx.requestId;
     const sameDest = ticket.destDir === destDir && !!ticket.file;
-    // Repetição da mesma operação: devolve o arquivo já conferido, sem copiar de novo.
     if (ticket.status === "attached" && sameDest) return { ticket, file: ticket.file as FileRef };
-    if (ticket.status === "finalized" && sameDest) {
+    if (ticket.status === "finalized" && sameDest && sameRequest) {
       // Depois do prazo, a limpeza diária pode descartar o arquivo: não é mais reaproveitado.
       if (ticketExpired(ticket)) fail("invalid", EXPIRED);
       return { ticket, file: ticket.file as FileRef };
     }
-    if (ticket.status === "finalizing") fail("conflict", IN_PROGRESS);
+    if (ticket.status === "finalizing" || ticket.status === "finalized") fail("conflict", IN_PROGRESS);
     if (ticket.status !== "pending") fail("conflict", USED_ELSEWHERE);
     if (ticketExpired(ticket)) fail("invalid", EXPIRED);
-    tx.update(ticketRef, { status: "finalizing", destDir, claimedAt: nowISO() });
+    tx.update(ticketRef, { status: "finalizing", destDir, claimedAt: nowISO(), claimRequestId: ctx.requestId });
     return { ticket, file: null };
   });
   if (claim.file) return claim.file;
@@ -300,9 +313,9 @@ export async function finalizeUpload(actor: Actor, uploadId: string, purpose: Up
   // 2) Compensação registrada ANTES de copiar: se a operação falhar (inclusive
   //    na própria preparação), o tíquete é descartado e o arquivo definitivo apagado.
   let dest: StorageFile | null = null;
-  ctx.onAbort(() => discardClaim(ticketRef, destDir, dest));
-
   const staged = bucket().file(ticket.path);
+  ctx.onAbort(() => discardClaim(ticketRef, destDir, dest, staged));
+
   const [exists] = await staged.exists();
   if (!exists) fail("invalid", "O envio do arquivo não foi concluído. Envie o arquivo novamente.");
   const [meta] = await staged.getMetadata();
@@ -334,7 +347,10 @@ export async function finalizeUpload(actor: Actor, uploadId: string, purpose: Up
   await staged.copy(dest, { contentType: detected, contentDisposition, metadata: { uploadedBy: actor.uid, sha256, uploadId } });
   // Remove qualquer token de download público herdado do envio pelo navegador.
   await dest.setMetadata({ contentType: detected, contentDisposition, metadata: { firebaseStorageDownloadTokens: null, uploadedBy: actor.uid, sha256, uploadId } });
-  await staged.delete({ ignoreNotFound: true });
+  // A cópia temporária só sai depois da confirmação (permite repetir a operação se ela falhar).
+  ctx.afterCommit(async () => {
+    await staged.delete({ ignoreNotFound: true });
+  });
 
   const file: FileRef = { name, size, mimeType: detected, path: destPath, sha256 };
   await ticketRef.update({ status: "finalized", file, finalizedAt: nowISO() });

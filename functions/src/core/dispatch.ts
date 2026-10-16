@@ -56,6 +56,8 @@ export interface PrepareContext {
   requestId: string;
   now: string;
   onAbort(cleanup: () => Promise<void>): void;
+  /** Executado só depois da confirmação da transação (ex.: apagar a cópia temporária do envio). */
+  afterCommit(fn: () => Promise<void>): void;
 }
 
 interface BaseAction<I> {
@@ -134,6 +136,16 @@ export function payloadFingerprint(input: unknown) {
   return createHash("sha256").update(JSON.stringify(canonical(input))).digest("hex");
 }
 
+/**
+ * A requisição já foi concluída? (mesma chave de idempotência usada abaixo,
+ * `idempotency/{uid}__{requestId}`). Use na etapa `prepare`: num reenvio, o
+ * despachante devolve o resultado guardado sem executar `run`, então a
+ * preparação não deve mover arquivos nem recusar por um estado posterior.
+ */
+export async function alreadyCompleted(uid: string, requestId: string) {
+  return (await db.doc(`idempotency/${uid}__${requestId}`).get()).exists;
+}
+
 /** Executa as compensações registradas; falhas vão só para o log (a limpeza diária cobre o resto). */
 async function runAborts(aborts: (() => Promise<void>)[], action: string, requestId: string) {
   const results = await Promise.allSettled(aborts.map((fn) => fn()));
@@ -158,7 +170,8 @@ export function isCommittedError(error: unknown) {
 async function runMutation(def: MutationAction<unknown, unknown, unknown>, uid: string | undefined, input: unknown, requestId: string) {
   const now = nowISO();
   const aborts: (() => Promise<void>)[] = [];
-  const prepareCtx: PrepareContext = { requestId, now, onAbort: (fn) => aborts.push(fn) };
+  const commits: (() => Promise<void>)[] = [];
+  const prepareCtx: PrepareContext = { requestId, now, onAbort: (fn) => aborts.push(fn), afterCommit: (fn) => commits.push(fn) };
 
   let prepared: unknown;
   if (def.prepare) {
@@ -223,6 +236,15 @@ async function runMutation(def: MutationAction<unknown, unknown, unknown>, uid: 
     throw error;
   }
 
+  for (const fn of commits) {
+    try {
+      await fn();
+    } catch (error) {
+      // Limpeza depois da confirmação (a rotina diária cobre o que sobrar).
+      logger.warn("Limpeza pós-confirmação falhou", { action: actionKey(def), requestId, error: (error as Error).message });
+    }
+  }
+
   if (!replayed) {
     for (const effect of effects) {
       try {
@@ -235,8 +257,10 @@ async function runMutation(def: MutationAction<unknown, unknown, unknown>, uid: 
   }
 
   if (!def.present) return result;
+  // Na repetição, o autor é carregado de novo: conta ou cargo desativados são
+  // uma recusa desta requisição (fora do try), não um erro "pós-confirmação".
+  if (!actor && uid) actor = await loadActorOutsideTx(uid);
   try {
-    if (!actor && uid) actor = await loadActorOutsideTx(uid);
     return await def.present(result, actor);
   } catch (error) {
     // A operação já foi confirmada (agora ou na requisição original): o erro é

@@ -16,6 +16,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/form";
 import { MemberSelect } from "@/components/shared/pickers";
 import { taskSchema, type TaskFormValues } from "./schemas";
+import { FormAlert } from "@/components/shared/form-alert";
 
 /* -------------------------------- Duplicar -------------------------------- */
 
@@ -110,11 +111,7 @@ function DuplicateBody({ onOpenChange, event }: DuplicateProps) {
             </ul>
           </div>
         </div>
-        {error && (
-          <p role="alert" className="text-[13px] text-danger">
-            {error}
-          </p>
-        )}
+        <FormAlert message={error} />
       </div>
     </DialogContent>
   );

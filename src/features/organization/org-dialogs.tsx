@@ -19,6 +19,7 @@ import { DemoNotice } from "@/components/shared/states";
 import { confirmAction } from "@/components/shared/confirm";
 import { PermissionMatrix } from "./permission-matrix";
 import { assignableRoles, canAssignRole, canChangeRoleAccess, memberEditRules, permissionLock, roleAccessLock } from "./org-rules";
+import { FormAlert } from "@/components/shared/form-alert";
 
 const HOME_LABELS: Record<HomePreset, string> = {
   presidency: "Presidência (visão institucional)",
@@ -30,12 +31,9 @@ const HOME_LABELS: Record<HomePreset, string> = {
   advisor: "Assessoria (tarefas e vendas)",
 };
 
+/** Erro do servidor no formulário (rola até ficar visível; ver FormAlert). */
 export function ErrorLine({ error }: { error?: string }) {
-  return error ? (
-    <p role="alert" className="mt-4 rounded-lg border border-danger/35 bg-danger/10 px-3.5 py-2.5 text-[13px] text-danger">
-      {error}
-    </p>
-  ) : null;
+  return <FormAlert message={error} className="mt-4" />;
 }
 
 /** Aviso do ambiente real (sem o ícone de "demonstração"). */

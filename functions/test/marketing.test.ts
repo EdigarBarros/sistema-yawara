@@ -405,6 +405,25 @@ describe("material aprovado", () => {
   });
 });
 
+describe("reenvio depois da aprovação", () => {
+  it("repetir um anexo já concluído devolve o resultado guardado, mesmo que o conteúdo tenha sido aprovado depois", async () => {
+    const c = await createContent("assmkt", { responsibleId: "assmkt" });
+    const ticket = await stage("assmkt", JPEG, "arte.jpg", "image/jpeg", c.id);
+    const requestId = randomUUID();
+    const first = await marketing<ContentItem>("addFiles", "assmkt", { id: c.id, uploadIds: [ticket.uploadId] }, requestId);
+    expect(first.files).toHaveLength(1);
+    await marketing("setStatus", "mkt", { id: c.id, status: "approved" });
+
+    // A resposta se perdeu e o navegador repete a MESMA requisição: não é uma nova alteração.
+    const replay = await marketing<ContentItem>("addFiles", "assmkt", { id: c.id, uploadIds: [ticket.uploadId] }, requestId);
+    expect(replay.files).toHaveLength(1);
+    expect(replay.status).toBe("approved");
+    // Uma requisição NOVA continua recusada pelo bloqueio do material aprovado.
+    const other = await stage("assmkt", JPEG, "outra.jpg", "image/jpeg", c.id);
+    await expectCode(marketing("addFiles", "assmkt", { id: c.id, uploadIds: [other.uploadId] }), "conflict");
+  });
+});
+
 describe("arquivos", () => {
   it("JPEG real: conferido, copiado para marketing/{id}/ sem token público, com SHA-256, histórico e auditoria", async () => {
     const c = await createContent("mkt");

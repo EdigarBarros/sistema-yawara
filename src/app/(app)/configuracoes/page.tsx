@@ -58,15 +58,17 @@ function ModeNotice({ children, className }: { children: React.ReactNode; classN
 function InstitutionSection() {
   const access = useAccess();
   const { data, isError, error: loadError, refetch } = useSettings();
-  const [form, setForm] = useState<InstitutionSettings | null>(null);
+  // Só os campos que a pessoa editou: um campo alterado por outra pessoa enquanto
+  // a tela estava aberta não é sobrescrito com o valor antigo.
+  const [edits, setEdits] = useState<Partial<InstitutionSettings>>({});
   const [error, setError] = useState<string>();
   const editable = access.can("settings.edit");
-  const value = form ?? data?.institution;
-  const save = useAction((changes: Partial<InstitutionSettings>) => services.settings.updateInstitution(changes), { success: "Dados institucionais salvos", silentError: true, onSuccess: () => setForm(null) });
+  const value = data?.institution ? { ...data.institution, ...edits } : undefined;
+  const save = useAction((changes: Partial<InstitutionSettings>) => services.settings.updateInstitution(changes), { success: "Dados institucionais salvos", silentError: true, onSuccess: () => setEdits({}) });
   if (!value && isError) return <ErrorState message={errorMessage(loadError, "Não foi possível carregar as configurações.")} onRetry={() => void refetch()} />;
   if (!value) return <InlineLoader />;
   // Só os campos alterados são enviados: a auditoria registra exatamente o que mudou.
-  const changes = changedInstitutionFields(data?.institution ?? {}, form);
+  const changes = changedInstitutionFields(data?.institution ?? {}, edits);
   const hasChanges = Object.keys(changes).length > 0;
   return (
     <Panel
@@ -97,7 +99,7 @@ function InstitutionSection() {
       <div className="grid gap-4 sm:grid-cols-2">
         {INSTITUTION_FIELDS.map((f) => (
           <Field key={f.key} label={f.label} className={f.wide ? "sm:col-span-2" : undefined}>
-            <Input value={value[f.key]} disabled={!editable} onChange={(e) => setForm({ ...value, [f.key]: e.target.value })} />
+            <Input value={value[f.key]} disabled={!editable} onChange={(e) => setEdits((prev) => ({ ...prev, [f.key]: e.target.value }))} />
           </Field>
         ))}
       </div>

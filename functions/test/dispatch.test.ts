@@ -123,6 +123,20 @@ describe("auditoria de recusas pela função chamável", () => {
     expect((await auditByRequest(rid)).map((l) => `${l.action}:${l.outcome}`)).toEqual(["events.update:success"]);
   });
 
+  it("repetição por conta desativada depois da operação: é recusa desta requisição (auditada), não erro pós-confirmação", async () => {
+    const ev = await events<AtleticaEvent>("create", "evt", eventInput());
+    const rid = randomUUID();
+    await callApi("evt", "update", { id: ev.id, input: { name: "Nome confirmado" } }, rid);
+    await db.doc("members/evt").update({ status: "inactive" });
+
+    const error = await errorOf(callApi("evt", "update", { id: ev.id, input: { name: "Nome confirmado" } }, rid));
+    expect(error.code).toBe("permission-denied");
+    expect(error.message).toBe("Sua conta está desativada. Procure a presidência para reativá-la.");
+    expect(error.details?.committed).toBeUndefined();
+    const logs = await auditByRequest(rid);
+    expect(logs.map((l) => `${l.action}:${l.outcome}`)).toEqual(["events.update:denied", "events.update:success"]);
+  });
+
   it("tentativa recusada por permissão: auditada como 'denied' com recurso genérico 'operation'", async () => {
     const ev = await events<AtleticaEvent>("create", "evt", eventInput());
     const rid = randomUUID();

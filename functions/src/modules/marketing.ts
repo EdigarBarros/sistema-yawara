@@ -44,7 +44,7 @@ import { db } from "../core/admin";
 import { requireModuleEnabled, requirePermission, type Actor } from "../core/actor";
 import { auditInTx } from "../core/audit";
 import { nextCode } from "../core/counters";
-import { mutation, type RunContext } from "../core/dispatch";
+import { alreadyCompleted, mutation, type RunContext } from "../core/dispatch";
 import { fail } from "../core/errors";
 import { finalizeUpload, markAttached } from "../core/files";
 import { appendHistory, historyEntry } from "../core/history";
@@ -512,8 +512,12 @@ export const marketingActions = {
      * Antes da transação: conferência antecipada do acesso (repetida dentro
      * dela) e conferência/cópia dos arquivos para `marketing/{id}/`.
      * Repetir a mesma requisição devolve os mesmos arquivos (finalizeUpload é idempotente).
+     * Num reenvio de requisição já concluída nada é conferido de novo: o
+     * despachante devolve o resultado guardado (mesmo que o conteúdo tenha sido
+     * aprovado depois).
      */
     async prepare(actor, { id: contentId, uploadIds }, ctx): Promise<FileRef[]> {
+      if (await alreadyCompleted(actor.uid, ctx.requestId)) return [];
       const snap = await db.doc(`contents/${contentId}`).get();
       if (!snap.exists) fail("not_found", "Conteúdo não encontrado. Pode ter sido removido ou não estar disponível para o seu perfil.");
       const item = normalizeContent(toDTO<ContentItem>(snap));

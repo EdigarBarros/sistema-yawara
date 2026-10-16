@@ -495,7 +495,7 @@ export function FinanceTab({ event }: { event: AtleticaEvent }) {
   const allowed = !!access.ctx && canSeeEventFinance(access.ctx, event) && access.moduleEnabled("finance");
   const { data, isLoading, isError, error } = useEventFinance(event.id, allowed);
   const { data: cats } = useFinanceCategories();
-  if (!allowed) return <RestrictedState title="Dados financeiros restritos" description="O Financeiro e a diretoria do departamento responsável veem esta aba." />;
+  if (!allowed) return <RestrictedState module="finance" title="Dados financeiros restritos" description="O Financeiro e a diretoria do departamento responsável veem esta aba." />;
   if (isLoading) return <InlineLoader />;
   if (isError) return <ErrorState message={errorMessage(error)} />;
   const s = summarizeFinance(data ?? []);
@@ -542,7 +542,7 @@ export function PublicityTab({ event }: { event: AtleticaEvent }) {
   const access = useAccess();
   const allowed = access.canModule("marketing");
   const { data, isLoading, isError, error, refetch } = useContents(allowed);
-  if (!allowed) return <RestrictedState title="Divulgação fica no Marketing" description="Seu perfil não acessa o módulo de Marketing." />;
+  if (!allowed) return <RestrictedState module="marketing" title="Divulgação fica no Marketing" description="Seu perfil não acessa o módulo de Marketing." />;
   const items = (data ?? []).filter((c) => c.eventId === event.id).sort((a, b) => (a.publishDate ?? "").localeCompare(b.publishDate ?? ""));
   return (
     <Panel
@@ -590,7 +590,7 @@ export function DocumentsTab({ event }: { event: AtleticaEvent }) {
   const { data, isLoading, isError, error, refetch } = useDocuments(allowed);
   const { data: cats } = useDocumentCategories();
   const [open, setOpen] = useState(false);
-  if (!allowed) return <RestrictedState title="Documentos restritos" description="Seu perfil não acessa o módulo de Documentos." />;
+  if (!allowed) return <RestrictedState module="documents" title="Documentos restritos" description="Seu perfil não acessa o módulo de Documentos." />;
   const docs = (data ?? []).filter((d) => d.links.eventId === event.id);
   return (
     <>

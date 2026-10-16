@@ -25,3 +25,11 @@ describe("dados institucionais: só o que mudou é enviado", () => {
     expect(changedInstitutionFields(current, withExtra)).toEqual({});
   });
 });
+
+describe("dados institucionais: edições parciais", () => {
+  it("só os campos editados entram; um campo alterado por outra pessoa enquanto a tela estava aberta não é sobrescrito", () => {
+    // A pessoa editou só o lema; enquanto isso, outra pessoa mudou a cidade (dado atual já atualizado).
+    const updatedByOther = { ...current, city: "Cidade Nova" };
+    expect(changedInstitutionFields(updatedByOther, { motto: "#Novo" })).toEqual({ motto: "#Novo" });
+  });
+});

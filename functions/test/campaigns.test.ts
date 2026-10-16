@@ -5,6 +5,7 @@ import type { Campaign, Sale } from "@/types";
 import { isCommittedError, loadActorOutsideTx } from "../src/core/dispatch";
 import { createUploadTicket } from "../src/core/files";
 import { campaignsActions, presentSale } from "../src/modules/campaigns";
+import { retryPendingBuyerSyncs } from "../src/modules/maintenance";
 import { auditFor, bucket, caller, db, expectCode, resetEmulators, seedPeople, seedStructure } from "./helpers";
 
 const api = caller("campaigns", campaignsActions);
@@ -474,6 +475,16 @@ describe("correções de segurança: responsável, motivos, respostas repetidas 
     expect(ok.sellerId).toBe("pres");
   });
 
+  it("ao registrar, o responsável pela venda também precisa poder vender nesta campanha", async () => {
+    const c = await newCampaign("pres", { access: { ...ACCESS, sell: aud("people", { userIds: ["ass"] }) } });
+    // evt está ativo, mas fora do público de vendas: não pode ser indicado (passaria a ver o comprador).
+    const e = await expectCode(register("ass", c.id, [5], { sellerId: "evt" }), "invalid");
+    expect(e.message).toMatch(/possa registrar vendas nesta campanha/);
+    expect((await db.collection(`campaigns/${c.id}/sales`).get()).size).toBe(0);
+    const ok = await register("ass", c.id, [5], { sellerId: "ass" });
+    expect(ok.sellerId).toBe("ass");
+  });
+
   it("motivos de cancelamento e de pagamento desfeito ficam só nos dados restritos", async () => {
     const c = await newCampaign("pres", { access: { ...ACCESS, buyerData: aud("people", { userIds: ["pres"] }) } });
     const sale = await register("ass", c.id, [3], { sellerId: "ass" });
@@ -637,5 +648,14 @@ describe("público dos compradores acompanha o público da campanha", () => {
     const expected = campaignReaders({ ...full, access: { ...full.access, view: aud("board") as Campaign["access"]["view"] } });
     list = await buyers();
     expect(list.every((b) => JSON.stringify(b.viewReaders) === JSON.stringify(expected))).toBe(true);
+
+    // 5) Sem nova edição da campanha, a rotina diária também retoma uma pendência.
+    const lagging = list[0];
+    await db.doc(`campaigns/${c.id}/buyers/${lagging.id}`).update({ readers: ["u:ninguem"] });
+    await db.doc(`campaigns/${c.id}`).update({ buyersSyncPending: true, buyersSyncToken: "pendente-de-teste" });
+    expect(await retryPendingBuyerSyncs()).toEqual({ pending: 1, completed: 1 });
+    stored = (await db.doc(`campaigns/${c.id}`).get()).data()!;
+    expect(stored.buyersSyncPending).toBeUndefined();
+    expect((await db.doc(`campaigns/${c.id}/buyers/${lagging.id}`).get()).data()!.readers).toContain("board");
   });
 });

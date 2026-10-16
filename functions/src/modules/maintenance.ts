@@ -11,12 +11,16 @@
  * tíquetes vencidos (validade + 30 min), nenhuma operação em andamento ainda
  * pode anexar um arquivo que a limpeza considera órfão.
  *
+ *  - Retoma a sincronização do público dos compradores marcada como pendente
+ *    (`buyersSyncPending`) em campanhas grandes.
+ *
  * Exige Cloud Scheduler (plano Blaze). Ver docs/backend/custos.md.
  */
 import type { DocumentReference } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/scheduler";
 import { logger } from "firebase-functions";
 import { bucket, db, nowISO, REGION } from "../core/admin";
+import { syncBuyerReaders } from "./campaigns";
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -86,7 +90,26 @@ export async function cleanupUploadsOnce(now = Date.now()) {
   return { staging, orphans };
 }
 
+/**
+ * Retoma a atualização do público dos compradores que ficou pendente (campanhas
+ * com mais vendas do que cabem numa transação, quando a etapa posterior falhou).
+ */
+export async function retryPendingBuyerSyncs(limit = 20) {
+  const pending = await db.collection("campaigns").where("buyersSyncPending", "==", true).limit(limit).get();
+  let completed = 0;
+  for (const doc of pending.docs) {
+    try {
+      if ((await syncBuyerReaders(doc.id)).completed) completed++;
+    } catch (error) {
+      logger.warn("Sincronização de compradores pendente falhou; nova tentativa na próxima execução", { campaignId: doc.id, error: (error as Error).message });
+    }
+  }
+  return { pending: pending.size, completed };
+}
+
 export const cleanupUploads = onSchedule({ schedule: "every day 04:00", timeZone: "America/Sao_Paulo", region: REGION }, async () => {
   const result = await cleanupUploadsOnce();
   logger.info("Limpeza de envios concluída", result);
+  const syncs = await retryPendingBuyerSyncs();
+  if (syncs.pending) logger.info("Sincronização de compradores pendente retomada", syncs);
 });

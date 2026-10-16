@@ -60,7 +60,7 @@ import type {
 import { db } from "../core/admin";
 import { requireModuleEnabled, requirePermission, type Actor } from "../core/actor";
 import { auditInTx } from "../core/audit";
-import { mutation, type RunContext } from "../core/dispatch";
+import { alreadyCompleted, mutation, type RunContext } from "../core/dispatch";
 import { fail } from "../core/errors";
 import { finalizeUpload, markAttached } from "../core/files";
 import { appendHistory, historyEntry } from "../core/history";
@@ -147,15 +147,6 @@ const idSchema = strict({ id: docId });
  */
 export function newDocumentId(uid: string, requestId: string) {
   return createHash("sha256").update(`${uid}:${requestId}`).digest("hex").slice(0, 20);
-}
-
-/**
- * A requisição já foi concluída? (mesma chave de idempotência do despachante,
- * `idempotency/{uid}__{requestId}`). Evita mover outro arquivo num reenvio: o
- * despachante devolve o resultado guardado sem executar `run`.
- */
-async function alreadyCompleted(uid: string, requestId: string) {
-  return (await db.doc(`idempotency/${uid}__${requestId}`).get()).exists;
 }
 
 function normalizeDocument(d: InstitutionalDocument): InstitutionalDocument {
