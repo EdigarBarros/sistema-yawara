@@ -92,8 +92,9 @@ grandes (históricos, textos longos) são excluídos da indexação.
 
 Campos `expireAt` com política de TTL: `idempotency` (2 dias), `uploads`
 (7 dias), `notifications` (180 dias) e `auditLogs`
-(`AUDIT_RETENTION_DAYS`, padrão 5 anos). As políticas precisam ser ativadas no
-projeto (ver implantação).
+(`AUDIT_RETENTION_DAYS`, padrão 5 anos). As políticas exigem o plano Blaze e são
+ativadas por `scripts/enable-ttl.sh` (ver implantação). No plano gratuito os
+documentos não expiram; nada no código depende da exclusão.
 
 ## Listagens e paginação
 

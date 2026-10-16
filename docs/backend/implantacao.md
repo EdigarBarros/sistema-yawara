@@ -53,13 +53,15 @@ firebase use dev                      # ou: firebase use prod
    Na primeira publicação das regras do Storage, a CLI pede permissão para
    as regras consultarem o Firestore (papel de agente de serviço) — aceite.
 4. Políticas de TTL (exclusão automática) para o campo `expireAt` nas
-   coleções `idempotency`, `uploads`, `notifications` e `auditLogs`. Elas vêm
-   em `firestore.indexes.json`; confira no console (Firestore → TTL) ou crie
-   manualmente:
+   coleções `idempotency`, `uploads`, `notifications` e `auditLogs`. O TTL
+   exige o Blaze, por isso **não** fica em `firestore.indexes.json` (assim o
+   mesmo arquivo publica no plano gratuito). Ative com:
    ```bash
-   gcloud firestore fields ttls update expireAt --collection-group=idempotency --enable-ttl
-   # repita para uploads, notifications e auditLogs
+   PROJECT=<id-do-projeto> sh scripts/enable-ttl.sh
    ```
+   Rode de novo depois de cada `firebase deploy --only firestore:indexes`,
+   caso a CLI desligue as políticas ao reaplicar as configurações de campo.
+   Confira no console (Firestore → TTL).
 5. CORS do bucket (necessário para o download autenticado no navegador):
    edite os domínios em `storage.cors.json` e rode
    ```bash

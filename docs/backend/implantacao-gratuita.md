@@ -64,10 +64,12 @@ npx firebase deploy --only firestore:rules,firestore:indexes
 
 Não publique `storage` nem `functions` neste modo (exigem o Blaze).
 
-O arquivo de índices também liga a exclusão automática (TTL) de registros
-técnicos antigos (controle de requisições, notificações). Se o console
-recusar a política de TTL no plano gratuito, nada quebra: esses registros só
-deixam de ser apagados sozinhos (ocupam pouco espaço).
+A exclusão automática (TTL) de registros técnicos antigos exige o Blaze e por
+isso não faz parte do arquivo de índices. No plano gratuito esses registros
+(controle de requisições repetidas, notificações, auditoria) só deixam de ser
+apagados sozinhos: o sistema funciona igual, as listas de notificações já são
+limitadas, e o espaço ocupado é pequeno perto de 1 GiB. Se migrar para o
+Blaze, ative com `scripts/enable-ttl.sh`.
 
 ## 3. Hospedagem (Vercel, plano Hobby)
 

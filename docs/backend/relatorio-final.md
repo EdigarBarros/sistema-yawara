@@ -22,7 +22,8 @@ passos que dependem do responsável pela Atlética estão na seção 9.
   - **Plano Blaze:** Cloud Functions (2ª geração, `southamerica-east1`), Cloud
     Storage para os arquivos, rotina diária de limpeza. Guia:
     [implantacao.md](implantacao.md).
-- Regras de segurança, índices, TTL e App Check (opcional) valem para os dois.
+- Regras de segurança, índices e App Check (opcional) valem para os dois. A
+  exclusão automática (TTL) de registros técnicos só existe no Blaze.
 - Documentação: [arquitetura](arquitetura.md), [modelo de dados](modelo-de-dados.md),
   [segurança e LGPD](seguranca.md), [implantação](implantacao.md) e
   [custos](custos.md).

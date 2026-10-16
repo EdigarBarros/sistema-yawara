@@ -460,7 +460,6 @@
     {
       "collectionGroup": "idempotency",
       "fieldPath": "expireAt",
-      "ttl": true,
       "indexes": [
         {
           "order": "ASCENDING",
@@ -475,7 +474,6 @@
     {
       "collectionGroup": "notifications",
       "fieldPath": "expireAt",
-      "ttl": true,
       "indexes": [
         {
           "order": "ASCENDING",
@@ -490,7 +488,6 @@
     {
       "collectionGroup": "uploads",
       "fieldPath": "expireAt",
-      "ttl": true,
       "indexes": [
         {
           "order": "ASCENDING",
@@ -505,7 +502,6 @@
     {
       "collectionGroup": "auditLogs",
       "fieldPath": "expireAt",
-      "ttl": true,
       "indexes": [
         {
           "order": "ASCENDING",

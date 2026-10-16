@@ -122,7 +122,7 @@ functions/               código do servidor: todas as gravações, validação,
                          (roda na rota acima ou como Cloud Functions)
 firestore.rules          regras do Firestore (fechado por padrão)
 storage.rules            regras do Storage
-firestore.indexes.json   índices e TTL
+firestore.indexes.json   índices (TTL: scripts/enable-ttl.sh, só Blaze)
 scripts/                 seed do emulador e implantação inicial (bootstrap)
 tests/rules/             testes das regras
 docs/backend/            documentação técnica do backend

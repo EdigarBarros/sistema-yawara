@@ -167,7 +167,8 @@ dispositivo). Exportações com dados pessoais são registradas.
 
 Nunca entram na auditoria: senhas, tokens, conteúdo de arquivos, nome/contato
 de compradores ou nomes de participantes. Leitura exige `audit.view` (página
-"Auditoria"). Retenção: `AUDIT_RETENTION_DAYS` (padrão 5 anos) via TTL.
+"Auditoria"). Retenção: `AUDIT_RETENTION_DAYS` (padrão 5 anos) via TTL (plano Blaze; no
+plano gratuito a auditoria é mantida sem prazo).
 
 Limitação: tentativas de login com senha errada são tratadas pelo próprio
 Firebase Auth (bloqueio por excesso de tentativas) e não aparecem na
@@ -192,8 +193,9 @@ O que a Central faz:
 - **Controle de acesso** por permissão e por público; comprovantes e
   documentos financeiros restritos.
 - **Sem exposição em URLs ou logs:** ids técnicos nas URLs; logs sem payload.
-- **Retenção técnica** com TTL (notificações 180 dias, controles técnicos
-  2–7 dias, auditoria configurável). Arquivar não é excluir.
+- **Retenção técnica** com TTL no plano Blaze (notificações 180 dias,
+  controles técnicos 2–7 dias, auditoria configurável); no plano gratuito
+  esses registros não expiram. Arquivar não é excluir.
 
 O que depende da Atlética (a conformidade não vem automaticamente do uso do
 Firebase):

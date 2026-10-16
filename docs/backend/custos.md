@@ -26,8 +26,8 @@
   lenta). `maxInstances` limitado a 10 por função para conter custos.
 - **Storage:** proporcional aos arquivos guardados; versões de documentos e
   comprovantes nunca são apagadas automaticamente (decisão de retenção).
-- **TTL:** remove automaticamente notificações antigas e controles técnicos,
-  reduzindo armazenamento.
+- **TTL (só no Blaze):** remove automaticamente notificações antigas e
+  controles técnicos, reduzindo armazenamento.
 
 ## Como controlar
 
