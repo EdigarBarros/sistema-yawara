@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as RD from "@radix-ui/react-dialog";
-import { CalendarDays, ClipboardList, CornerDownLeft, FolderOpen, GraduationCap, Loader2, Megaphone, Search, Ticket, Wallet } from "lucide-react";
+import { AlertTriangle, CalendarDays, ClipboardList, CornerDownLeft, FolderOpen, GraduationCap, Loader2, Megaphone, RotateCcw, Search, Ticket, Wallet } from "lucide-react";
 import type { SearchResult, SearchResultKind } from "@/types";
 import { useSearch } from "@/hooks/use-data";
 import { useUI } from "@/stores/ui";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/notify";
 import { Kbd } from "@/components/ui/misc";
 
 const GROUPS: Record<SearchResultKind, { label: string; icon: React.ReactNode }> = {
@@ -20,16 +21,26 @@ const GROUPS: Record<SearchResultKind, { label: string; icon: React.ReactNode }>
   content: { label: "Marketing", icon: <Megaphone /> },
 };
 const ORDER: SearchResultKind[] = ["campaign", "event", "document", "meeting", "finance", "project", "content"];
+/** Espera entre a digitação e a busca (evita uma consulta ao servidor por tecla). */
+const DEBOUNCE_MS = 250;
 
-/** Busca global (Ctrl K) nos dados que o perfil demonstrativo pode ver. */
+/** Busca global (Ctrl K) nos dados que o perfil em uso pode ver. */
 export function CommandPalette() {
   const router = useRouter();
   const open = useUI((s) => s.searchOpen);
   const setOpen = useUI((s) => s.setSearchOpen);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
-  const { data, isFetching } = useSearch(query);
+  const [debounced, setDebounced] = useState("");
+  const { data, isFetching, isError, error, refetch } = useSearch(debounced);
   const listRef = useRef<HTMLDivElement>(null);
+  const typing = debounced !== query;
+  const busy = isFetching || (typing && query.trim().length >= 2);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(query), DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [query]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -42,7 +53,7 @@ export function CommandPalette() {
     return () => window.removeEventListener("keydown", onKey);
   }, [setOpen]);
 
-  const results = useMemo(() => (query.trim().length >= 2 ? (data ?? []) : []), [data, query]);
+  const results = useMemo(() => (query.trim().length >= 2 && !isError ? (data ?? []) : []), [data, query, isError]);
   const grouped = useMemo(() => {
     const flat: SearchResult[] = [];
     const groups = ORDER.map((kind) => {
@@ -90,7 +101,7 @@ export function CommandPalette() {
           <RD.Title className="sr-only">Busca global</RD.Title>
           <RD.Description className="sr-only">Procure rifas, eventos, documentos, reuniões, lançamentos, projetos e conteúdos.</RD.Description>
           <div className="flex items-center gap-3 border-b border-line px-4">
-            {isFetching ? <Loader2 className="size-[18px] animate-spin text-gold" /> : <Search className="size-[18px] text-fg-subtle" />}
+            {busy ? <Loader2 className="size-[18px] animate-spin text-gold" /> : <Search className="size-[18px] text-fg-subtle" />}
             <input
               autoFocus
               value={query}
@@ -111,7 +122,22 @@ export function CommandPalette() {
                 Digite pelo menos 2 letras. A busca considera apenas o que o seu perfil pode ver.
               </p>
             )}
-            {query.trim().length >= 2 && !isFetching && grouped.flat.length === 0 && (
+            {query.trim().length >= 2 && !busy && isError && (
+              <div role="alert" className="flex flex-col items-center gap-3 px-3 py-6 text-center text-[13px] text-fg-muted">
+                <span className="flex items-center gap-2 font-medium text-fg">
+                  <AlertTriangle className="size-4 text-danger" aria-hidden /> Não foi possível buscar agora.
+                </span>
+                <span>{errorMessage(error)}</span>
+                <button
+                  type="button"
+                  onClick={() => refetch()}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line-strong px-3 text-[12.5px] font-medium text-fg hover:bg-surface-2 [&_svg]:size-3.5"
+                >
+                  <RotateCcw /> Tentar novamente
+                </button>
+              </div>
+            )}
+            {query.trim().length >= 2 && !busy && !isError && grouped.flat.length === 0 && (
               <p className="px-3 py-6 text-center text-[13px] text-fg-muted">Nenhum resultado para “{query}”.</p>
             )}
             {grouped.groups.map((g) => (

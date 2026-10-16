@@ -2,8 +2,8 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { BadgeCheck, Ban, Download, Eye, Paperclip, Pencil, RotateCcw } from "lucide-react";
-import type { FinanceEntry } from "@/types";
+import { BadgeCheck, Ban, Paperclip, Pencil, RotateCcw } from "lucide-react";
+import type { FileRef, FinanceEntry } from "@/types";
 import { services } from "@/services";
 import { useAccess } from "@/hooks/use-access";
 import { useAction } from "@/hooks/use-action";
@@ -12,14 +12,27 @@ import { canEditEntry } from "@/lib/policies";
 import { ENTRY_TYPE_LABELS, PAYMENT_METHOD_LABELS, entryStatusMeta } from "@/lib/labels";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { isDemoMode, usesFileLinks } from "@/lib/mode";
 import { Sheet, SheetContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/misc";
 import { DetailList, SectionTitle } from "@/components/shared/page";
 import { FileRow } from "@/components/shared/pickers";
+import { FileActions } from "@/components/shared/file-actions";
+import { AttachLinkDialog } from "@/components/shared/file-link";
 import { HistoryTimeline } from "@/components/shared/history";
 import { askReason, confirmAction } from "@/components/shared/confirm";
 import { EntryFormDialog } from "./entry-form-dialog";
+import { RECEIPT_ACCEPT } from "./receipt";
+
+/** Comprovantes substituídos (guardados pelo servidor; não existem no modo demonstração). */
+type EntryWithReceipts = FinanceEntry & { receiptHistory?: FileRef[] };
+
+/** Detalhe do arquivo: no modo demonstração, indica se o conteúdo está disponível nesta aba. */
+function receiptMeta(file: FileRef) {
+  if (!isDemoMode) return undefined;
+  return services.files.isAvailable(file) ? "neste navegador" : "exemplo sem arquivo";
+}
 
 /** Painel de consulta de um lançamento, com as ações permitidas ao perfil. */
 export function EntrySheet({ entry, onOpenChange }: { entry: FinanceEntry | null; onOpenChange: (o: boolean) => void }) {
@@ -30,11 +43,16 @@ export function EntrySheet({ entry, onOpenChange }: { entry: FinanceEntry | null
   const { data: campaigns } = useCampaigns();
   const [editOpen, setEditOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [linkOpen, setLinkOpen] = useState(false);
 
   const settle = useAction((id: string) => services.finance.setStatus(id, "settled"), { success: (e) => (e.type === "income" ? "Recebimento confirmado" : "Pagamento confirmado") });
   const reopen = useAction((id: string) => services.finance.setStatus(id, "pending"), { success: "Lançamento reaberto como pendente" });
   const cancel = useAction((id: string, reason: string) => services.finance.setStatus(id, "cancelled", reason), { success: "Lançamento cancelado", successDescription: "O registro continua no histórico." });
-  const attach = useAction((id: string, file: File) => services.finance.attachReceipt(id, file), { success: "Comprovante anexado" });
+  const attach = useAction((id: string, file: File) => services.finance.attachReceipt(id, file), {
+    success: (e) => (e.history[e.history.length - 1]?.summary.startsWith("Comprovante substituído") ? "Comprovante substituído" : "Comprovante anexado"),
+    successDescription: (e) =>
+      !isDemoMode && e.history[e.history.length - 1]?.summary.startsWith("Comprovante substituído") ? "O comprovante anterior continua guardado no histórico de comprovantes." : undefined,
+  });
 
   if (!entry) return <Sheet open={false} onOpenChange={onOpenChange} />;
 
@@ -43,7 +61,7 @@ export function EntrySheet({ entry, onOpenChange }: { entry: FinanceEntry | null
   const canApprove = access.can("finance.approve");
   const canArchive = access.can("finance.archive");
   const canAttach = access.can("finance.register") || access.can("finance.edit");
-  const receiptUrl = services.files.getObjectUrl(entry.receipt?.blobId);
+  const previousReceipts = [...((entry as EntryWithReceipts).receiptHistory ?? [])].reverse();
   const event = events?.find((e) => e.id === entry.eventId);
   const campaign = campaigns?.find((c) => c.id === entry.campaignId);
 
@@ -111,7 +129,7 @@ export function EntrySheet({ entry, onOpenChange }: { entry: FinanceEntry | null
               <p className={cn("tnum mt-2 font-mono text-[30px] leading-none font-semibold", entry.type === "income" ? "text-ok" : "text-fg", entry.status === "cancelled" && "line-through opacity-60")}>
                 {entry.type === "income" ? "+" : "−"} {formatMoney(entry.amount)}
               </p>
-              <p className="mt-2 text-[12px] text-fg-subtle">Valor fictício de demonstração</p>
+              {isDemoMode && <p className="mt-2 text-[12px] text-fg-subtle">Valor fictício de demonstração</p>}
             </div>
             <DetailList
               items={[
@@ -159,13 +177,14 @@ export function EntrySheet({ entry, onOpenChange }: { entry: FinanceEntry | null
                   canAttach &&
                   entry.status !== "cancelled" && (
                     <>
-                      <Button size="sm" variant="ghost" onClick={() => fileRef.current?.click()} loading={attach.pending}>
+                      <Button size="sm" variant="ghost" onClick={() => (usesFileLinks ? setLinkOpen(true) : fileRef.current?.click())} loading={attach.pending}>
                         <Paperclip /> {entry.receipt ? "Substituir" : "Anexar"}
                       </Button>
+                      <AttachLinkDialog open={linkOpen} onOpenChange={setLinkOpen} title="Link do comprovante" onSubmit={(f) => attach.runSafe(entry.id, f)} />
                       <input
                         ref={fileRef}
                         type="file"
-                        accept="image/*,application/pdf"
+                        accept={RECEIPT_ACCEPT}
                         className="sr-only"
                         tabIndex={-1}
                         onChange={(e) => {
@@ -181,25 +200,21 @@ export function EntrySheet({ entry, onOpenChange }: { entry: FinanceEntry | null
                 Comprovante
               </SectionTitle>
               {entry.receipt ? (
-                <FileRow
-                  name={entry.receipt.name}
-                  size={entry.receipt.size}
-                  meta={receiptUrl ? "neste navegador" : "exemplo sem arquivo"}
-                  actions={
-                    receiptUrl && (
-                      <>
-                        <a href={receiptUrl} target="_blank" rel="noreferrer" aria-label="Visualizar comprovante" className="grid size-8 place-items-center rounded-md text-fg-muted hover:bg-surface-2">
-                          <Eye className="size-4" />
-                        </a>
-                        <a href={receiptUrl} download={entry.receipt.name} aria-label="Baixar comprovante" className="grid size-8 place-items-center rounded-md text-fg-muted hover:bg-surface-2">
-                          <Download className="size-4" />
-                        </a>
-                      </>
-                    )
-                  }
-                />
+                <FileRow name={entry.receipt.name} size={entry.receipt.size} meta={receiptMeta(entry.receipt)} actions={<FileActions file={entry.receipt} label="comprovante" />} />
               ) : (
                 <p className="text-[13px] text-fg-subtle">Nenhum comprovante anexado.</p>
+              )}
+              {previousReceipts.length > 0 && (
+                <div className="mt-3 border-t border-line pt-2">
+                  <p className="text-[12px] font-medium text-fg-muted">Comprovantes anteriores (substituídos, mantidos para conferência)</p>
+                  <ul className="divide-y divide-line">
+                    {previousReceipts.map((file) => (
+                      <li key={file.path ?? file.name}>
+                        <FileRow name={file.name} size={file.size} actions={<FileActions file={file} label="comprovante anterior" />} />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
             <div>

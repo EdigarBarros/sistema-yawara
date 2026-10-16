@@ -1,5 +1,7 @@
 /**
- * Exportações da rifa geradas localmente a partir dos dados de demonstração.
+ * Exportações da rifa geradas no navegador a partir dos dados já carregados
+ * (demonstração: dados fictícios; Firebase: dados registrados que o perfil
+ * pode ver — compradores restritos aparecem como "Restrito").
  * A versão de divulgação NUNCA inclui nome ou contato dos compradores.
  */
 import type { Campaign, NumberSlot, NumberStatus } from "@/types";
@@ -7,6 +9,7 @@ import { NUMBER_STATUS, PAYMENT_METHOD_LABELS } from "@/lib/labels";
 import { formatDate, formatDateTimeShort, formatMoney } from "@/lib/format";
 import { padNumber } from "@/lib/raffle";
 import { autoTable, createPdf, downloadBlob, downloadCsv, drawPdfFooters, drawPdfHeader, loadLogo, PDF_COLORS, slugify } from "@/lib/export/common";
+import { isDemoMode } from "@/lib/mode";
 
 export type ExportFormat = "pdf" | "csv" | "png";
 export type ExportScope = "all" | "available" | "sold" | "paid" | "pending";
@@ -277,10 +280,14 @@ export async function exportPng(ctx: ExportContext) {
   });
   g.fillStyle = "#5f6b95";
   g.font = "400 15px Inter, sans-serif";
-  g.fillText("#SomosYawara · Imagem gerada na Central Yawara (ambiente de demonstração, dados fictícios)", pad, height - 36);
+  g.fillText(
+    isDemoMode ? "#SomosYawara · Imagem gerada na Central Yawara (ambiente de demonstração, dados fictícios)" : "#SomosYawara · Imagem gerada na Central Yawara",
+    pad,
+    height - 36,
+  );
 
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-  if (!blob) throw new Error("Não foi possível gerar a imagem neste navegador.");
+  if (!blob) throw new Error(isDemoMode ? "Não foi possível gerar a imagem neste navegador." : "Não foi possível gerar a imagem.");
   downloadBlob(blob, `${baseName({ ...ctx, audience: "public" })}.png`);
   return rows.length;
 }

@@ -2,37 +2,40 @@
 
 Plataforma interna de gestão da **Associação Atlética Acadêmica de Psicologia Yawara**.
 
-> **Etapa 1 — somente front-end.** Tudo o que aparece na interface é **fictício** e fica salvo **apenas no navegador** de quem está usando (localStorage). Não há back-end, banco de dados, autenticação real, integração bancária, envio de e-mails ou publicação em redes sociais. Nenhum nome, telefone ou valor representa registros reais da Atlética.
+O aplicativo tem dois modos, escolhidos pela variável `NEXT_PUBLIC_DATA_SOURCE`:
+
+| Modo | Para quê | Onde ficam os dados |
+|---|---|---|
+| `demo` (padrão) | Apresentação e testes de interface | Dados **fictícios**, só no navegador (localStorage). Perfis simulados, sem senha |
+| `firebase` | Uso real | Firebase Authentication e Cloud Firestore; operações do servidor na rota de API do aplicativo (ou em Cloud Functions). Login com e-mail e senha, contas só por convite |
+
+Os dois modos **nunca se misturam**: no modo `firebase` não há perfis de demonstração, seletor "Demo" nem dados fictícios, e os dados de demonstração nunca são copiados para um projeto real.
+
+Há dois jeitos de colocar o modo `firebase` no ar:
+
+| Implantação | Firebase | Servidor | Arquivos | Custo |
+|---|---|---|---|---|
+| **Gratuita (recomendada)** — [guia](docs/backend/implantacao-gratuita.md) | plano Spark | rota `src/app/api/[api]/route.ts` na hospedagem (ex.: Vercel Hobby) | links (Google Drive, OneDrive…) | R$ 0 |
+| Plano Blaze — [guia](docs/backend/implantacao.md) | plano Blaze | Cloud Functions | envio para o Cloud Storage | por uso |
+
+As duas usam **o mesmo código de servidor** (`functions/src`), as mesmas regras e os mesmos testes. A escolha é feita por variáveis (`NEXT_PUBLIC_API_TRANSPORT`, `NEXT_PUBLIC_FILE_STORAGE` — ver `.env.example`).
+
+> **Situação atual.** O backend foi implementado e testado **somente com o Firebase Emulator Suite**. Nada foi publicado num projeto real: isso depende do responsável pela Atlética.
 
 ---
 
 ## Como rodar localmente
 
-Requisitos: **Node.js 20.9 ou superior** e npm.
+Requisitos: **Node.js 20.9 ou superior** (22 recomendado) e npm. Para os emuladores do Firebase: **Java 21** e a CLI do Firebase (instalada como dependência de desenvolvimento).
+
+### Modo demonstração
 
 ```bash
-npm install          # instala as dependências
-npm run dev          # ambiente de desenvolvimento em http://localhost:3000
+npm install
+npm run dev          # http://localhost:3000
 ```
 
-Versão de produção:
-
-```bash
-npm run build
-npm start            # http://localhost:3000
-```
-
-Verificações:
-
-```bash
-npm run typecheck    # TypeScript
-npm run lint         # ESLint
-npm test             # testes unitários (Vitest)
-```
-
-Ao abrir, a tela de login oferece **perfis de demonstração** (não há senha real). Para recomeçar do zero, use *menu da conta → Restaurar dados de demonstração* ou *Configurações → Dados da demonstração*.
-
-### Perfis de demonstração
+A tela de login oferece **perfis de demonstração**. Para recomeçar do zero: *menu da conta → Restaurar dados de demonstração*.
 
 | Perfil | Integrante fictício | O que mostra |
 |---|---|---|
@@ -44,7 +47,38 @@ Ao abrir, a tela de login oferece **perfis de demonstração** (não há senha r
 | Ensino e Extensão | Marina Saraiva | Projetos, palestrantes, presença e certificados |
 | Assessor | Pedro Lins | Acesso restrito: tarefas de eventos e registro de vendas |
 
-Dá para trocar de perfil a qualquer momento pelo seletor **Demo** na barra superior. As permissões são **simuladas** para demonstrar a interface; elas não protegem dados de verdade.
+No modo demonstração as permissões são **simuladas**: servem para mostrar a interface e não protegem dados.
+
+### Modo Firebase com emuladores (sem projeto real)
+
+```bash
+npm install && npm --prefix functions install
+npm run functions:build
+npm run emulators                       # Auth, Firestore, Storage e Functions (projeto demo-yawara)
+
+# em outro terminal: dados fictícios SOMENTE no emulador
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 \
+  FIREBASE_STORAGE_EMULATOR_HOST=127.0.0.1:9199 GCLOUD_PROJECT=demo-yawara npm run seed:emulator
+```
+
+Crie um `.env.local` com a configuração de emulador mostrada em [implantacao.md §9](docs/backend/implantacao.md#9-desenvolvimento-local-com-emuladores) e rode `npm run dev`. As contas criadas pelo seed usam os e-mails fictícios dos perfis (ex.: `rebeca@example.org`) e a senha `Yawara-demo-2026`, que **só existe no emulador**.
+
+O seed se recusa a rodar sem as variáveis dos emuladores ou com um projeto cujo id não comece com `demo-`.
+
+### Verificações
+
+```bash
+npm run typecheck            # TypeScript do aplicativo
+npm run functions:typecheck  # TypeScript das Cloud Functions
+npm run lint                 # ESLint
+npm test                     # testes unitários (Vitest)
+npm run test:rules           # regras do Firestore e do Storage, no emulador
+npm run test:functions       # Cloud Functions de ponta a ponta, no emulador
+npm run test:all             # tudo acima, exceto typecheck e lint
+npm run build                # build de produção (modo definido no .env)
+```
+
+Os testes automatizados usam apenas dados fictícios gerados no próprio teste.
 
 ---
 
@@ -52,79 +86,98 @@ Dá para trocar de perfil a qualquer momento pelo seletor **Demo** na barra supe
 
 | Módulo | Rota | Principais interações |
 |---|---|---|
-| Login demo | `/login` | Escolha de perfil, aviso de ambiente demonstrativo |
+| Login | `/login` | Modo demo: escolha de perfil. Modo Firebase: e-mail e senha, "manter conectado", recuperação de senha, avisos de sessão encerrada ou conta desativada |
+| Convite | `/convite` | Aceite de convite e criação da senha (cadastro somente por convite) |
 | Início | `/inicio` | Painel personalizado por perfil, atalhos, pendências |
-| Campanhas e vendas (rifas) | `/campanhas` | Lista com filtros; criação em etapas com **Acesso e permissões**; grade de números; detalhe do número; venda/reserva de vários números; editar, cancelar (com motivo) e liberar; confirmar/desfazer pagamento; exportar **PDF / CSV / PNG** (versão de divulgação sem dados pessoais e versão interna); encerrar campanha. Estrutura de dados preparada para bingo |
-| Eventos e projetos | `/eventos` | Lista, criação, página com 6 abas (visão geral, programação e tarefas, financeiro, divulgação, documentos, histórico), tarefas por departamento, fornecedores, duplicar estrutura |
-| Documentos | `/documentos` | Biblioteca com filtros, envio local de arquivo, versões, compartilhamento por público, arquivar/restaurar |
-| Secretaria e reuniões | `/secretaria` | Registro em 5 etapas, fluxo da ata (rascunho → aguardando aprovação → aprovada → arquivada), PDF da ata |
-| Financeiro | `/financeiro` | Indicadores, lançamentos (receitas/despesas, comprovante), relatórios com filtros e exportação, gráfico mensal com tabela alternativa |
-| Marketing | `/marketing` | Quadro por etapa, lista e calendário de conteúdos |
-| Ensino e Extensão | `/extensao` | Projetos, palestrantes, inscritos, presença, certificados em PDF |
-| Diretoria e organização | `/diretoria` | Integrantes, cargos, departamentos e matriz de permissões |
-| Configurações | `/configuracoes` | Dados institucionais, identidade visual, cargos e permissões, categorias de documentos e financeiras, módulos, preferências da interface (tema claro/escuro/sistema), dados da demonstração |
+| Campanhas e vendas (rifas) | `/campanhas` | Criação em etapas com **Acesso e permissões**; grade de números; venda/reserva de vários números de uma vez, sem venda duplicada; confirmar/desfazer pagamento; comprovantes; exportar **PDF / CSV / PNG** (divulgação sem dados pessoais e versão interna); encerrar campanha |
+| Eventos e projetos | `/eventos` | Página com abas (visão geral, programação e tarefas, financeiro, divulgação, documentos, histórico), tarefas por departamento, fornecedores, duplicar estrutura sem dados financeiros ou pessoais |
+| Documentos | `/documentos` | Biblioteca com filtros, envio de arquivo com progresso e cancelamento, versões, compartilhamento e revogação por público, arquivar/restaurar |
+| Secretaria e reuniões | `/secretaria` | Registro em etapas, convidados, fluxo da ata (rascunho → aguardando aprovação → aprovada → arquivada), PDF da ata |
+| Financeiro | `/financeiro` | Indicadores, lançamentos (receitas/despesas, situação, comprovante), relatórios com filtros e exportação |
+| Marketing | `/marketing` | Quadro por etapa, lista e calendário de conteúdos, arquivos |
+| Ensino e Extensão | `/extensao` | Projetos, palestrantes, inscritos, presença (dados pessoais restritos), certificados em PDF |
+| Diretoria e organização | `/diretoria` | Integrantes, convites, cargos, departamentos e matriz de permissões |
+| Auditoria | `/auditoria` | Registro das operações, com filtros (somente quem tem `audit.view`) |
+| Configurações | `/configuracoes` | Dados institucionais, cargos e permissões, categorias, módulos, preferências da interface |
 
-Componentes transversais: histórico de alterações, estados de carregamento/vazio/erro/sucesso, busca global (`Ctrl K`), notificações internas, breadcrumbs, menu lateral recolhível e menu móvel.
+Componentes transversais: histórico de alterações, estados de carregamento/vazio/erro/sucesso, busca global (`Ctrl K`), notificações internas, fila de envios de arquivos, menu lateral recolhível e menu móvel.
 
 ---
 
-## Arquitetura
+## Arquitetura (resumo)
 
 ```
 src/
-  app/                 rotas (Next.js App Router)
-  components/          ui/ (botões, formulários, diálogos), shared/ (tabelas, filtros, estados), layout/
-  features/<módulo>/   formulários, diálogos e exportações de cada módulo
+  app/                   rotas (Next.js App Router)
+  components/ features/  interface por módulo
   services/
-    contracts.ts       interfaces que o back-end da Etapa 2 deve implementar
-    local/             implementação atual: dados no navegador
-    index.ts           escolhe qual implementação a interface usa
-  data/demo/           dados fictícios (gerados em relação à data atual)
-  lib/                 permissões, políticas de acesso, formatação, validação, rifa
-  hooks/ stores/ types/
+    contracts.ts         interfaces usadas pelas telas
+    local/               modo demonstração (navegador)
+    firebase/            modo Firebase (leituras com regras + chamadas ao servidor)
+    index.ts             escolhe a implementação pelo modo
+  lib/                   permissões, políticas, marcadores de acesso, modelo do Firestore (compartilhado com o servidor)
+  data/demo/             dados fictícios (só para o modo demo e o seed do emulador)
+  app/api/[api]/         rota de API do servidor (implantação gratuita)
+functions/               código do servidor: todas as gravações, validação, auditoria, arquivos
+                         (roda na rota acima ou como Cloud Functions)
+firestore.rules          regras do Firestore (fechado por padrão)
+storage.rules            regras do Storage
+firestore.indexes.json   índices (TTL: scripts/enable-ttl.sh, só Blaze)
+scripts/                 seed do emulador e implantação inicial (bootstrap)
+tests/rules/             testes das regras
+docs/backend/            documentação técnica do backend
 ```
 
-- **As telas nunca acessam os dados diretamente.** Elas chamam `services.*` (via React Query), definidos em `src/services/contracts.ts`.
-- `src/services/local/*` simula latência, valida entradas, aplica as mesmas políticas de acesso da interface (`src/lib/policies.ts`) e grava tudo de forma transacional no localStorage (`central-yawara:demo-db`).
-- Operações que o navegador não executa de verdade (e-mail, pagamentos, publicação, auditoria oficial) **não são simuladas como sucesso**: a interface informa que dependem da próxima etapa.
+- **As telas nunca acessam os dados diretamente**: chamam `services.*` (via React Query).
+- **Toda gravação de dados de negócio passa pelo servidor** (rota de API ou Cloud Functions), que confere identidade, conta ativa, permissões e regras de negócio, gravam em transação, registram auditoria e aplicam idempotência. O navegador só lê (com as regras de segurança) e marca as próprias notificações como lidas.
+- A visibilidade de cada registro (pessoas, cargos, departamentos ou todos) é calculada no servidor e aplicada pelas regras.
 
-### Como trocar pelo back-end (Etapa 2)
+Documentação completa:
 
-1. Criar `src/services/firebase/*` (ou outro provedor) implementando as interfaces de `src/services/contracts.ts`.
-2. Trocar as atribuições em `src/services/index.ts`.
-3. Reescrever as regras de `src/lib/policies.ts` e `src/lib/permissions.ts` **no servidor** (regras de segurança / Cloud Functions). No front-end elas servem só para a interface.
-4. Remover `src/data/demo` e os avisos de demonstração.
+- [Arquitetura do backend](docs/backend/arquitetura.md)
+- [Modelo de dados](docs/backend/modelo-de-dados.md)
+- [Segurança, permissões e privacidade (LGPD)](docs/backend/seguranca.md)
+- [Implantação gratuita (Spark + Vercel)](docs/backend/implantacao-gratuita.md)
+- [Implantação com o plano Blaze](docs/backend/implantacao.md)
+- [Custos e faturamento](docs/backend/custos.md)
+- [Relatório técnico final da Etapa 2](docs/backend/relatorio-final.md)
 
 ---
 
-## O que depende do back-end
+## O que depende do responsável pela Atlética
 
-- Autenticação real e gestão de sessões.
-- Banco de dados compartilhado entre integrantes e dispositivos (hoje cada navegador tem a sua cópia).
-- Armazenamento de arquivos (hoje ficam só na memória da aba e somem ao recarregar; os metadados permanecem).
-- Aplicação real das permissões e regras de acesso no servidor.
-- Histórico/auditoria oficial e imutável.
-- Numeração oficial de registros (RIFA-…, EVT-…, REU-…).
-- Notificações por e-mail ou push, convites e lembretes.
-- Conciliação financeira, comprovantes oficiais, integrações bancárias ou de pagamento.
-- Sorteio oficial de rifas e emissão de certificados com validação.
+Nada disso pode ser feito pelo código sozinho. No caminho **gratuito** ([passo a passo](docs/backend/implantacao-gratuita.md)):
+
+1. No projeto Firebase (plano Spark): ativar login por e-mail/senha, criar o Firestore em `southamerica-east1` e registrar o app da Web.
+2. Gerar a chave da conta de serviço (guardada fora do repositório).
+3. Publicar regras e índices do Firestore (`firebase deploy --only firestore:rules,firestore:indexes`).
+4. Criar a conta gratuita na hospedagem (ex.: Vercel), importar o repositório e preencher as variáveis de ambiente.
+5. Rodar `npm run bootstrap` **uma vez** para criar a estrutura inicial e o convite do primeiro administrador.
+
+No plano Blaze, ver [implantacao.md](docs/backend/implantacao.md).
+
+## Fora do escopo
+
+- Pagamentos reais, integração bancária ou conciliação automática.
 - Publicação automática em redes sociais.
+- Envio de e-mails transacionais além do e-mail de redefinição de senha do Firebase (o link de convite é copiado e entregue por quem convidou).
+- Sorteio oficial de rifas e certificados com validação externa.
+- Monitoramento ou avaliação de desempenho de integrantes.
 
-## Limitações conhecidas desta etapa
+## Limitações conhecidas
 
-- Os dados existem apenas no navegador atual; outro navegador ou aba anônima começa do zero.
-- Arquivos enviados (documentos, comprovantes, artes) não sobrevivem a um recarregamento da página.
-- Perfis e permissões são simulados — qualquer pessoa com acesso ao navegador pode trocar de perfil.
-- O bingo está apenas preparado na estrutura de dados; a criação está desabilitada na interface.
+- **Modo demo:** dados só no navegador atual; arquivos enviados somem ao recarregar; perfis trocáveis por qualquer pessoa.
+- **Implantação gratuita:** arquivos são links (o acesso a eles é controlado pelo serviço onde estão); não há envio de arquivos para a Central.
+- **Modo Firebase:** as listagens carregam até 500 registros visíveis por módulo (suficiente para o porte da Atlética; acima disso será preciso paginar na interface). Mudanças de cargo ou permissão chegam à sessão aberta em segundos, mas uma consulta já carregada só é refeita ao navegar.
+- O bingo está apenas preparado na estrutura de dados.
 - PDFs, CSVs e PNGs são gerados no navegador e não têm valor oficial.
-- Não há monitoramento ou avaliação de desempenho de integrantes (fora do escopo por decisão do projeto).
 
 ## Identidade visual — arquivos ainda necessários
 
-Os arquivos em `public/brand/` foram extraídos das imagens enviadas e servem para a demonstração. Para a versão final:
+Os arquivos em `public/brand/` foram extraídos das imagens enviadas. Para a versão final:
 
-- **Escudo/logomarca em SVG** (ou PNG transparente em alta resolução, mínimo 1024 px) — usado no menu, login, ícone do app e cabeçalho dos PDFs.
+- **Escudo/logomarca em SVG** (ou PNG transparente, mínimo 1024 px) — menu, login, ícone do app e cabeçalho dos PDFs.
 - **Mascote em PNG transparente** (ou SVG) em alta resolução.
-- **Nomes e arquivos das fontes oficiais**, se houver. Hoje são usadas Barlow Semi Condensed (títulos), Inter (texto) e JetBrains Mono (números), todas com licença aberta e servidas localmente.
-- **Códigos de cor oficiais** (hex) do dourado e do azul, caso existam no manual de marca.
+- **Fontes oficiais**, se houver. Hoje: Barlow Semi Condensed (títulos), Inter (texto) e JetBrains Mono (números), todas de licença aberta.
+- **Códigos de cor oficiais** (hex) do dourado e do azul, se existirem no manual de marca.
 - Versão monocromática do escudo para impressão.

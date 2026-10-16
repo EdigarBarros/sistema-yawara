@@ -2,10 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { Building2, Globe2, ShieldCheck, UserCheck, Users, UsersRound } from "lucide-react";
-import type { Audience, AudienceScope, ID, Member } from "@/types";
+import type { Audience, AudienceScope, ID, Member, ModuleKey, Permission } from "@/types";
 import { useDirectory } from "@/hooks/use-data";
 import { AUDIENCE_SCOPE_HINTS, AUDIENCE_SCOPE_LABELS } from "@/lib/labels";
-import { matchesAudience } from "@/lib/permissions";
+import { hasPermission, matchesAudience } from "@/lib/permissions";
 import { ChoiceCards } from "@/components/ui/form";
 import { Avatar } from "@/components/ui/misc";
 import { MemberMultiPicker, RoleMultiPicker } from "./pickers";
@@ -27,6 +27,8 @@ interface AudiencePickerProps {
   scopes: AudienceScope[];
   /** Rótulos específicos do contexto (ex.: "Todos os integrantes autorizados"). */
   labels?: Partial<Record<AudienceScope, string>>;
+  /** Descrições específicas do contexto. */
+  hints?: Partial<Record<AudienceScope, string>>;
   /** Departamento usado quando o escopo é "Meu departamento". */
   departmentId?: ID;
   error?: string;
@@ -36,7 +38,7 @@ interface AudiencePickerProps {
  * Seletor de público reutilizado em rifas, eventos, documentos e reuniões.
  * Os campos extras aparecem só quando necessários (cargos ou pessoas).
  */
-export function AudiencePicker({ name, value, onChange, scopes, labels, departmentId, error }: AudiencePickerProps) {
+export function AudiencePicker({ name, value, onChange, scopes, labels, hints, departmentId, error }: AudiencePickerProps) {
   const set = (patch: Partial<Audience>) => onChange({ ...value, ...patch });
   return (
     <div className="space-y-3">
@@ -47,7 +49,7 @@ export function AudiencePicker({ name, value, onChange, scopes, labels, departme
         options={scopes.map((s) => ({
           value: s,
           label: labels?.[s] ?? AUDIENCE_SCOPE_LABELS[s],
-          description: AUDIENCE_SCOPE_HINTS[s],
+          description: hints?.[s] ?? AUDIENCE_SCOPE_HINTS[s],
           icon: ICONS[s],
         }))}
       />
@@ -72,19 +74,36 @@ export function AudiencePicker({ name, value, onChange, scopes, labels, departme
   );
 }
 
-/** Lista de integrantes ativos que pertencem ao público (simulação). */
-export function useAudienceMembers(audience: Audience, extra: { departmentId?: ID; alwaysIncluded?: ID[] } = {}) {
+interface AudienceMembersOptions {
+  departmentId?: ID;
+  alwaysIncluded?: ID[];
+  /**
+   * Módulo do registro. Quando informado, só conta quem pode abrir o módulo
+   * (`<módulo>.view`) — estar no público não basta — e inclui quem administra
+   * o módulo (vê todos os registros), como fazem as regras do servidor.
+   */
+  module?: ModuleKey;
+  /** Permissão adicional exigida (ex.: "campaigns.register" para registrar vendas). */
+  need?: Permission;
+}
+
+/** Lista de integrantes ativos que terão acesso ao registro com o público informado. */
+export function useAudienceMembers(audience: Audience, extra: AudienceMembersOptions = {}) {
   const dir = useDirectory();
+  const { departmentId, alwaysIncluded, module, need } = extra;
   return useMemo(() => {
     const result: Member[] = [];
     for (const m of dir.activeMembers) {
       const role = dir.role(m.roleId);
       if (!role) continue;
       const ctx = { user: m, role, department: dir.department(role.departmentId) };
-      if (matchesAudience(ctx, audience, extra.departmentId) || extra.alwaysIncluded?.includes(m.id)) result.push(m);
+      if (module && !hasPermission(ctx, `${module}.view` as Permission)) continue;
+      if (need && !hasPermission(ctx, need)) continue;
+      const admin = !!module && hasPermission(ctx, `${module}.admin` as Permission);
+      if (admin || matchesAudience(ctx, audience, departmentId) || alwaysIncluded?.includes(m.id)) result.push(m);
     }
     return result;
-  }, [dir, audience, extra.departmentId, extra.alwaysIncluded]);
+  }, [dir, audience, departmentId, alwaysIncluded, module, need]);
 }
 
 export function describeAudience(audience: Audience, dir: ReturnType<typeof useDirectory>, labels?: Partial<Record<AudienceScope, string>>) {
@@ -110,15 +129,19 @@ export function AudienceSummary({
   alwaysIncluded,
   labels,
   title,
+  module,
+  need,
 }: {
   audience: Audience;
   departmentId?: ID;
   alwaysIncluded?: ID[];
   labels?: Partial<Record<AudienceScope, string>>;
   title?: string;
+  module?: ModuleKey;
+  need?: Permission;
 }) {
   const dir = useDirectory();
-  const members = useAudienceMembers(audience, { departmentId, alwaysIncluded });
+  const members = useAudienceMembers(audience, { departmentId, alwaysIncluded, module, need });
   const [open, setOpen] = useState(false);
   return (
     <div className="text-[13px]">

@@ -1,17 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Controller, useFieldArray, useForm } from "react-hook-form";
+import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Plus, Trash2 } from "lucide-react";
-import type { Channel, ContentItem, ContentType } from "@/types";
+import type { AudienceScope, Channel, ContentItem, ContentType } from "@/types";
 import { services } from "@/services";
 import { useAccess } from "@/hooks/use-access";
 import { useAction } from "@/hooks/use-action";
-import { useCampaigns, useEvents } from "@/hooks/use-data";
+import { useCampaigns, useDirectory, useEvents } from "@/hooks/use-data";
 import { CHANNEL_LABELS, CONTENT_TYPE_LABELS } from "@/lib/labels";
-import { requiredText } from "@/lib/validation";
+import { emptyAudience } from "@/lib/permissions";
+import { audienceError, audienceSchema, requiredText } from "@/lib/validation";
 import { liveRegister } from "@/lib/forms";
 import { errorMessage } from "@/lib/notify";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,15 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/form";
 import { MemberSelect } from "@/components/shared/pickers";
+import { AudiencePicker, AudienceSummary } from "@/components/shared/audience";
+import { FormAlert } from "@/components/shared/form-alert";
+
+/** Quem pode ver um conteúdo — ex.: compartilhar uma arte aprovada com o departamento de Eventos. */
+export const CONTENT_SCOPES: AudienceScope[] = ["all", "department", "board", "roles", "people"];
+export const CONTENT_SCOPE_LABELS: Partial<Record<AudienceScope, string>> = {
+  all: "Todos com acesso ao Marketing",
+  department: "Um departamento",
+};
 
 const schema = z.object({
   title: requiredText("o nome do conteúdo", 3),
@@ -36,6 +46,7 @@ const schema = z.object({
       url: z.string().trim().refine((v) => !v || /^https?:\/\//i.test(v), "O link deve começar com http:// ou https://"),
     }),
   ),
+  access: audienceSchema.refine((a) => a.scope !== "department" || !!a.departmentId, "Escolha o departamento."),
 });
 type Values = z.infer<typeof schema>;
 
@@ -58,6 +69,7 @@ function ContentFormBody({ onOpenChange, item, onSaved }: Props) {
   const access = useAccess();
   const { data: campaigns } = useCampaigns();
   const { data: events } = useEvents(access.canModule("events"));
+  const dir = useDirectory();
   const [serverError, setServerError] = useState<string>();
   const form = useForm<Values>({
     resolver: zodResolver(schema),
@@ -73,12 +85,31 @@ function ContentFormBody({ onOpenChange, item, onSaved }: Props) {
           briefing: item.briefing,
           notes: item.notes ?? "",
           links: item.links,
+          access: item.access ?? emptyAudience("all"),
         }
-      : { title: "", type: "arte", responsibleId: access.user?.id ?? "", publishDate: "", channels: ["instagram_feed"], campaignId: "", eventId: "", briefing: "", notes: "", links: [] },
+      : {
+          title: "",
+          type: "arte",
+          responsibleId: access.user?.id ?? "",
+          publishDate: "",
+          channels: ["instagram_feed"],
+          campaignId: "",
+          eventId: "",
+          briefing: "",
+          notes: "",
+          links: [],
+          access: emptyAudience("all"),
+        },
   });
   const register = liveRegister(form);
   const { control, handleSubmit, formState } = form;
   const links = useFieldArray({ control, name: "links" });
+  const accessValue = useWatch({ control, name: "access" });
+  const responsibleId = useWatch({ control, name: "responsibleId" });
+  const creatorId = item?.createdBy ?? access.user?.id;
+  // Vínculos que o perfil não consegue listar continuam preservados ao editar.
+  const hiddenCampaign = !!item?.campaignId && !campaigns?.some((c) => c.id === item.campaignId);
+  const hiddenEvent = !!item?.eventId && !events?.some((e) => e.id === item.eventId);
 
   const save = useAction(
     (v: Values) => {
@@ -90,6 +121,7 @@ function ContentFormBody({ onOpenChange, item, onSaved }: Props) {
         campaignId: v.campaignId || undefined,
         eventId: v.eventId || undefined,
         links: v.links.filter((l) => l.url),
+        access: { ...v.access, departmentId: v.access.scope === "department" ? v.access.departmentId : undefined },
       };
       return item ? services.marketing.update(item.id, input) : services.marketing.create(input);
     },
@@ -147,6 +179,7 @@ function ContentFormBody({ onOpenChange, item, onSaved }: Props) {
           <Field label="Campanha associada" optional>
             <Select {...register("campaignId")}>
               <option value="">Nenhuma</option>
+              {hiddenCampaign && <option value={item!.campaignId}>Campanha vinculada (sem acesso pelo seu perfil)</option>}
               {campaigns?.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -157,6 +190,7 @@ function ContentFormBody({ onOpenChange, item, onSaved }: Props) {
           <Field label="Evento relacionado" optional className="sm:col-span-2">
             <Select {...register("eventId")}>
               <option value="">Nenhum</option>
+              {hiddenEvent && <option value={item!.eventId}>Evento vinculado (sem acesso pelo seu perfil)</option>}
               {events?.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.name}
@@ -221,11 +255,50 @@ function ContentFormBody({ onOpenChange, item, onSaved }: Props) {
             <Plus /> Adicionar link
           </Button>
         </div>
-        {serverError && (
-          <p role="alert" className="rounded-lg border border-danger/35 bg-danger/10 px-3.5 py-2.5 text-[13px] text-danger">
-            {serverError}
-          </p>
-        )}
+
+        <div className="space-y-3">
+          <div>
+            <p className="text-[13px] font-medium">Quem pode ver</p>
+            <p className="mt-0.5 text-[12px] text-fg-subtle">Use para compartilhar o material — por exemplo, uma arte aprovada com o departamento de Eventos.</p>
+          </div>
+          <Controller
+            control={control}
+            name="access"
+            render={({ field }) => (
+              <>
+                <AudiencePicker
+                  name="content-access"
+                  value={field.value}
+                  onChange={field.onChange}
+                  scopes={CONTENT_SCOPES}
+                  labels={CONTENT_SCOPE_LABELS}
+                  hints={{ department: "Integrantes do departamento escolhido abaixo (ex.: Eventos)." }}
+                  departmentId={field.value.departmentId ?? access.role?.departmentId}
+                  error={audienceError(formState.errors.access)}
+                />
+                {field.value.scope === "department" && (
+                  <Field label="Qual departamento?" required>
+                    <Select value={field.value.departmentId ?? ""} onChange={(e) => field.onChange({ ...field.value, departmentId: e.target.value || undefined })}>
+                      <option value="">Escolha…</option>
+                      {dir.departments
+                        .filter((d) => d.active || d.id === field.value.departmentId)
+                        .map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.name}
+                          </option>
+                        ))}
+                    </Select>
+                  </Field>
+                )}
+              </>
+            )}
+          />
+          <div className="rounded-lg border border-line bg-sunken px-4 py-3">
+            <AudienceSummary module="marketing" audience={accessValue} labels={CONTENT_SCOPE_LABELS} alwaysIncluded={[creatorId, responsibleId].filter((id): id is string => !!id)} />
+            <p className="mt-2 text-[12px] text-fg-subtle">Quem criou e o responsável sempre têm acesso.</p>
+          </div>
+        </div>
+        <FormAlert message={serverError} />
       </form>
     </DialogContent>
   );

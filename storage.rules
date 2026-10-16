@@ -1,0 +1,108 @@
+rules_version = '2';
+
+/*
+ * CENTRAL YAWARA — REGRAS DE SEGURANÇA DO CLOUD STORAGE
+ * ---------------------------------------------------------------------------
+ *  - Fechado por padrão.
+ *  - O navegador só envia arquivos para a área temporária `staging/`, e
+ *    somente com um tíquete válido emitido pelo servidor (uploads/{id}), que
+ *    fixa o dono, o nome, o tamanho exato, o tipo declarado e a validade.
+ *  - O servidor confere o conteúdo real do arquivo (assinatura binária),
+ *    move-o para o caminho definitivo e só então grava os metadados.
+ *  - Arquivos definitivos nunca são gravados pelo navegador e só podem ser
+ *    lidos por quem pode ver o registro correspondente no Firestore. Não são
+ *    gerados links públicos: o download usa o SDK autenticado.
+ *
+ * As consultas ao Firestore feitas aqui (firestore.get) são limitadas a duas
+ * por requisição: o retrato de acesso do usuário e o registro que controla o
+ * arquivo. Por isso, módulos desativados em `settings/system` NÃO são
+ * conferidos aqui (seria uma terceira consulta): o bloqueio vale para o
+ * Firestore e para o servidor (ver docs/backend/seguranca.md).
+ */
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function accessData() {
+      return firestore.get(/databases/(default)/documents/userAccess/$(request.auth.uid)).data;
+    }
+
+    function active() {
+      return request.auth != null && accessData().status == 'active';
+    }
+
+    function can(permission) {
+      return active() && permission in accessData().permissions;
+    }
+
+    function readersOf(path) {
+      return firestore.get(path).data.readers;
+    }
+
+    /** Comprador visível (público próprio) dentro de uma campanha visível (cópia `viewReaders`). */
+    function buyerAndCampaignVisible(campaignId, saleId) {
+      let buyer = firestore.get(/databases/(default)/documents/campaigns/$(campaignId)/buyers/$(saleId)).data;
+      return buyer.readers.hasAny(accessData().tokens)
+        && buyer.get('viewReaders', []).hasAny(accessData().tokens);
+    }
+
+    /* ----------------------- envio (área temporária) ----------------------- */
+
+    function ticketAllows(uploadId, uid, fileName) {
+      let ticket = firestore.get(/databases/(default)/documents/uploads/$(uploadId)).data;
+      return ticket.uid == uid
+        && ticket.status == 'pending'
+        && ticket.fileName == fileName
+        && request.time < ticket.expiresAt
+        && request.resource.size == ticket.size
+        && request.resource.size <= ticket.maxBytes
+        && request.resource.contentType == ticket.contentType;
+    }
+
+    match /staging/{uid}/{uploadId}/{fileName} {
+      allow create: if request.auth != null
+        && request.auth.uid == uid
+        && ticketAllows(uploadId, uid, fileName);
+      // Nada pode ser lido, sobrescrito ou apagado pelo navegador; o servidor
+      // finaliza o envio e uma rotina diária remove envios abandonados.
+      allow read, update, delete: if false;
+    }
+
+    /* --------------------------- arquivos definitivos ------------------------ */
+
+    // Documentos institucionais (todas as versões).
+    match /documents/{docId}/{allPaths=**} {
+      allow read: if can('documents.view')
+        && (can('documents.admin')
+            || readersOf(/databases/(default)/documents/documents/$(docId)).hasAny(accessData().tokens));
+      allow write: if false;
+    }
+
+    // Comprovantes de pagamento de vendas: mesmo público dos dados do comprador
+    // E de quem vê a campanha. O documento do comprador guarda as duas listas
+    // (`readers` e a cópia `viewReaders` do público da campanha, regravada pelo
+    // servidor sempre que esse público muda), então basta uma consulta.
+    match /campaigns/{campaignId}/receipts/{saleId}/{allPaths=**} {
+      allow read: if can('campaigns.view')
+        && (can('campaigns.admin') || buyerAndCampaignVisible(campaignId, saleId));
+      allow write: if false;
+    }
+
+    // Comprovantes de lançamentos financeiros.
+    match /finance/{entryId}/{allPaths=**} {
+      allow read: if can('finance.view');
+      allow write: if false;
+    }
+
+    // Arquivos de conteúdos de Marketing.
+    match /marketing/{contentId}/{allPaths=**} {
+      allow read: if can('marketing.view')
+        && (can('marketing.admin')
+            || readersOf(/databases/(default)/documents/contents/$(contentId)).hasAny(accessData().tokens));
+      allow write: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

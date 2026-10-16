@@ -27,6 +27,8 @@ interface CampaignBase {
   status: CampaignStatus;
   departmentId: ID;
   access: CampaignAccess;
+  /** Evento relacionado (opcional). */
+  eventId?: ID;
   notes?: string;
   startDate?: DateOnly;
   endDate?: DateOnly;
@@ -77,7 +79,10 @@ export interface Sale {
   notes?: string;
   cancelledAt?: ISODateTime;
   cancelledById?: ID;
+  /** Texto livre (pode citar o comprador): fica com os dados restritos, só para quem vê o comprador. */
   cancelReason?: string;
+  /** Último motivo informado ao desfazer a confirmação de pagamento (dados restritos, como `cancelReason`). */
+  revertReason?: string;
   /** Quando preenchido, os números da venda cancelada voltaram a ficar disponíveis. */
   releasedAt?: ISODateTime;
   releasedById?: ID;

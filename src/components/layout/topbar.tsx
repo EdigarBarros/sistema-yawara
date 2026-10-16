@@ -13,6 +13,7 @@ import { notifyError, notifySuccess } from "@/lib/notify";
 import { Avatar, Kbd } from "@/components/ui/misc";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/menu";
 import { confirmAction } from "@/components/shared/confirm";
+import { isDemoMode } from "@/lib/mode";
 import { ROUTE_LABELS } from "./nav";
 import { ProfileSwitcher } from "./profile-switcher";
 import { NotificationsButton } from "./notifications";
@@ -74,7 +75,12 @@ function AccountMenu() {
           <div className="min-w-0">
             <p className="truncate text-[13.5px] font-semibold">{access.user.name}</p>
             <p className="truncate text-[12px] text-fg-muted">{access.role?.name}</p>
-            <p className="truncate text-[11.5px] text-fg-subtle">{access.user.email} · fictício</p>
+            {access.user.email && (
+              <p className="truncate text-[11.5px] text-fg-subtle">
+                {access.user.email}
+                {isDemoMode && " · fictício"}
+              </p>
+            )}
           </div>
         </div>
         <DropdownMenuSeparator />
@@ -87,39 +93,45 @@ function AccountMenu() {
         <DropdownMenuItem icon={<Settings2 />} onSelect={() => router.push("/configuracoes?secao=preferencias")}>
           Preferências da interface
         </DropdownMenuItem>
-        <DropdownMenuItem
-          icon={<RotateCcw />}
-          hint="Desfaz as alterações feitas neste navegador"
-          onSelect={async () => {
-            const ok = await confirmAction({
-              title: "Restaurar dados de demonstração?",
-              description: "Todas as rifas, vendas, eventos e demais registros criados ou alterados neste navegador serão substituídos pelos dados fictícios originais.",
-              confirmLabel: "Restaurar dados",
-              tone: "danger",
-            });
-            if (!ok) return;
-            try {
-              await services.settings.resetDemoData();
-              await qc.invalidateQueries();
-              notifySuccess("Dados de demonstração restaurados");
-              router.push("/inicio");
-            } catch (e) {
-              notifyError(e);
-            }
-          }}
-        >
-          Restaurar dados de demonstração
-        </DropdownMenuItem>
+        {isDemoMode && (
+          <DropdownMenuItem
+            icon={<RotateCcw />}
+            hint="Desfaz as alterações feitas neste navegador"
+            onSelect={async () => {
+              const ok = await confirmAction({
+                title: "Restaurar dados de demonstração?",
+                description: "Todas as rifas, vendas, eventos e demais registros criados ou alterados neste navegador serão substituídos pelos dados fictícios originais.",
+                confirmLabel: "Restaurar dados",
+                tone: "danger",
+              });
+              if (!ok) return;
+              try {
+                await services.settings.resetDemoData();
+                await qc.invalidateQueries();
+                notifySuccess("Dados de demonstração restaurados");
+                router.push("/inicio");
+              } catch (e) {
+                notifyError(e);
+              }
+            }}
+          >
+            Restaurar dados de demonstração
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           icon={<LogOut />}
-          onSelect={() => {
-            signOut();
-            qc.clear();
-            router.replace("/login");
+          onSelect={async () => {
+            try {
+              await services.auth.signOut();
+            } finally {
+              signOut();
+              qc.clear();
+              router.replace("/login");
+            }
           }}
         >
-          Sair da demonstração
+          {isDemoMode ? "Sair da demonstração" : "Sair"}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -155,7 +167,7 @@ export function Topbar() {
           <Kbd>Ctrl K</Kbd>
         </span>
       </button>
-      <ProfileSwitcher />
+      {isDemoMode && <ProfileSwitcher />}
       <NotificationsButton />
       <AccountMenu />
     </header>

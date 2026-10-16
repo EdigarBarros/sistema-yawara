@@ -98,7 +98,7 @@ export const MODULES: ModuleDefinition[] = [
       view: "Ver projetos",
       create: "Criar projetos",
       edit: "Editar projetos, presença e programação",
-      approve: "Emitir certificados (demonstração)",
+      approve: "Emitir certificados",
       archive: "Concluir ou cancelar projetos",
       export: "Exportar listas e certificados",
     },
@@ -110,9 +110,9 @@ export const MODULES: ModuleDefinition[] = [
     core: true,
     actions: {
       view: "Ver integrantes e cargos",
-      create: "Adicionar integrantes, cargos e departamentos",
-      edit: "Editar integrantes, cargos e departamentos",
-      admin: "Alterar permissões dos cargos",
+      create: "Convidar integrantes e criar cargos e departamentos",
+      edit: "Editar integrantes, cargos e departamentos; desativar contas",
+      admin: "Alterar permissões dos cargos e atribuir cargos com permissões administrativas",
     },
   },
   {
@@ -124,6 +124,16 @@ export const MODULES: ModuleDefinition[] = [
       view: "Ver configurações",
       edit: "Editar configurações institucionais",
       admin: "Ativar e desativar módulos",
+    },
+  },
+  {
+    key: "audit",
+    label: "Auditoria",
+    description: "Registro oficial das operações importantes, gravado pelo servidor.",
+    core: true,
+    actions: {
+      view: "Consultar a auditoria",
+      export: "Exportar registros de auditoria",
     },
   },
 ];

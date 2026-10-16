@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Bell, CalendarClock, CheckCheck, ClipboardCheck, FileText, Lock, Sparkles, Ticket } from "lucide-react";
 import type { AppNotification } from "@/types";
 import { services } from "@/services";
@@ -10,9 +11,11 @@ import { useAction } from "@/hooks/use-action";
 import { useSession } from "@/stores/session";
 import { formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { isDemoMode } from "@/lib/mode";
+import { errorMessage } from "@/lib/notify";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/menu";
 import { Button } from "@/components/ui/button";
-import { EmptyState, InlineLoader } from "@/components/shared/states";
+import { EmptyState, ErrorState, InlineLoader } from "@/components/shared/states";
 
 const ICONS: Record<AppNotification["kind"], React.ReactNode> = {
   document_shared: <FileText />,
@@ -24,12 +27,23 @@ const ICONS: Record<AppNotification["kind"], React.ReactNode> = {
   report_shared: <FileText />,
 };
 
-/** Notificações internas demonstrativas — nenhum e-mail ou mensagem externa é enviado. */
+/** Notificações internas — nenhum e-mail ou mensagem externa é enviado. */
 export function NotificationsButton() {
   const router = useRouter();
   const userId = useSession((s) => s.userId) ?? "";
-  const { data, isLoading } = useNotifications();
+  const queryClient = useQueryClient();
+  const { data, isLoading, isError, error, refetch } = useNotifications();
   const [open, setOpen] = useState(false);
+
+  // Tempo real (quando a fonte de dados oferece): novas notificações atualizam a lista sem recarregar a página.
+  useEffect(() => {
+    const service = services.notifications;
+    if (!userId || !service.subscribe) return;
+    return service.subscribe(() => {
+      void queryClient.invalidateQueries({ queryKey: [userId, "notifications"] });
+    });
+  }, [userId, queryClient]);
+
   const markRead = useAction((id: string) => services.notifications.markRead(id));
   const markAll = useAction(() => services.notifications.markAllRead(), { success: "Notificações marcadas como lidas" });
   const unread = (data ?? []).filter((n) => !n.readBy.includes(userId)).length;
@@ -51,7 +65,7 @@ export function NotificationsButton() {
         <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
           <div>
             <p className="text-[14px] font-semibold">Notificações</p>
-            <p className="text-[11.5px] text-fg-subtle">Avisos internos da demonstração</p>
+            <p className="text-[11.5px] text-fg-subtle">{isDemoMode ? "Avisos internos da demonstração" : "Avisos internos da Central"}</p>
           </div>
           {unread > 0 && (
             <Button size="sm" variant="ghost" loading={markAll.pending} onClick={() => markAll.runSafe()}>
@@ -61,7 +75,8 @@ export function NotificationsButton() {
         </div>
         <div className="max-h-[60vh] overflow-y-auto">
           {isLoading && <InlineLoader />}
-          {!isLoading && (data?.length ?? 0) === 0 && <EmptyState compact title="Nada por aqui" description="Quando algo for compartilhado com você, aparecerá nesta lista." />}
+          {!isLoading && isError && <ErrorState className="py-8" message={errorMessage(error)} onRetry={() => refetch()} />}
+          {!isLoading && !isError && (data?.length ?? 0) === 0 && <EmptyState compact title="Nada por aqui" description="Quando algo for compartilhado com você, aparecerá nesta lista." />}
           <ul className="divide-y divide-line">
             {data?.map((n) => {
               const isUnread = !n.readBy.includes(userId);

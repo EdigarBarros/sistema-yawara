@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { ArrowRight, CalendarDays, ClipboardList, FileText, Megaphone, Ticket } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarDays, ClipboardList, FileText, GraduationCap, Megaphone, Ticket, Wallet } from "lucide-react";
 import type { AppNotification } from "@/types";
 import {
   useAllSales,
@@ -26,11 +26,13 @@ import { formatDate, formatDayMonth, formatMoneyCompact, formatRelative, formatT
 import { CONTENT_STATUS, CONTENT_TYPE_LABELS, EVENT_STATUS, MEETING_STATUS, PROJECT_STATUS, TASK_STATUS, entryStatusMeta } from "@/lib/labels";
 import { Panel, Stat } from "@/components/shared/page";
 import { DateChip, ListRow } from "@/components/shared/list-row";
-import { EmptyState } from "@/components/shared/states";
+import { EmptyState, ErrorState } from "@/components/shared/states";
 import { StatusBadge } from "@/components/shared/badges";
 import { Progress, Skeleton, Badge } from "@/components/ui/misc";
 import { ButtonLink } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { isDemoMode } from "@/lib/mode";
+import { errorMessage } from "@/lib/notify";
 
 function PanelSkeleton({ rows = 4 }: { rows?: number }) {
   return (
@@ -40,6 +42,30 @@ function PanelSkeleton({ rows = 4 }: { rows?: number }) {
       ))}
     </div>
   );
+}
+
+/** Falha ao carregar os dados de um painel: nunca aparece como "vazio". */
+function PanelError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  return <ErrorState className="py-8" message={errorMessage(error)} onRetry={onRetry} />;
+}
+
+/** Rodapé de indicador quando a consulta falhou (o valor fica "—"). */
+function StatError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  return (
+    <span role="alert" className="flex min-w-0 items-center gap-1.5 text-danger" title={errorMessage(error)}>
+      <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
+      <span className="truncate">Não foi possível carregar.</span>
+      <button type="button" onClick={onRetry} className="shrink-0 font-medium underline-offset-2 hover:underline">
+        Tentar de novo
+      </button>
+    </span>
+  );
+}
+
+/** Primeiro erro entre as consultas usadas por um widget, com a ação de repetir todas. */
+function firstError(...queries: { isError: boolean; error: unknown; refetch: () => unknown }[]) {
+  const failed = queries.find((q) => q.isError);
+  return failed ? { error: failed.error, retry: () => queries.filter((q) => q.isError).forEach((q) => void q.refetch()) } : null;
 }
 
 function SeeAll({ href, label = "Ver tudo" }: { href: string; label?: string }) {
@@ -57,8 +83,11 @@ export function StatsRow({ children }: { children: React.ReactNode }) {
 }
 
 export function CampaignStats() {
-  const { data: campaigns } = useCampaigns();
-  const { data: sales } = useAllSales();
+  const campaignsQuery = useCampaigns();
+  const salesQuery = useAllSales();
+  const { data: campaigns } = campaignsQuery;
+  const { data: sales } = salesQuery;
+  const failed = firstError(campaignsQuery, salesQuery);
   const totals = useMemo(() => {
     const active = (campaigns ?? []).filter((c) => c.status === "active");
     let received = 0;
@@ -72,21 +101,30 @@ export function CampaignStats() {
   }, [campaigns, sales]);
   return (
     <>
-      <Stat label="Campanhas ativas" value={campaigns ? totals.active : "—"} footer={<span>Rifas autorizadas para você</span>} />
-      <Stat label="Recebido em rifas ativas" value={sales ? formatMoneyCompact(totals.received) : "—"} footer={<span>{formatMoneyCompact(totals.receivable)} a receber</span>} />
+      <Stat
+        label="Campanhas ativas"
+        value={campaigns && !campaignsQuery.isError ? totals.active : "—"}
+        footer={campaignsQuery.isError ? <StatError error={campaignsQuery.error} onRetry={() => void campaignsQuery.refetch()} /> : <span>Rifas autorizadas para você</span>}
+      />
+      <Stat
+        label="Recebido em rifas ativas"
+        value={sales && !failed ? formatMoneyCompact(totals.received) : "—"}
+        footer={failed ? <StatError error={failed.error} onRetry={failed.retry} /> : <span>{sales ? `${formatMoneyCompact(totals.receivable)} a receber` : "Carregando…"}</span>}
+      />
     </>
   );
 }
 
 export function EventStats() {
-  const { data } = useEvents();
+  const { data, isError, error, refetch } = useEvents();
   const today = todayDateOnly();
   const upcoming = (data ?? []).filter((e) => e.date >= today && e.status !== "cancelled" && e.status !== "done");
-  return <Stat label="Próximos eventos" value={data ? upcoming.length : "—"} footer={<span>{upcoming[0] ? `Próximo: ${formatDayMonth(upcoming.sort((a, b) => a.date.localeCompare(b.date))[0].date)}` : "Nenhum agendado"}</span>} />;
+  if (isError) return <Stat label="Próximos eventos" value="—" footer={<StatError error={error} onRetry={() => void refetch()} />} />;
+  return <Stat label="Próximos eventos" value={data ? upcoming.length : "—"} footer={<span>{!data ? "Carregando…" : upcoming[0] ? `Próximo: ${formatDayMonth(upcoming.sort((a, b) => a.date.localeCompare(b.date))[0].date)}` : "Nenhum agendado"}</span>} />;
 }
 
 export function MeetingStats({ kinds = ["pending", "draft"] }: { kinds?: ("pending" | "draft" | "upcoming")[] }) {
-  const { data } = useMeetings();
+  const { data, isError, error, refetch } = useMeetings();
   const today = todayDateOnly();
   const map = {
     pending: { label: "Atas aguardando aprovação", value: (data ?? []).filter((m) => m.status === "pending_approval").length, footer: "Precisam de aprovação" },
@@ -96,72 +134,93 @@ export function MeetingStats({ kinds = ["pending", "draft"] }: { kinds?: ("pendi
   return (
     <>
       {kinds.map((k) => (
-        <Stat key={k} label={map[k].label} value={data ? map[k].value : "—"} footer={<span>{map[k].footer}</span>} />
+        <Stat
+          key={k}
+          label={map[k].label}
+          value={data && !isError ? map[k].value : "—"}
+          footer={isError ? <StatError error={error} onRetry={() => void refetch()} /> : <span>{map[k].footer}</span>}
+        />
       ))}
     </>
   );
 }
 
+/** No ambiente real, o saldo é o realizado (receitas recebidas − despesas pagas). */
+const BALANCE_LABEL = isDemoMode ? "Saldo demonstrativo" : "Saldo realizado";
+
 export function FinanceStats({ compact }: { compact?: boolean }) {
-  const { data } = useFinanceEntries();
+  const { data, isError, error, refetch } = useFinanceEntries();
   const s = summarizeFinance(data ?? []);
+  const ok = !!data && !isError;
+  const err = isError ? <StatError error={error} onRetry={() => void refetch()} /> : null;
   if (compact) {
-    return <Stat label="Saldo demonstrativo" value={data ? formatMoneyCompact(s.balance) : "—"} footer={<span>Receitas − despesas realizadas</span>} />;
+    return <Stat label={BALANCE_LABEL} value={ok ? formatMoneyCompact(s.balance) : "—"} footer={err ?? <span>Receitas − despesas realizadas</span>} />;
   }
   return (
     <>
-      <Stat label="Receitas recebidas" value={data ? formatMoneyCompact(s.income) : "—"} footer={<span className="flex items-center gap-1.5"><span className="size-1.5 rounded-full bg-ok" />Valores confirmados</span>} />
-      <Stat label="Despesas pagas" value={data ? formatMoneyCompact(s.expense) : "—"} footer={<span className="flex items-center gap-1.5"><span className="size-1.5 rounded-full bg-danger" />Valores confirmados</span>} />
-      <Stat label="Saldo demonstrativo" value={data ? formatMoneyCompact(s.balance) : "—"} footer={<span>Receitas − despesas</span>} />
+      <Stat label="Receitas recebidas" value={ok ? formatMoneyCompact(s.income) : "—"} footer={err ?? <span className="flex items-center gap-1.5"><span className="size-1.5 rounded-full bg-ok" />Valores confirmados</span>} />
+      <Stat label="Despesas pagas" value={ok ? formatMoneyCompact(s.expense) : "—"} footer={err ?? <span className="flex items-center gap-1.5"><span className="size-1.5 rounded-full bg-danger" />Valores confirmados</span>} />
+      <Stat label={BALANCE_LABEL} value={ok ? formatMoneyCompact(s.balance) : "—"} footer={err ?? <span>Receitas − despesas</span>} />
       <Stat
         label="Pendentes"
-        value={data ? formatMoneyCompact(s.receivable) : "—"}
+        value={ok ? formatMoneyCompact(s.receivable) : "—"}
         suffix="a receber"
-        footer={<span>{formatMoneyCompact(s.payable)} a pagar</span>}
+        footer={err ?? <span>{formatMoneyCompact(s.payable)} a pagar</span>}
       />
     </>
   );
 }
 
 export function DocumentStats() {
-  const { data } = useDocuments();
-  return <Stat label="Documentos vigentes" value={data ? data.filter((d) => d.status === "current").length : "—"} footer={<span>Na biblioteca institucional</span>} />;
+  const { data, isError, error, refetch } = useDocuments();
+  return (
+    <Stat
+      label="Documentos vigentes"
+      value={data && !isError ? data.filter((d) => d.status === "current").length : "—"}
+      footer={isError ? <StatError error={error} onRetry={() => void refetch()} /> : <span>Na biblioteca institucional</span>}
+    />
+  );
 }
 
 export function MarketingStats() {
-  const { data } = useContents();
-  const count = (s: keyof typeof CONTENT_STATUS) => (data ?? []).filter((c) => c.status === s).length;
+  const { data, isError, error, refetch } = useContents();
+  const count = (s: keyof typeof CONTENT_STATUS) => (data && !isError ? (data ?? []).filter((c) => c.status === s).length : "—");
+  const footer = (text: string) => (isError ? <StatError error={error} onRetry={() => void refetch()} /> : <span>{text}</span>);
   return (
     <>
-      <Stat label="Briefings" value={data ? count("briefing") : "—"} footer={<span>Aguardando produção</span>} />
-      <Stat label="Em produção" value={data ? count("production") : "—"} footer={<span>Sendo produzidos</span>} />
-      <Stat label="Em revisão" value={data ? count("review") : "—"} footer={<span>Precisam de aprovação</span>} />
-      <Stat label="Aprovados" value={data ? count("approved") : "—"} footer={<span>Prontos para publicar</span>} />
+      <Stat label="Briefings" value={count("briefing")} footer={footer("Aguardando produção")} />
+      <Stat label="Em produção" value={count("production")} footer={footer("Sendo produzidos")} />
+      <Stat label="Em revisão" value={count("review")} footer={footer("Precisam de aprovação")} />
+      <Stat label="Aprovados" value={count("approved")} footer={footer("Prontos para publicar")} />
     </>
   );
 }
 
 export function TaskStats() {
-  const { data } = useEvents();
+  const { data, isError, error, refetch } = useEvents();
   const access = useAccess();
   const tasks = (data ?? []).filter((e) => e.status !== "done" && e.status !== "cancelled").flatMap((e) => e.tasks);
   const dep = tasks.filter((t) => t.departmentId === access.role?.departmentId);
+  const ok = !!data && !isError;
+  const err = isError ? <StatError error={error} onRetry={() => void refetch()} /> : null;
   return (
     <>
-      <Stat label="Tarefas abertas do setor" value={data ? dep.filter((t) => t.status !== "done").length : "—"} footer={<span>{access.department?.name}</span>} />
-      <Stat label="Tarefas bloqueadas" value={data ? tasks.filter((t) => t.status === "blocked").length : "—"} footer={<span>Em todos os eventos</span>} />
+      <Stat label="Tarefas abertas do setor" value={ok ? dep.filter((t) => t.status !== "done").length : "—"} footer={err ?? <span>{access.department?.name}</span>} />
+      <Stat label="Tarefas bloqueadas" value={ok ? tasks.filter((t) => t.status === "blocked").length : "—"} footer={err ?? <span>Em todos os eventos</span>} />
     </>
   );
 }
 
 export function ExtensionStats() {
-  const { data } = useProjects();
+  const { data, isError, error, refetch } = useProjects();
   const today = todayDateOnly();
+  const list = data && !isError ? data : null;
+  const footer = (text: string) => (isError ? <StatError error={error} onRetry={() => void refetch()} /> : <span>{text}</span>);
   return (
     <>
-      <Stat label="Projetos em andamento" value={data ? data.filter((p) => p.status === "open" || p.status === "planning").length : "—"} footer={<span>Planejamento ou inscrições</span>} />
-      <Stat label="Próximas atividades" value={data ? data.filter((p) => p.date >= today && p.status !== "cancelled").length : "—"} footer={<span>Agendadas</span>} />
-      <Stat label="Certificados pendentes" value={data ? data.filter((p) => p.status === "done" && p.certificateStatus !== "issued").length : "—"} footer={<span>Atividades realizadas</span>} />
+      <Stat label="Projetos em andamento" value={list ? list.filter((p) => p.status === "open" || p.status === "planning").length : "—"} footer={footer("Planejamento ou inscrições")} />
+      <Stat label="Próximas atividades" value={list ? list.filter((p) => p.date >= today && p.status !== "cancelled").length : "—"} footer={footer("Agendadas")} />
+      <Stat label="Certificados pendentes" value={list ? list.filter((p) => p.status === "done" && p.certificateStatus !== "issued").length : "—"} footer={footer("Atividades realizadas")} />
     </>
   );
 }
@@ -170,13 +229,18 @@ export function ExtensionStats() {
 
 export function ActiveCampaignsPanel({ sellOnly, title = "Campanhas ativas" }: { sellOnly?: boolean; title?: string }) {
   const access = useAccess();
-  const { data: campaigns, isLoading } = useCampaigns();
-  const { data: sales } = useAllSales();
+  const campaignsQuery = useCampaigns();
+  const salesQuery = useAllSales();
+  const { data: campaigns, isLoading } = campaignsQuery;
+  const { data: sales } = salesQuery;
+  const failed = firstError(campaignsQuery, salesQuery);
   const list = (campaigns ?? []).filter((c) => c.status === "active" && (!sellOnly || (access.ctx && canSellIn(access.ctx, c)))).slice(0, 5);
   return (
     <Panel title={title} description={sellOnly ? "Onde você pode registrar vendas" : undefined} actions={<SeeAll href="/campanhas" />} bodyClassName="py-1.5">
       {isLoading ? (
         <PanelSkeleton />
+      ) : failed ? (
+        <PanelError error={failed.error} onRetry={failed.retry} />
       ) : list.length === 0 ? (
         <EmptyState compact icon={<Ticket />} title="Nenhuma campanha ativa" description="Quando uma rifa for disponibilizada para você, ela aparecerá aqui." />
       ) : (
@@ -208,7 +272,7 @@ export function ActiveCampaignsPanel({ sellOnly, title = "Campanhas ativas" }: {
 }
 
 export function UpcomingEventsPanel({ limit = 5 }: { limit?: number }) {
-  const { data, isLoading } = useEvents();
+  const { data, isLoading, isError, error, refetch } = useEvents();
   const today = todayDateOnly();
   const list = (data ?? [])
     .filter((e) => e.date >= today && e.status !== "cancelled")
@@ -218,6 +282,8 @@ export function UpcomingEventsPanel({ limit = 5 }: { limit?: number }) {
     <Panel title="Próximos eventos" actions={<SeeAll href="/eventos" />} bodyClassName="py-1.5">
       {isLoading ? (
         <PanelSkeleton />
+      ) : isError ? (
+        <PanelError error={error} onRetry={() => void refetch()} />
       ) : list.length === 0 ? (
         <EmptyState compact icon={<CalendarDays />} title="Sem eventos agendados" />
       ) : (
@@ -244,7 +310,7 @@ export function UpcomingEventsPanel({ limit = 5 }: { limit?: number }) {
 
 export function RecentDocumentsPanel({ sharedOnly }: { sharedOnly?: boolean }) {
   const access = useAccess();
-  const { data, isLoading } = useDocuments();
+  const { data, isLoading, isError, error, refetch } = useDocuments();
   const { data: cats } = useDocumentCategories();
   const list = (data ?? [])
     .filter((d) => d.status !== "archived" && (!sharedOnly || access.ownership(d) === "shared"))
@@ -254,6 +320,8 @@ export function RecentDocumentsPanel({ sharedOnly }: { sharedOnly?: boolean }) {
     <Panel title={sharedOnly ? "Compartilhados com você" : "Documentos recentes"} actions={<SeeAll href="/documentos" />} bodyClassName="py-1.5">
       {isLoading ? (
         <PanelSkeleton />
+      ) : isError ? (
+        <PanelError error={error} onRetry={() => void refetch()} />
       ) : list.length === 0 ? (
         <EmptyState compact icon={<FileText />} title="Nenhum documento recente" />
       ) : (
@@ -279,7 +347,7 @@ export function RecentDocumentsPanel({ sharedOnly }: { sharedOnly?: boolean }) {
 }
 
 export function MeetingsPanel({ mode }: { mode: "upcoming" | "pending" }) {
-  const { data, isLoading } = useMeetings();
+  const { data, isLoading, isError, error, refetch } = useMeetings();
   const today = todayDateOnly();
   const list =
     mode === "upcoming"
@@ -293,6 +361,8 @@ export function MeetingsPanel({ mode }: { mode: "upcoming" | "pending" }) {
     >
       {isLoading ? (
         <PanelSkeleton />
+      ) : isError ? (
+        <PanelError error={error} onRetry={() => void refetch()} />
       ) : list.length === 0 ? (
         <EmptyState compact icon={<ClipboardList />} title={mode === "upcoming" ? "Nenhuma reunião agendada" : "Tudo em dia"} />
       ) : (
@@ -315,12 +385,21 @@ export function MeetingsPanel({ mode }: { mode: "upcoming" | "pending" }) {
 }
 
 export function RecentEntriesPanel() {
-  const { data, isLoading } = useFinanceEntries();
+  const { data, isLoading, isError, error, refetch } = useFinanceEntries();
   const list = (data ?? []).slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
   return (
-    <Panel title="Lançamentos recentes" description="Valores fictícios de demonstração" actions={<SeeAll href="/financeiro/lancamentos" />} bodyClassName="py-1.5">
+    <Panel
+      title="Lançamentos recentes"
+      description={isDemoMode ? "Valores fictícios de demonstração" : "Últimos registros de receitas e despesas"}
+      actions={<SeeAll href="/financeiro/lancamentos" />}
+      bodyClassName="py-1.5"
+    >
       {isLoading ? (
         <PanelSkeleton />
+      ) : isError ? (
+        <PanelError error={error} onRetry={() => void refetch()} />
+      ) : list.length === 0 ? (
+        <EmptyState compact icon={<Wallet />} title="Nenhum lançamento registrado" description="Receitas e despesas registradas aparecem aqui." />
       ) : (
         <ul className="divide-y divide-line">
           {list.map((e) => (
@@ -344,13 +423,20 @@ export function RecentEntriesPanel() {
 }
 
 export function CampaignCollectionPanel() {
-  const { data: campaigns, isLoading } = useCampaigns();
-  const { data: sales } = useAllSales();
+  const campaignsQuery = useCampaigns();
+  const salesQuery = useAllSales();
+  const { data: campaigns, isLoading } = campaignsQuery;
+  const { data: sales } = salesQuery;
+  const failed = firstError(campaignsQuery, salesQuery);
   const list = (campaigns ?? []).filter((c) => c.status === "active");
   return (
     <Panel title="Arrecadação das campanhas" description="Pagos e pendentes por rifa" actions={<SeeAll href="/campanhas" />} bodyClassName="py-1.5">
       {isLoading ? (
         <PanelSkeleton />
+      ) : failed ? (
+        <PanelError error={failed.error} onRetry={failed.retry} />
+      ) : list.length === 0 ? (
+        <EmptyState compact icon={<Ticket />} title="Nenhuma campanha ativa" description="A arrecadação das rifas ativas aparece aqui." />
       ) : (
         <ul className="divide-y divide-line">
           {list.map((c) => {
@@ -378,7 +464,7 @@ export function CampaignCollectionPanel() {
 }
 
 export function UpcomingContentPanel() {
-  const { data, isLoading } = useContents();
+  const { data, isLoading, isError, error, refetch } = useContents();
   const today = todayDateOnly();
   const list = (data ?? [])
     .filter((c) => c.publishDate && c.publishDate >= today && c.status !== "cancelled" && c.status !== "published")
@@ -388,6 +474,8 @@ export function UpcomingContentPanel() {
     <Panel title="Próximas publicações" actions={<SeeAll href="/marketing?visao=calendario" label="Calendário" />} bodyClassName="py-1.5">
       {isLoading ? (
         <PanelSkeleton />
+      ) : isError ? (
+        <PanelError error={error} onRetry={() => void refetch()} />
       ) : list.length === 0 ? (
         <EmptyState compact icon={<Megaphone />} title="Nada agendado" />
       ) : (
@@ -412,7 +500,7 @@ export function UpcomingContentPanel() {
 export function TasksPanel({ mine }: { mine?: boolean }) {
   const access = useAccess();
   const dir = useDirectory();
-  const { data, isLoading } = useEvents();
+  const { data, isLoading, isError, error, refetch } = useEvents();
   const rows = (data ?? [])
     .filter((e) => e.status !== "done" && e.status !== "cancelled")
     .flatMap((e) => e.tasks.map((t) => ({ ...t, event: e })))
@@ -429,6 +517,8 @@ export function TasksPanel({ mine }: { mine?: boolean }) {
     >
       {isLoading ? (
         <PanelSkeleton />
+      ) : isError ? (
+        <PanelError error={error} onRetry={() => void refetch()} />
       ) : rows.length === 0 ? (
         <EmptyState compact title="Nenhuma tarefa pendente" description="Tarefas atribuídas nos eventos aparecem aqui." />
       ) : (
@@ -450,15 +540,17 @@ export function TasksPanel({ mine }: { mine?: boolean }) {
 }
 
 export function ProjectsPanel() {
-  const { data, isLoading } = useProjects();
+  const { data, isLoading, isError, error, refetch } = useProjects();
   const today = todayDateOnly();
   const list = (data ?? []).filter((p) => p.date >= today && p.status !== "cancelled").sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5);
   return (
     <Panel title="Próximas atividades acadêmicas" actions={<SeeAll href="/extensao" />} bodyClassName="py-1.5">
       {isLoading ? (
         <PanelSkeleton />
+      ) : isError ? (
+        <PanelError error={error} onRetry={() => void refetch()} />
       ) : list.length === 0 ? (
-        <EmptyState compact title="Nenhuma atividade agendada" />
+        <EmptyState compact icon={<GraduationCap />} title="Nenhuma atividade agendada" />
       ) : (
         <ul className="divide-y divide-line">
           {list.map((p) => (
@@ -480,14 +572,16 @@ export function ProjectsPanel() {
 
 export function NoticesPanel() {
   const userId = useSession((s) => s.userId) ?? "";
-  const { data, isLoading } = useNotifications();
+  const { data, isLoading, isError, error, refetch } = useNotifications();
   const list: AppNotification[] = (data ?? []).slice(0, 4);
   return (
-    <Panel title="Avisos" description="Notificações internas da demonstração" bodyClassName="py-1.5">
+    <Panel title="Avisos" description={isDemoMode ? "Notificações internas da demonstração" : "Notificações internas da Central"} bodyClassName="py-1.5">
       {isLoading ? (
         <PanelSkeleton rows={3} />
+      ) : isError ? (
+        <PanelError error={error} onRetry={() => void refetch()} />
       ) : list.length === 0 ? (
-        <EmptyState compact title="Sem avisos" />
+        <EmptyState compact title="Sem avisos" description="Quando algo for compartilhado com você, aparecerá aqui." />
       ) : (
         <ul className="divide-y divide-line">
           {list.map((n) => (

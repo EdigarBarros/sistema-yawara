@@ -5,9 +5,8 @@ import { useAccess } from "@/hooks/use-access";
 import { useMeeting } from "@/hooks/use-data";
 import { useBreadcrumbTitle } from "@/stores/breadcrumb";
 import { canEditMeeting } from "@/lib/policies";
-import { errorMessage } from "@/lib/notify";
 import { PageHeader } from "@/components/shared/page";
-import { ErrorState, PageSkeleton, RestrictedState } from "@/components/shared/states";
+import { RecordErrorState, PageSkeleton, RestrictedState } from "@/components/shared/states";
 import { MeetingForm } from "@/features/meetings/meeting-form";
 
 export default function EditMeetingPage() {
@@ -16,7 +15,7 @@ export default function EditMeetingPage() {
   const { data: meeting, isLoading, isError, error } = useMeeting(id);
   useBreadcrumbTitle(`/secretaria/${id}`, meeting?.title);
   if (isLoading) return <PageSkeleton />;
-  if (isError || !meeting) return <ErrorState message={errorMessage(error, "Reunião não encontrada.")} />;
+  if (isError || !meeting) return <RecordErrorState error={error} notFound="Reunião não encontrada" backHref="/secretaria" />;
   const allowed = !!access.ctx && canEditMeeting(access.ctx, meeting);
   return (
     <>

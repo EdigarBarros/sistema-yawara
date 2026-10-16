@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BadgeCheck, Ban, Download, Eye, Lock, Pencil, RotateCcw, ShoppingCart, Undo2, Unlock } from "lucide-react";
+import { BadgeCheck, Ban, Lock, Pencil, RotateCcw, ShoppingCart, Undo2, Unlock } from "lucide-react";
 import type { Campaign, NumberSlot, Sale } from "@/types";
 import { services } from "@/services";
 import { useAccess } from "@/hooks/use-access";
@@ -12,12 +12,14 @@ import { NUMBER_STATUS, PAYMENT_METHOD_LABELS, SALE_STATUS } from "@/lib/labels"
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { formatNumberRanges, padNumber } from "@/lib/raffle";
 import { cn } from "@/lib/utils";
+import { isDemoMode } from "@/lib/mode";
 import { Sheet, SheetContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/misc";
 import { DetailList, SectionTitle } from "@/components/shared/page";
 import { HistoryTimeline } from "@/components/shared/history";
 import { FileRow } from "@/components/shared/pickers";
+import { FileActions } from "@/components/shared/file-actions";
 import { askReason, confirmAction } from "@/components/shared/confirm";
 import { ConfirmPaymentDialog, EditSaleDialog } from "./sale-dialogs";
 
@@ -31,26 +33,9 @@ function Restricted() {
 
 function ReceiptView({ sale }: { sale: Sale }) {
   if (!sale.receipt) return <span className="text-fg-subtle">Não anexado</span>;
-  const url = services.files.getObjectUrl(sale.receipt.blobId);
-  return (
-    <FileRow
-      name={sale.receipt.name}
-      size={sale.receipt.size}
-      meta={url ? "neste navegador" : "exemplo sem arquivo"}
-      actions={
-        url ? (
-          <>
-            <a href={url} target="_blank" rel="noreferrer" className="grid size-8 place-items-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg" aria-label="Visualizar comprovante">
-              <Eye className="size-4" />
-            </a>
-            <a href={url} download={sale.receipt.name} className="grid size-8 place-items-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg" aria-label="Baixar comprovante">
-              <Download className="size-4" />
-            </a>
-          </>
-        ) : undefined
-      }
-    />
-  );
+  const available = services.files.isAvailable(sale.receipt);
+  const meta = isDemoMode ? (available ? "neste navegador" : "exemplo sem arquivo") : available ? "download autenticado" : "arquivo indisponível";
+  return <FileRow name={sale.receipt.name} size={sale.receipt.size} meta={meta} actions={<FileActions file={sale.receipt} label="comprovante" />} />;
 }
 
 interface NumberSheetProps {
@@ -255,6 +240,8 @@ export function NumberSheet({ campaign, slot, onOpenChange, onSell }: NumberShee
                         { label: "Forma de pagamento", value: sale.paymentMethod ? PAYMENT_METHOD_LABELS[sale.paymentMethod] : "Não informada" },
                         { label: "Confirmado em", value: sale.paidAt ? formatDateTime(sale.paidAt) : "Aguardando confirmação" },
                         { label: "Confirmado por", value: sale.confirmedById ? dir.memberName(sale.confirmedById) : "—", hidden: !sale.confirmedById },
+                        // Motivo em texto livre: só chega para quem vê os dados do comprador.
+                        { label: "Motivo da última confirmação desfeita", value: sale.revertReason, hidden: !sale.revertReason },
                       ]}
                     />
                     <div className="mt-2 border-t border-line pt-1">
@@ -268,7 +255,8 @@ export function NumberSheet({ campaign, slot, onOpenChange, onSell }: NumberShee
                     <SectionTitle>Cancelamento</SectionTitle>
                     <DetailList
                       items={[
-                        { label: "Motivo", value: sale.cancelReason ?? "—" },
+                        // Motivo em texto livre (pode citar o comprador): restrito a quem vê os dados do comprador.
+                        { label: "Motivo", value: sale.cancelReason ?? (buyerAllowed ? "—" : <Restricted />) },
                         { label: "Cancelada por", value: dir.memberName(sale.cancelledById) },
                         { label: "Em", value: formatDateTime(sale.cancelledAt) },
                       ]}

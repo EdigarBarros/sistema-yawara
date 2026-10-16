@@ -4,6 +4,31 @@
 import { z } from "zod";
 import { parseMoney } from "./format";
 
+/*
+ * As mensagens padrão do Zod são em inglês e técnicas ("Too big: expected
+ * string to have <=800 characters"). Regras sem mensagem própria recebem um
+ * texto em português. Vale para todo o aplicativo a partir do momento em que
+ * este arquivo é carregado — todo formulário com esquema Zod o importa (as
+ * telas de login e de convite têm mensagens próprias em todas as regras).
+ */
+z.config({
+  customError: (issue) => {
+    if (issue.code === "too_big" || issue.code === "too_small") {
+      const big = issue.code === "too_big";
+      const limit = Number(issue.code === "too_big" ? issue.maximum : issue.minimum);
+      if (issue.origin === "string") {
+        if (!big && limit <= 1) return "Preencha este campo.";
+        return big ? `Use no máximo ${limit} caracteres.` : `Use pelo menos ${limit} caracteres.`;
+      }
+      if (issue.origin === "array" || issue.origin === "set") {
+        const items = `${limit} ${limit === 1 ? "item" : "itens"}`;
+        return big ? `Escolha no máximo ${items}.` : `Escolha pelo menos ${items}.`;
+      }
+    }
+    return "Valor inválido. Revise este campo.";
+  },
+});
+
 export const requiredText = (label: string, min = 2) =>
   z
     .string()

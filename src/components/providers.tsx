@@ -4,6 +4,8 @@ import { MutationCache, QueryClient, QueryClientProvider } from "@tanstack/react
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Toaster } from "sonner";
 import { ConfirmHost } from "@/components/shared/confirm";
+import { FirebaseSessionBridge } from "@/components/auth/firebase-session";
+import { isFirebaseMode } from "@/lib/mode";
 import { useUI } from "@/stores/ui";
 
 const LIGHT_QUERY = "(prefers-color-scheme: light)";
@@ -37,6 +39,7 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={client}>
+      {isFirebaseMode && <FirebaseSessionBridge />}
       {children}
       <ConfirmHost />
       <Toaster

@@ -6,6 +6,8 @@ import { FlaskConical, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useAccess } from "@/hooks/use-access";
 import { useUI } from "@/stores/ui";
 import { cn } from "@/lib/utils";
+import { isFirebaseMode } from "@/lib/mode";
+import { USE_EMULATORS } from "@/services/firebase/app";
 import { NAV } from "./nav";
 import { BrandLockup } from "./brand";
 
@@ -61,6 +63,19 @@ export function NavList({ collapsed, onNavigate }: { collapsed?: boolean; onNavi
 }
 
 export function DemoFootnote({ collapsed }: { collapsed?: boolean }) {
+  // Ambiente real: sem aviso. Desenvolvimento com emuladores: aviso discreto.
+  if (isFirebaseMode) {
+    if (!USE_EMULATORS) return null;
+    return collapsed ? (
+      <div className="flex justify-center" title="Ambiente de desenvolvimento: Firebase Emulator Suite (dados locais de teste).">
+        <FlaskConical className="size-4 text-info" aria-label="Ambiente de desenvolvimento" />
+      </div>
+    ) : (
+      <p className="text-[12px] leading-relaxed text-fg-subtle">
+        <span className="font-semibold text-fg-muted">Ambiente de desenvolvimento.</span> Firebase Emulator Suite — dados locais de teste.
+      </p>
+    );
+  }
   if (collapsed) {
     return (
       <div className="flex justify-center" title="Ambiente de demonstração: dados fictícios, salvos apenas neste navegador.">

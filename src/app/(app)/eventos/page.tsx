@@ -10,6 +10,7 @@ import { EVENT_STATUS, EVENT_TYPE_LABELS } from "@/lib/labels";
 import { formatTime, todayDateOnly } from "@/lib/format";
 import { matchesQuery } from "@/lib/utils";
 import { errorMessage } from "@/lib/notify";
+import { isDemoMode } from "@/lib/mode";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/menu";
 import { PageHeader } from "@/components/shared/page";
@@ -55,7 +56,18 @@ export default function EventsPage() {
     .sort((a, b) => (filter === "past" ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)));
   const count = (f: Filter) => (data ?? []).filter(tests[f]).length;
 
-  if (!enabled) return <RestrictedState />;
+  if (!enabled)
+    return (
+      <RestrictedState
+        description={
+          access.moduleEnabled("events")
+            ? isDemoMode
+              ? undefined
+              : "Seu perfil não tem acesso aos eventos. Procure a diretoria se precisar."
+            : "O módulo de eventos está desativado nas configurações."
+        }
+      />
+    );
 
   const columns: Column<AtleticaEvent>[] = [
     {

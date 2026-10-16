@@ -5,6 +5,7 @@ import {
   GraduationCap,
   House,
   Megaphone,
+  ScrollText,
   Settings,
   Ticket,
   Users,
@@ -51,6 +52,7 @@ export const NAV: NavGroup[] = [
     items: [
       { label: "Diretoria e organização", href: "/diretoria", icon: Users, module: "organization" },
       { label: "Configurações", href: "/configuracoes", icon: Settings, module: "settings" },
+      { label: "Auditoria", href: "/auditoria", icon: ScrollText, module: "audit" },
     ],
   },
 ];
@@ -74,4 +76,5 @@ export const ROUTE_LABELS: Record<string, string> = {
   diretoria: "Diretoria e organização",
   cargos: "Cargos",
   configuracoes: "Configurações",
+  auditoria: "Auditoria",
 };

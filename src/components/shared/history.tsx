@@ -1,5 +1,6 @@
 "use client";
 
+import { isDemoMode } from "@/lib/mode";
 import { useState } from "react";
 import type { HistoryAction, HistoryEntry } from "@/types";
 import { useDirectory } from "@/hooks/use-data";
@@ -58,7 +59,11 @@ export function HistoryTimeline({ entries, limit = 8, className }: { entries: Hi
           {showAll ? "Mostrar menos" : `Ver todas as ${sorted.length} alterações`}
         </Button>
       )}
-      <p className="mt-4 text-[11.5px] text-fg-subtle">Histórico demonstrativo. A auditoria oficial será registrada pelo backend.</p>
+      <p className="mt-4 text-[11.5px] text-fg-subtle">
+        {isDemoMode
+          ? "Histórico demonstrativo. A auditoria oficial será registrada pelo backend."
+          : "Resumo das últimas alterações. O registro completo fica na Auditoria."}
+      </p>
     </div>
   );
 }

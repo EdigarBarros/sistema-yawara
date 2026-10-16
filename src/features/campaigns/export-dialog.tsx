@@ -3,15 +3,17 @@
 import { useState } from "react";
 import { FileImage, FileSpreadsheet, FileText, Lock } from "lucide-react";
 import type { Campaign, NumberSlot } from "@/types";
+import { services } from "@/services";
 import { useAccess } from "@/hooks/use-access";
 import { useDirectory } from "@/hooks/use-data";
 import { canSeeAllBuyers } from "@/lib/policies";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { isDemoMode } from "@/lib/mode";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ChoiceCards } from "@/components/ui/form";
-import { DemoNotice } from "@/components/shared/states";
 import { exportCsv, exportPdf, exportPng, filterSlots, SCOPE_LABELS, type ExportAudience, type ExportFormat, type ExportScope } from "./export";
+import { CampaignNotice } from "./notice";
 
 interface ExportDialogProps {
   open: boolean;
@@ -46,6 +48,19 @@ function ExportDialogBody({ onOpenChange, campaign, slots, initialFormat = "pdf"
     setBusy(true);
     try {
       const ctx = { campaign, slots, scope, audience: effectiveAudience, memberName: dir.memberName, generatedBy: access.user?.name ?? "—" };
+      if (effectiveAudience === "internal") {
+        // Registro na auditoria ANTES de gerar e entregar o arquivo (fechar a aba logo após o download não
+        // perde o registro). Melhor esforço: nunca lança erro nem impede a exportação. Sem dados pessoais no resumo.
+        await services.audit
+          .recordExport({
+            module: "campaigns",
+            resourceType: "campaign",
+            resourceId: campaign.id,
+            summary: `${format.toUpperCase()} interno com dados dos compradores (${SCOPE_LABELS[scope].toLowerCase()}, ${count} número(s)) da campanha ${campaign.code}`,
+            personalData: true,
+          })
+          .catch(() => undefined);
+      }
       const n = format === "csv" ? exportCsv(ctx) : format === "pdf" ? await exportPdf(ctx) : await exportPng(ctx);
       notifySuccess(
         `Arquivo ${format.toUpperCase()} gerado`,
@@ -53,7 +68,7 @@ function ExportDialogBody({ onOpenChange, campaign, slots, initialFormat = "pdf"
       );
       onOpenChange(false);
     } catch (e) {
-      notifyError(e, "Não foi possível gerar o arquivo neste navegador.");
+      notifyError(e, isDemoMode ? "Não foi possível gerar o arquivo neste navegador." : "Não foi possível gerar o arquivo. Tente novamente.");
     } finally {
       setBusy(false);
     }
@@ -63,7 +78,11 @@ function ExportDialogBody({ onOpenChange, campaign, slots, initialFormat = "pdf"
     <DialogContent
         size="lg"
         title="Exportar campanha"
-        description="O arquivo é gerado neste navegador, a partir dos dados de demonstração."
+        description={
+          isDemoMode
+            ? "O arquivo é gerado neste navegador, a partir dos dados de demonstração."
+            : "O arquivo é gerado no navegador a partir dos dados registrados que o seu perfil pode ver."
+        }
         footer={
           <>
             <Button variant="ghost" onClick={() => onOpenChange(false)}>
@@ -123,7 +142,15 @@ function ExportDialogBody({ onOpenChange, campaign, slots, initialFormat = "pdf"
               />
             </section>
           )}
-          {format === "png" && <DemoNotice>A imagem é sempre a versão de divulgação: nunca mostra dados pessoais dos compradores.</DemoNotice>}
+          {format === "png" && (
+            <CampaignNotice
+              demo="A imagem é sempre a versão de divulgação: nunca mostra dados pessoais dos compradores."
+              live="A imagem é sempre a versão de divulgação: nunca mostra dados pessoais dos compradores."
+            />
+          )}
+          {format !== "png" && effectiveAudience === "internal" && (
+            <CampaignNotice live="Relatório interno com dados pessoais: a exportação fica registrada na auditoria. Não compartilhe fora da diretoria autorizada." />
+          )}
         </div>
       </DialogContent>
   );

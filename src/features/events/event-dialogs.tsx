@@ -16,6 +16,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/form";
 import { MemberSelect } from "@/components/shared/pickers";
 import { taskSchema, type TaskFormValues } from "./schemas";
+import { FormAlert } from "@/components/shared/form-alert";
 
 /* -------------------------------- Duplicar -------------------------------- */
 
@@ -45,7 +46,7 @@ function DuplicateBody({ onOpenChange, event }: DuplicateProps) {
     `${event.responsibleIds.length} responsável(is) designado(s)`,
     `${event.schedule.length} item(ns) da programação`,
     `${event.tasks.length} tarefa(s), reiniciadas como “A fazer” e sem prazo`,
-    `${event.suppliers.length} fornecedor(es) como “Orçamento”, sem valores`,
+    `${event.suppliers.length} fornecedor(es) como “Orçamento”, sem contatos`,
   ];
   const notCopied = ["Orçamento e lançamentos financeiros", "Vendas e dados de compradores", "Documentos, histórico e observações"];
 
@@ -110,11 +111,7 @@ function DuplicateBody({ onOpenChange, event }: DuplicateProps) {
             </ul>
           </div>
         </div>
-        {error && (
-          <p role="alert" className="text-[13px] text-danger">
-            {error}
-          </p>
-        )}
+        <FormAlert message={error} />
       </div>
     </DialogContent>
   );

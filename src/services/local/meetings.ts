@@ -20,12 +20,39 @@ import {
   ServiceError,
   validateAudience,
 } from "./context";
-import { allowedMeetingTransitions, canEditMeeting, canSeeMeeting, MEETING_TRANSITIONS } from "@/lib/policies";
+import { allowedMeetingTransitions, canEditMeeting, canSeeEvent, canSeeMeeting, MEETING_TRANSITIONS } from "@/lib/policies";
+
+/** Limites (os mesmos do servidor). */
+const MAX_GUESTS = 50;
 
 function visibleMeeting(db: DemoDB, ctx: AccessContext, id: string) {
   const m = findOrThrow(db.meetings, id, "Reunião");
   if (!canSeeMeeting(ctx, m)) throw new ServiceError("forbidden", "Esta reunião não está disponível para o seu perfil.");
   return m;
+}
+
+/** Convidados externos: apenas nomes (2 a 80 caracteres), sem repetição — mesma regra do servidor. */
+function cleanGuests(items?: string[]) {
+  const seen = new Set<string>();
+  const guests = (items ?? [])
+    .map((g) => g.trim().replace(/\s+/g, " "))
+    .filter((g) => {
+      const key = g.toLocaleLowerCase("pt-BR");
+      if (!g || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  if ((items ?? []).length > MAX_GUESTS) throw new ServiceError("invalid", `Informe no máximo ${MAX_GUESTS} convidados externos.`);
+  if (guests.some((g) => g.length > 80)) throw new ServiceError("invalid", "O nome de cada convidado pode ter no máximo 80 caracteres.");
+  if (guests.some((g) => g.length < 2)) throw new ServiceError("invalid", "Informe o nome de cada convidado externo (mínimo de 2 caracteres).");
+  return guests;
+}
+
+/** Evento relacionado: precisa existir e estar visível para quem vincula (mesma regra do servidor). */
+function validateEvent(db: DemoDB, ctx: AccessContext, eventId: string | undefined) {
+  if (!eventId) return;
+  const ev = db.events.find((e) => e.id === eventId);
+  if (!ev || !canSeeEvent(ctx, ev)) throw new ServiceError("invalid", "O evento relacionado não existe ou não está disponível para o seu perfil.");
 }
 
 function validate(input: Partial<MeetingInput>, creating: boolean) {
@@ -69,6 +96,8 @@ export const localMeetings: MeetingService = {
       const ctx = accessContext(db);
       requirePermission(ctx, "meetings.create", "Seu perfil não pode registrar reuniões.");
       validate(input, true);
+      const guests = cleanGuests(input.guests);
+      validateEvent(db, ctx, input.eventId || undefined);
       const at = now();
       const meeting: Meeting = {
         id: newId("mtg"),
@@ -80,6 +109,8 @@ export const localMeetings: MeetingService = {
         mode: input.mode,
         location: input.location.trim(),
         participantIds: [...new Set(input.participantIds)],
+        guests,
+        eventId: input.eventId || undefined,
         agenda: cleanList(input.agenda),
         summary: input.summary.trim(),
         decisions: cleanList(input.decisions),
@@ -119,7 +150,20 @@ export const localMeetings: MeetingService = {
         );
       }
       validate(input, false);
+      // Regras sobre o registro resultante (as mesmas do servidor).
+      const nextEnd = "endTime" in input ? input.endTime || undefined : meeting.endTime;
+      if (nextEnd && nextEnd <= (input.startTime ?? meeting.startTime)) {
+        throw new ServiceError("invalid", "O horário de término deve ser depois do início.");
+      }
+      if (meeting.status === "pending_approval" && !(input.summary ?? meeting.summary).trim()) {
+        throw new ServiceError("invalid", "O resumo das discussões é obrigatório enquanto a ata aguarda aprovação. Devolva para rascunho se precisar apagá-lo.");
+      }
       const patch: Partial<Meeting> = { ...input, actions: undefined } as Partial<Meeting>;
+      if ("guests" in input) patch.guests = cleanGuests(input.guests);
+      if ("eventId" in input) {
+        patch.eventId = input.eventId || undefined;
+        if (patch.eventId !== meeting.eventId) validateEvent(db, ctx, patch.eventId);
+      }
       if (input.agenda) patch.agenda = cleanList(input.agenda);
       if (input.decisions) patch.decisions = cleanList(input.decisions);
       if (input.access) patch.access = sanitizeAudience(input.access);
@@ -157,11 +201,15 @@ export const localMeetings: MeetingService = {
       meeting.status = status;
       meeting.updatedAt = now();
       const summary =
-        status === "approved" && from === "archived"
-          ? "Ata desarquivada"
-          : status === "draft"
-            ? "Ata devolvida para rascunho"
-            : `Situação alterada para ${MEETING_STATUS[status].label}`;
+        status === "pending_approval"
+          ? "Enviada para aprovação"
+          : status === "approved"
+            ? from === "archived"
+              ? "Ata desarquivada"
+              : "Ata aprovada"
+            : status === "draft"
+              ? "Ata devolvida para rascunho"
+              : "Ata arquivada";
       meeting.history.push(historyEntry(ctx.user.id, status === "archived" ? "archived" : "status", summary));
       if (status === "pending_approval") {
         pushNotification(db, {

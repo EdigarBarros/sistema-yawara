@@ -30,7 +30,7 @@ import { buildFinanceCategories, buildFinanceEntries } from "./finance";
 import { buildContents } from "./marketing";
 import { buildProjects } from "./extension";
 
-export const DEMO_DB_VERSION = 1;
+export const DEMO_DB_VERSION = 2;
 
 export interface DemoDB {
   version: number;
@@ -77,6 +77,7 @@ export function defaultSettings(): SystemSettings {
       extension: true,
       organization: true,
       settings: true,
+      audit: true,
     },
   };
 }

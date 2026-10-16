@@ -1,11 +1,12 @@
 "use client";
 
-import { CalendarPlus, ClipboardPlus, FilePlus2, GraduationCap, KeyRound, Megaphone, MinusCircle, PlusCircle, Settings, Ticket, Users } from "lucide-react";
+import { CalendarPlus, ClipboardPlus, FilePlus2, GraduationCap, KeyRound, Megaphone, MinusCircle, PlusCircle, ScrollText, Settings, Ticket, UserX, Users } from "lucide-react";
 import type { HomePreset } from "@/types";
 import { useAccess } from "@/hooks/use-access";
 import { firstName, formatLongDate, greeting } from "@/lib/format";
 import { PageHeader, Panel } from "@/components/shared/page";
 import { ListRow } from "@/components/shared/list-row";
+import { EmptyState } from "@/components/shared/states";
 import {
   ActiveCampaignsPanel,
   CampaignCollectionPanel,
@@ -51,6 +52,11 @@ function AdminShortcuts() {
         {access.canModule("settings") && (
           <li>
             <ListRow href="/configuracoes" leading={<Settings className="size-4 text-fg-muted" />} title="Configurações" subtitle="Dados institucionais, módulos e categorias" />
+          </li>
+        )}
+        {access.canModule("audit") && (
+          <li>
+            <ListRow href="/auditoria" leading={<ScrollText className="size-4 text-fg-muted" />} title="Auditoria" subtitle="Registro oficial das operações importantes" />
           </li>
         )}
       </ul>
@@ -210,7 +216,16 @@ function QuickActions({ preset }: { preset: HomePreset }) {
 
 export default function HomePage() {
   const access = useAccess();
-  if (!access.user || !access.role) return null;
+  if (!access.user) return null;
+  if (!access.role) {
+    return (
+      <EmptyState
+        icon={<UserX />}
+        title="Seu cargo não foi encontrado"
+        description="O cargo associado à sua conta não está disponível. Procure a presidência para revisar o seu cadastro."
+      />
+    );
+  }
   const preset = access.role.homePreset;
   return (
     <>

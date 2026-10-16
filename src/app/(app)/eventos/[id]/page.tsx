@@ -12,11 +12,10 @@ import { useBreadcrumbTitle } from "@/stores/breadcrumb";
 import { canCloseEvent, canEditEvent, canSeeEventFinance } from "@/lib/policies";
 import { EVENT_STATUS, EVENT_TYPE_LABELS } from "@/lib/labels";
 import { formatDate, formatTime } from "@/lib/format";
-import { errorMessage } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/menu";
 import { MetaItem, PageHeader, Panel } from "@/components/shared/page";
-import { ErrorState, PageSkeleton } from "@/components/shared/states";
+import { RecordErrorState, PageSkeleton } from "@/components/shared/states";
 import { OwnershipBadge, StatusBadge } from "@/components/shared/badges";
 import { HistoryTimeline } from "@/components/shared/history";
 import { confirmAction } from "@/components/shared/confirm";
@@ -44,12 +43,14 @@ export default function EventDetailPage() {
   const setTab = (t: string) => router.replace(`${pathname}?aba=${t}`, { scroll: false });
 
   if (isLoading) return <PageSkeleton />;
-  if (isError || !event) return <ErrorState message={errorMessage(error, "Evento não encontrado.")} onRetry={() => refetch()} />;
+  if (isError || !event) return <RecordErrorState error={error} notFound="Evento não encontrado" backHref="/eventos" onRetry={() => refetch()} />;
 
   const ctx = access.ctx;
   const canEdit = !!ctx && canEditEvent(ctx, event);
   const canClose = !!ctx && canCloseEvent(ctx, event);
   const showFinance = !!ctx && canSeeEventFinance(ctx, event) && access.moduleEnabled("finance");
+  // Link direto para uma aba que o perfil não vê (ex.: ?aba=financeiro) abre a visão geral.
+  const activeTab = tab === "financeiro" && !showFinance ? "visao" : tab;
   const changeStatus = async (s: EventStatus, title: string, description: string, danger = false) => {
     if (await confirmAction({ title, description, confirmLabel: "Confirmar", tone: danger ? "danger" : "default" })) setStatus.runSafe(s);
   };
@@ -124,7 +125,7 @@ export default function EventDetailPage() {
         }
       />
 
-      <Tabs value={tab} onValueChange={setTab}>
+      <Tabs value={activeTab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="visao">Visão geral</TabsTrigger>
           <TabsTrigger value="tarefas" count={event.tasks.length}>

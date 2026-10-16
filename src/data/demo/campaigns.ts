@@ -92,7 +92,7 @@ function generateSales(rng: Rng, clock: Clock, opts: SaleGenOptions): Sale[] {
       sale.cancelledById = opts.confirmers[0];
       sale.cancelReason = "Comprador desistiu antes do pagamento";
       sale.updatedAt = cancelledAt;
-      history.push(h(cancelledAt, opts.confirmers[0], "cancelled", "Venda cancelada: comprador desistiu antes do pagamento"));
+      history.push(h(cancelledAt, opts.confirmers[0], "cancelled", "Venda cancelada (motivo nos dados restritos)"));
     }
     sales.push(sale);
   }

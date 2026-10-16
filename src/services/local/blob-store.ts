@@ -5,6 +5,7 @@
  */
 import type { FileRef } from "@/types";
 import { newId } from "@/lib/utils";
+import { ServiceError } from "../errors";
 
 const blobs = new Map<string, Blob>();
 const urls = new Map<string, string>();
@@ -30,4 +31,27 @@ export function getObjectUrl(blobId?: string) {
 
 export function hasBlob(blobId?: string) {
   return !!blobId && blobs.has(blobId);
+}
+
+export function isAvailable(file: FileRef | null | undefined) {
+  return !!file?.blobId && blobs.has(file.blobId);
+}
+
+/** Abre o arquivo escolhido nesta sessão (demonstração). */
+export async function openFile(file: FileRef, options?: { download?: boolean }) {
+  const url = getObjectUrl(file.blobId);
+  if (!url) throw new ServiceError("unavailable", "O arquivo só fica disponível na sessão em que foi escolhido (demonstração).");
+  const a = document.createElement("a");
+  a.href = url;
+  if (options?.download) a.download = file.name;
+  else a.target = "_blank";
+  a.rel = "noopener";
+  a.click();
+}
+
+/** Demonstração: a URL já existe enquanto o arquivo estiver na memória desta aba. */
+export async function loadObjectUrl(file: FileRef) {
+  const url = getObjectUrl(file.blobId);
+  if (!url) throw new ServiceError("unavailable", "O arquivo só fica disponível na sessão em que foi escolhido (demonstração).");
+  return url;
 }

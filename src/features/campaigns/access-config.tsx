@@ -101,9 +101,9 @@ export function CampaignAccessSummary({ access, creatorId }: { access: CampaignA
   const always = creatorId ? [creatorId] : undefined;
   return (
     <div className="grid gap-4 sm:grid-cols-3">
-      <AudienceSummary title="Quem vê" audience={access.view} labels={VIEW_LABELS} alwaysIncluded={always} />
-      <AudienceSummary title="Quem registra vendas" audience={access.sell} labels={SELL_LABELS} alwaysIncluded={always} />
-      <AudienceSummary title="Quem vê dados dos compradores" audience={access.buyerData} labels={BUYER_LABELS} alwaysIncluded={always} />
+      <AudienceSummary module="campaigns" title="Quem vê" audience={access.view} labels={VIEW_LABELS} alwaysIncluded={always} />
+      <AudienceSummary module="campaigns" need="campaigns.register" title="Quem registra vendas" audience={access.sell} labels={SELL_LABELS} alwaysIncluded={always} />
+      <AudienceSummary module="campaigns" title="Quem vê dados dos compradores" audience={access.buyerData} labels={BUYER_LABELS} alwaysIncluded={always} />
     </div>
   );
 }

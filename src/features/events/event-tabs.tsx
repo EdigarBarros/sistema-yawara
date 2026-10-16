@@ -1,16 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { CalendarClock, FilePlus2, FileText, Megaphone, Plus, Trash2, Wallet } from "lucide-react";
+import { AlertTriangle, CalendarClock, FilePlus2, FileText, Megaphone, Plus, Trash2, Wallet } from "lucide-react";
 import type { AtleticaEvent, EventTask, Supplier, TaskStatus } from "@/types";
 import { services } from "@/services";
 import { useAccess } from "@/hooks/use-access";
 import { useAction } from "@/hooks/use-action";
-import { useContents, useDirectory, useDocumentCategories, useDocuments, useEventFinance, useFinanceCategories } from "@/hooks/use-data";
+import {
+  useCampaigns,
+  useContents,
+  useDirectory,
+  useDocumentCategories,
+  useDocuments,
+  useEventFinance,
+  useFinanceCategories,
+  useMeetings,
+  useProjects,
+} from "@/hooks/use-data";
 import { canEditTasks, canEditEvent, canSeeEventFinance } from "@/lib/policies";
-import { CONTENT_STATUS, CONTENT_TYPE_LABELS, DOCUMENT_STATUS, SUPPLIER_STATUS, TASK_STATUS, entryStatusMeta } from "@/lib/labels";
+import {
+  CAMPAIGN_STATUS,
+  CONTENT_STATUS,
+  CONTENT_TYPE_LABELS,
+  DOCUMENT_STATUS,
+  MEETING_STATUS,
+  PROJECT_STATUS,
+  SUPPLIER_STATUS,
+  TASK_STATUS,
+  entryStatusMeta,
+} from "@/lib/labels";
 import { formatDate, formatMoney, formatRelative, formatTime, todayDateOnly } from "@/lib/format";
+import { isDemoMode } from "@/lib/mode";
 import { summarizeFinance } from "@/features/finance/utils";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/lib/notify";
@@ -60,6 +81,7 @@ export function OverviewTab({ event }: { event: AtleticaEvent }) {
           />
           {event.notes && <p className="mt-4 rounded-lg border border-warn/30 bg-warn/[0.07] px-4 py-3 text-[13px] text-fg-muted">{event.notes}</p>}
         </Panel>
+        <RelatedPanel event={event} />
       </div>
       <div className="space-y-4">
         <Panel title="Responsáveis" bodyClassName="py-1.5">
@@ -82,10 +104,139 @@ export function OverviewTab({ event }: { event: AtleticaEvent }) {
           </p>
         </Panel>
         <Panel title="Quem tem acesso">
-          <AudienceSummary audience={event.access} departmentId={event.departmentId} alwaysIncluded={[...event.responsibleIds, event.createdBy]} />
+          <AudienceSummary module="events" audience={event.access} departmentId={event.departmentId} alwaysIncluded={[...event.responsibleIds, event.createdBy]} />
         </Panel>
       </div>
     </div>
+  );
+}
+
+/* ------------------------------- Relacionados ------------------------------ */
+
+interface RelatedQuery<T> {
+  data?: T[];
+  isLoading: boolean;
+  isError: boolean;
+  error: unknown;
+  refetch: () => unknown;
+}
+
+/** Um grupo do painel "Relacionados": carregando, erro (com nova tentativa), vazio ou lista. */
+function RelatedGroup<T extends { id: string; eventId?: string }>({
+  label,
+  eventId,
+  query,
+  row,
+}: {
+  label: string;
+  eventId: string;
+  query: RelatedQuery<T>;
+  row: (item: T) => ReactNode;
+}) {
+  const items = (query.data ?? []).filter((item) => item.eventId === eventId);
+  return (
+    <div className="px-5 py-3">
+      <p className="eyebrow mb-1">{label}</p>
+      {query.isLoading ? (
+        <p role="status" className="text-[12.5px] text-fg-subtle">
+          Carregando…
+        </p>
+      ) : query.isError ? (
+        <div role="alert" className="text-[12.5px] text-danger">
+          <p className="flex items-start gap-1.5">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+            <span>Não foi possível carregar. {errorMessage(query.error)}</span>
+          </p>
+          <button type="button" onClick={() => query.refetch()} className="mt-1 font-medium text-fg-muted underline hover:text-fg">
+            Tentar novamente
+          </button>
+        </div>
+      ) : items.length === 0 ? (
+        <p className="text-[12.5px] text-fg-subtle">Nenhum registro vinculado.</p>
+      ) : (
+        <ul className="-mx-5 divide-y divide-line">
+          {items.map((item) => (
+            <li key={item.id}>{row(item)}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function RelatedCampaigns({ eventId }: { eventId: string }) {
+  const query = useCampaigns();
+  return (
+    <RelatedGroup
+      label="Campanhas"
+      eventId={eventId}
+      query={query}
+      row={(c) => <ListRow href={`/campanhas/${c.id}`} title={c.name} subtitle={c.code} trailing={<StatusBadge meta={CAMPAIGN_STATUS[c.status]} />} />}
+    />
+  );
+}
+
+function RelatedMeetings({ eventId }: { eventId: string }) {
+  const query = useMeetings(true);
+  return (
+    <RelatedGroup
+      label="Reuniões"
+      eventId={eventId}
+      query={query}
+      row={(m) => <ListRow href={`/secretaria/${m.id}`} title={m.title} subtitle={`${m.code} · ${formatDate(m.date)}`} trailing={<StatusBadge meta={MEETING_STATUS[m.status]} />} />}
+    />
+  );
+}
+
+function RelatedContents({ eventId }: { eventId: string }) {
+  const query = useContents(true);
+  return (
+    <RelatedGroup
+      label="Conteúdos de Marketing"
+      eventId={eventId}
+      query={query}
+      row={(c) => (
+        <ListRow
+          href={`/marketing?item=${c.id}`}
+          title={c.title}
+          subtitle={`${CONTENT_TYPE_LABELS[c.type]}${c.publishDate ? ` · ${formatDate(c.publishDate)}` : ""}`}
+          trailing={<StatusBadge meta={CONTENT_STATUS[c.status]} />}
+        />
+      )}
+    />
+  );
+}
+
+function RelatedProjects({ eventId }: { eventId: string }) {
+  const query = useProjects(true);
+  return (
+    <RelatedGroup
+      label="Projetos de extensão"
+      eventId={eventId}
+      query={query}
+      row={(p) => <ListRow href={`/extensao/${p.id}`} title={p.name} subtitle={`${p.code} · ${formatDate(p.date)}`} trailing={<StatusBadge meta={PROJECT_STATUS[p.status]} />} />}
+    />
+  );
+}
+
+/**
+ * Campanhas, reuniões, conteúdos e projetos ligados ao evento. Cada grupo só
+ * aparece (e só é consultado) quando o perfil acessa o módulo; a lista mostra
+ * apenas os registros que o perfil pode ver.
+ */
+export function RelatedPanel({ event }: { event: AtleticaEvent }) {
+  const access = useAccess();
+  const groups = [
+    access.canModule("campaigns") && <RelatedCampaigns key="campaigns" eventId={event.id} />,
+    access.canModule("meetings") && <RelatedMeetings key="meetings" eventId={event.id} />,
+    access.canModule("marketing") && <RelatedContents key="marketing" eventId={event.id} />,
+    access.canModule("extension") && <RelatedProjects key="extension" eventId={event.id} />,
+  ].filter(Boolean);
+  if (groups.length === 0) return null;
+  return (
+    <Panel title="Relacionados" description="Registros ligados a este evento que o seu perfil pode ver" bodyClassName="divide-y divide-line">
+      {groups}
+    </Panel>
   );
 }
 
@@ -156,7 +307,7 @@ function SuppliersSection({ event, editable }: { event: AtleticaEvent; editable:
   const add = useAction(() => services.events.addSupplier(event.id, { name, service, status: "quoted" }), { success: "Fornecedor adicionado" });
   const update = useAction((id: string, status: Supplier["status"]) => services.events.updateSupplier(event.id, id, { status }), { success: "Fornecedor atualizado" });
   return (
-    <Panel title="Fornecedores" description="Contatos de exemplo — nenhum contrato real">
+    <Panel title="Fornecedores" description={isDemoMode ? "Contatos de exemplo — nenhum contrato real" : "Orçamentos e contratações do evento"}>
       {event.suppliers.length === 0 ? (
         <p className="text-[13px] text-fg-subtle">Nenhum fornecedor registrado.</p>
       ) : (
@@ -256,7 +407,7 @@ export function TasksTab({ event }: { event: AtleticaEvent }) {
       key: "status",
       header: "Situação",
       cell: (t) =>
-        editable || t.responsibleId === access.user?.id ? (
+        editable || (t.responsibleId === access.user?.id && event.status !== "cancelled") ? (
           <select
             aria-label={`Situação de ${t.title}`}
             value={t.status}
@@ -344,7 +495,7 @@ export function FinanceTab({ event }: { event: AtleticaEvent }) {
   const allowed = !!access.ctx && canSeeEventFinance(access.ctx, event) && access.moduleEnabled("finance");
   const { data, isLoading, isError, error } = useEventFinance(event.id, allowed);
   const { data: cats } = useFinanceCategories();
-  if (!allowed) return <RestrictedState title="Dados financeiros restritos" description="O Financeiro e a diretoria do departamento responsável veem esta aba." />;
+  if (!allowed) return <RestrictedState module="finance" title="Dados financeiros restritos" description="O Financeiro e a diretoria do departamento responsável veem esta aba." />;
   if (isLoading) return <InlineLoader />;
   if (isError) return <ErrorState message={errorMessage(error)} />;
   const s = summarizeFinance(data ?? []);
@@ -359,7 +510,7 @@ export function FinanceTab({ event }: { event: AtleticaEvent }) {
         <Stat label="Receitas" value={formatMoney(s.income)} footer={<span>{formatMoney(s.receivable)} a receber</span>} />
         <Stat label="Resultado realizado" value={formatMoney(s.balance)} footer={<span>Receitas − despesas pagas</span>} />
       </div>
-      <Panel title="Lançamentos do evento" description="Valores fictícios de demonstração" bodyClassName="py-1.5">
+      <Panel title="Lançamentos do evento" description={isDemoMode ? "Valores fictícios de demonstração" : "Lançamentos do Financeiro vinculados a este evento"} bodyClassName="py-1.5">
         {(data ?? []).length === 0 ? (
           <EmptyState compact icon={<Wallet />} title="Sem lançamentos vinculados" description="Lançamentos do Financeiro associados a este evento aparecem aqui." />
         ) : (
@@ -390,8 +541,8 @@ export function FinanceTab({ event }: { event: AtleticaEvent }) {
 export function PublicityTab({ event }: { event: AtleticaEvent }) {
   const access = useAccess();
   const allowed = access.canModule("marketing");
-  const { data, isLoading } = useContents(allowed);
-  if (!allowed) return <RestrictedState title="Divulgação fica no Marketing" description="Seu perfil não acessa o módulo de Marketing." />;
+  const { data, isLoading, isError, error, refetch } = useContents(allowed);
+  if (!allowed) return <RestrictedState module="marketing" title="Divulgação fica no Marketing" description="Seu perfil não acessa o módulo de Marketing." />;
   const items = (data ?? []).filter((c) => c.eventId === event.id).sort((a, b) => (a.publishDate ?? "").localeCompare(b.publishDate ?? ""));
   return (
     <Panel
@@ -408,6 +559,8 @@ export function PublicityTab({ event }: { event: AtleticaEvent }) {
     >
       {isLoading ? (
         <InlineLoader />
+      ) : isError ? (
+        <ErrorState message={errorMessage(error)} onRetry={() => refetch()} />
       ) : items.length === 0 ? (
         <EmptyState compact icon={<Megaphone />} title="Nenhum material vinculado" />
       ) : (
@@ -434,10 +587,10 @@ export function PublicityTab({ event }: { event: AtleticaEvent }) {
 export function DocumentsTab({ event }: { event: AtleticaEvent }) {
   const access = useAccess();
   const allowed = access.canModule("documents");
-  const { data, isLoading } = useDocuments(allowed);
+  const { data, isLoading, isError, error, refetch } = useDocuments(allowed);
   const { data: cats } = useDocumentCategories();
   const [open, setOpen] = useState(false);
-  if (!allowed) return <RestrictedState />;
+  if (!allowed) return <RestrictedState module="documents" title="Documentos restritos" description="Seu perfil não acessa o módulo de Documentos." />;
   const docs = (data ?? []).filter((d) => d.links.eventId === event.id);
   return (
     <>
@@ -455,6 +608,8 @@ export function DocumentsTab({ event }: { event: AtleticaEvent }) {
       >
         {isLoading ? (
           <InlineLoader />
+        ) : isError ? (
+          <ErrorState message={errorMessage(error)} onRetry={() => refetch()} />
         ) : docs.length === 0 ? (
           <EmptyState compact icon={<FileText />} title="Nenhum documento vinculado" />
         ) : (

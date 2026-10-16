@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Award, CalendarDays, CheckCircle2, Clock, FilePlus2, FileSpreadsheet, FileText, MapPin, MoreHorizontal, Pencil, Plus, Trash2, UserPlus, XCircle } from "lucide-react";
+import { Award, CalendarDays, CheckCircle2, Clock, FilePlus2, FileSpreadsheet, FileText, Lock, MapPin, MoreHorizontal, Pencil, Plus, Trash2, UserPlus, XCircle } from "lucide-react";
 import type { CertificateStatus, ProjectStatus } from "@/types";
 import { services } from "@/services";
 import { useAccess } from "@/hooks/use-access";
@@ -12,23 +12,26 @@ import { useDirectory, useDocuments, useEvents, useProject } from "@/hooks/use-d
 import { useBreadcrumbTitle } from "@/stores/breadcrumb";
 import { canCloseProject, canEditProject } from "@/lib/policies";
 import { ACTIVITY_TYPE_LABELS, CERTIFICATE_STATUS, PROJECT_STATUS } from "@/lib/labels";
+import { isDemoMode } from "@/lib/mode";
 import { formatDate, formatTime } from "@/lib/format";
 import { downloadCsv, slugify } from "@/lib/export/common";
-import { errorMessage, notifyError, notifySuccess } from "@/lib/notify";
+import { notifyError, notifySuccess } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/form";
 import { Progress } from "@/components/ui/misc";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/menu";
 import { DetailList, MetaItem, PageHeader, Panel } from "@/components/shared/page";
-import { DemoNotice, EmptyState, ErrorState, PageSkeleton } from "@/components/shared/states";
+import { DemoNotice, EmptyState, RecordErrorState, PageSkeleton } from "@/components/shared/states";
 import { OwnershipBadge, StatusBadge } from "@/components/shared/badges";
 import { HistoryTimeline } from "@/components/shared/history";
 import { ListRow } from "@/components/shared/list-row";
 import { confirmAction } from "@/components/shared/confirm";
 import { AddDocumentDialog } from "@/features/documents/document-form-dialog";
 import { ProjectFormDialog } from "@/features/extension/project-form-dialog";
+import { markAttendance as markOptimistic, settleAttendance, shownAttendance, type AttendanceMarks } from "@/features/extension/attendance";
 import { attendanceRows, exportCertificatesPdf } from "@/features/extension/certificates";
+import { attendeeTotal, certificateStatusMeta, RESTRICTED_ATTENDEES_TEXT } from "@/features/extension/labels";
 
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -45,8 +48,10 @@ export default function ProjectDetailPage() {
   const [attendee, setAttendee] = useState("");
   const [report, setReport] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
-  // Marcação otimista: a caixa muda na hora; se a gravação falhar, volta ao valor salvo.
-  const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
+  const [exportingCsv, setExportingCsv] = useState(false);
+  // Marcação otimista: a caixa muda na hora; quando a gravação termina, vale de novo o dado do servidor.
+  const [optimistic, setOptimistic] = useState<AttendanceMarks>({});
+  const clickSeq = useRef(0);
 
   const setStatus = useAction((s: ProjectStatus) => services.extension.setStatus(id, s), { success: (r) => `Situação: ${PROJECT_STATUS[r.status].label}` });
   const addSpeaker = useAction(() => services.extension.addSpeaker(id, speaker), { success: "Palestrante adicionado" });
@@ -56,28 +61,35 @@ export default function ProjectDetailPage() {
   const addAttendee = useAction(() => services.extension.addAttendee(id, attendee), { success: "Participante adicionado" });
   const toggle = useAction((aid: string, present: boolean) => services.extension.setAttendance(id, aid, present));
   const markAttendance = async (aid: string, present: boolean) => {
-    setOptimistic((o) => ({ ...o, [aid]: present }));
-    const saved = await toggle.runSafe(aid, present);
-    if (!saved)
-      setOptimistic((o) => {
-        const next = { ...o };
-        delete next[aid];
-        return next;
-      });
+    const token = ++clickSeq.current;
+    setOptimistic((o) => markOptimistic(o, aid, present, token));
+    // Com sucesso o projeto já foi relido (ver QueryProvider); com falha, volta o valor salvo.
+    await toggle.runSafe(aid, present);
+    setOptimistic((o) => settleAttendance(o, aid, token));
   };
-  const setCert = useAction((s: CertificateStatus) => services.extension.setCertificateStatus(id, s), { success: (r) => `Certificados: ${CERTIFICATE_STATUS[r.certificateStatus].label}` });
+  const setCert = useAction((s: CertificateStatus) => services.extension.setCertificateStatus(id, s), { success: (r) => `Certificados: ${certificateStatusMeta(r.certificateStatus).label}` });
   const saveReport = useAction(() => services.extension.update(id, { report: report ?? "" }), { success: "Relatório salvo" });
   const linkDoc = useAction((docId: string) => services.extension.linkDocument(id, docId), { success: "Documento vinculado ao projeto" });
 
   if (isLoading) return <PageSkeleton />;
-  if (isError || !p) return <ErrorState message={errorMessage(error, "Projeto não encontrado.")} onRetry={() => refetch()} />;
+  if (isError || !p) return <RecordErrorState error={error} notFound="Projeto não encontrado" backHref="/extensao" onRetry={() => refetch()} />;
 
   const ctx = access.ctx;
   const editable = !!ctx && canEditProject(ctx, p);
   const closable = !!ctx && canCloseProject(ctx, p);
   const event = events?.find((e) => e.id === p.eventId);
-  const isPresent = (a: { id: string; present: boolean }) => optimistic[a.id] ?? a.present;
+  const isPresent = (a: { id: string; present: boolean }) => shownAttendance(optimistic, a);
   const present = p.attendees.filter(isPresent).length;
+  // Lista de presença (dados pessoais): só vem preenchida para quem organiza o projeto.
+  const restricted = !!p.attendeesRestricted;
+  const total = attendeeTotal(p);
+  const canApprove = access.can("extension.approve");
+  /**
+   * Registro da exportação na auditoria (melhor esforço; o resumo não traz nomes).
+   * É aguardado ANTES de entregar o arquivo: fechar a aba logo após o download não perde o registro.
+   */
+  const recordExport = (summary: string) =>
+    services.audit.recordExport({ module: "extension", resourceType: "project", resourceId: p.id, summary, personalData: true }).catch(() => undefined);
   const linkedDocs = (documents ?? []).filter((d) => p.documentIds.includes(d.id) || d.links.projectId === p.id);
   const reportValue = report ?? p.report ?? "";
 
@@ -136,7 +148,8 @@ export default function ProjectDetailPage() {
                       Cancelar projeto
                     </DropdownMenuItem>
                   )}
-                  {editable && p.status !== "planning" && (
+                  {/* Reabrir um projeto realizado ou cancelado: no servidor, só quem pode concluir (criador ou extension.archive). */}
+                  {(isDemoMode || p.status === "open" ? editable : closable) && p.status !== "planning" && (
                     <DropdownMenuItem icon={<Clock />} onSelect={() => setStatus.runSafe("planning")}>
                       Voltar para planejamento
                     </DropdownMenuItem>
@@ -154,7 +167,7 @@ export default function ProjectDetailPage() {
           <TabsTrigger value="programacao" count={p.speakers.length}>
             Programação e palestrantes
           </TabsTrigger>
-          <TabsTrigger value="presenca" count={p.attendees.length}>
+          <TabsTrigger value="presenca" count={total}>
             Presença e certificados
           </TabsTrigger>
           <TabsTrigger value="relatorio">Relatório e documentos</TabsTrigger>
@@ -199,12 +212,23 @@ export default function ProjectDetailPage() {
                 )}
               </Panel>
               <Panel title="Participação">
-                <Progress value={present} max={Math.max(1, p.attendees.length)} label="Presença" />
-                <p className="mt-2 text-[13px] text-fg-muted">
-                  {present} presente(s) de {p.attendees.length} na lista
-                </p>
+                {restricted ? (
+                  <>
+                    <p className="text-[13px] text-fg-muted">{total} inscrito(s) na lista de presença</p>
+                    <p className="mt-1.5 inline-flex items-center gap-1.5 text-[12.5px] text-fg-subtle">
+                      <Lock className="size-3.5" aria-hidden /> {RESTRICTED_ATTENDEES_TEXT}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Progress value={present} max={Math.max(1, p.attendees.length)} label="Presença" />
+                    <p className="mt-2 text-[13px] text-fg-muted">
+                      {present} presente(s) de {p.attendees.length} na lista
+                    </p>
+                  </>
+                )}
                 <p className="mt-3 text-[13px]">
-                  Certificados: <StatusBadge meta={CERTIFICATE_STATUS[p.certificateStatus]} />
+                  Certificados: <StatusBadge meta={certificateStatusMeta(p.certificateStatus)} />
                 </p>
               </Panel>
             </div>
@@ -294,15 +318,27 @@ export default function ProjectDetailPage() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
             <Panel
               title="Lista de presença"
-              description="Nomes de participantes fictícios"
+              description={isDemoMode ? "Nomes de participantes fictícios" : "Dados pessoais: visíveis só para quem organiza o projeto"}
               actions={
+                !restricted &&
+                access.can("extension.export") &&
                 p.attendees.length > 0 && (
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => {
-                      downloadCsv(attendanceRows(p), `presenca-${slugify(p.name)}.csv`);
-                      notifySuccess("Lista de presença exportada (CSV)");
+                    loading={exportingCsv}
+                    onClick={async () => {
+                      setExportingCsv(true);
+                      try {
+                        const rows = attendanceRows(p);
+                        await recordExport(`Lista de presença em CSV (${rows.length - 1} participantes)`);
+                        downloadCsv(rows, `presenca-${slugify(p.name)}.csv`);
+                        notifySuccess("Lista de presença exportada (CSV)");
+                      } catch (e) {
+                        notifyError(e);
+                      } finally {
+                        setExportingCsv(false);
+                      }
                     }}
                   >
                     <FileSpreadsheet /> Exportar CSV
@@ -310,7 +346,9 @@ export default function ProjectDetailPage() {
                 )
               }
             >
-              {p.attendees.length === 0 ? (
+              {restricted ? (
+                <EmptyState compact icon={<Lock />} title={`${total} inscrito(s)`} description={RESTRICTED_ATTENDEES_TEXT} />
+              ) : p.attendees.length === 0 ? (
                 <EmptyState compact title="Lista vazia" description={editable ? "Adicione os participantes inscritos." : undefined} />
               ) : (
                 <ul className="divide-y divide-line">
@@ -325,7 +363,7 @@ export default function ProjectDetailPage() {
                   ))}
                 </ul>
               )}
-              {editable && (
+              {editable && !restricted && (
                 <form
                   className="mt-4 flex gap-2"
                   onSubmit={async (e) => {
@@ -344,33 +382,34 @@ export default function ProjectDetailPage() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-[13px] text-fg-muted">Situação</span>
-                  <StatusBadge meta={CERTIFICATE_STATUS[p.certificateStatus]} />
+                  <StatusBadge meta={certificateStatusMeta(p.certificateStatus)} />
                 </div>
                 {editable && (
                   <select
                     aria-label="Situação dos certificados"
                     value={p.certificateStatus}
+                    disabled={setCert.pending || (!isDemoMode && p.certificateStatus === "issued" && !canApprove)}
                     onChange={(e) => setCert.runSafe(e.target.value as CertificateStatus)}
                     className="h-9 w-full rounded-lg border border-line-strong bg-sunken px-3 text-[13px]"
                   >
                     {(Object.keys(CERTIFICATE_STATUS) as CertificateStatus[]).map((s) => (
-                      <option key={s} value={s} disabled={s === "issued" && !access.can("extension.approve")}>
-                        {CERTIFICATE_STATUS[s].label}
+                      <option key={s} value={s} disabled={s === "issued" && !canApprove}>
+                        {certificateStatusMeta(s).label}
                       </option>
                     ))}
                   </select>
                 )}
-                <p className="text-[12.5px] text-fg-muted">{present} participante(s) com presença confirmada.</p>
-                {access.can("extension.export") && (
+                <p className="text-[12.5px] text-fg-muted">{restricted ? `${RESTRICTED_ATTENDEES_TEXT}.` : `${present} participante(s) com presença confirmada.`}</p>
+                {access.can("extension.export") && !restricted && (
                   <Button
                     className="w-full"
                     loading={generating}
-                    disabled={present === 0}
+                    disabled={present === 0 || toggle.pending}
                     onClick={async () => {
                       setGenerating(true);
                       try {
-                        const n = await exportCertificatesPdf(p, dir.memberName(p.responsibleId));
-                        notifySuccess(`${n} certificado(s) gerado(s) em PDF`, "Modelo demonstrativo, sem validade.");
+                        const n = await exportCertificatesPdf(p, dir.memberName(p.responsibleId), { onBeforeSave: (count) => recordExport(`Certificados (${count} participantes)`) });
+                        notifySuccess(`${n} certificado(s) gerado(s) em PDF`, isDemoMode ? "Modelo demonstrativo, sem validade." : "PDF gerado no navegador a partir dos dados registrados.");
                       } catch (e) {
                         notifyError(e);
                       } finally {
@@ -381,7 +420,13 @@ export default function ProjectDetailPage() {
                     <Award /> Gerar certificados (PDF)
                   </Button>
                 )}
-                <DemoNotice>Certificados de demonstração: trazem a marca “sem validade” e não têm código de verificação.</DemoNotice>
+                {isDemoMode ? (
+                  <DemoNotice>Certificados de demonstração: trazem a marca “sem validade” e não têm código de verificação.</DemoNotice>
+                ) : (
+                  <p className="text-[12px] leading-relaxed text-fg-subtle">
+                    PDF gerado no navegador a partir dos dados registrados, somente para quem teve presença marcada. Os certificados não têm código de verificação; a geração fica registrada na auditoria.
+                  </p>
+                )}
               </div>
             </Panel>
           </div>
@@ -389,7 +434,7 @@ export default function ProjectDetailPage() {
 
         <TabsContent value="relatorio" className="mt-5">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <Panel title="Relatório da atividade" actions={editable && <span className="text-[12px] text-fg-subtle">Salvo apenas neste navegador</span>}>
+            <Panel title="Relatório da atividade" actions={editable && isDemoMode && <span className="text-[12px] text-fg-subtle">Salvo apenas neste navegador</span>}>
               {editable ? (
                 <>
                   <Textarea rows={10} value={reportValue} onChange={(e) => setReport(e.target.value)} placeholder="Como foi a atividade, participação, aprendizados e próximos passos." aria-label="Relatório" />

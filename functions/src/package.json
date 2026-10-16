@@ -1,0 +1,5 @@
+{
+  "//": "Código-fonte em módulos ES (TypeScript). O pacote das Cloud Functions (functions/lib) continua CommonJS; este arquivo permite que o aplicativo Next.js também importe estas fontes (rota de API da implantação gratuita).",
+  "private": true,
+  "type": "module"
+}

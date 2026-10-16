@@ -56,6 +56,19 @@ export function canEditSale(ctx: AccessContext, sale: Pick<Sale, "registeredById
   return hasPermission(ctx, "campaigns.edit") || sale.registeredById === ctx.user.id;
 }
 
+/**
+ * Trocar o responsável pela venda dá ao novo responsável acesso aos dados do
+ * comprador: só quem pode editar a venda E já vê esses dados pode transferi-la.
+ */
+export function canChangeSeller(ctx: AccessContext, c: Campaign, sale: Pick<Sale, "registeredById" | "sellerId">) {
+  return canEditSale(ctx, sale) && canSeeBuyer(ctx, c, sale);
+}
+
+/** Forma de pagamento de uma venda já paga: só quem confirma recebimentos altera (a confirmação vale para a forma registrada). */
+export function canChangePaymentMethod(ctx: AccessContext, sale: Pick<Sale, "status">) {
+  return sale.status !== "paid" || hasPermission(ctx, "campaigns.approve");
+}
+
 /* -------------------------------- Eventos ------------------------------- */
 
 export function canSeeEvent(ctx: AccessContext, ev: AtleticaEvent) {
@@ -99,6 +112,15 @@ export function canArchiveDocument(ctx: AccessContext, doc: InstitutionalDocumen
   return doc.createdBy === ctx.user.id || hasPermission(ctx, "documents.archive");
 }
 
+/**
+ * Marcar como "Vigente" (validar o documento): documents.approve ou quem criou.
+ * Uma nova versão enviada por quem não valida faz um documento vigente voltar
+ * para "Em elaboração" até ser validado de novo.
+ */
+export function canMarkDocumentCurrent(ctx: AccessContext, doc: Pick<InstitutionalDocument, "createdBy">) {
+  return doc.createdBy === ctx.user.id || hasPermission(ctx, "documents.approve");
+}
+
 /* ------------------------------- Reuniões ------------------------------- */
 
 export function canSeeMeeting(ctx: AccessContext, m: Meeting) {
@@ -136,21 +158,44 @@ export function canEditEntry(ctx: AccessContext, entry: FinanceEntry) {
 /* ------------------------------- Marketing ------------------------------ */
 
 export function canSeeContent(ctx: AccessContext, c: ContentItem) {
-  return c.responsibleId === ctx.user.id || canSeeRecord(ctx, "marketing", c);
+  if (c.responsibleId === ctx.user.id && hasPermission(ctx, "marketing.view")) return true;
+  return canSeeRecord(ctx, "marketing", c);
 }
 
 export function canEditContent(ctx: AccessContext, c: ContentItem) {
   return hasPermission(ctx, "marketing.edit") || c.createdBy === ctx.user.id || c.responsibleId === ctx.user.id;
 }
 
-/** Quais etapas o perfil pode escolher a partir da etapa atual. */
+/** O material já passou pela aprovação ("Aprovado" ou "Publicado"). */
+export function isContentApproved(c: Pick<ContentItem, "status">) {
+  return c.status === "approved" || c.status === "published";
+}
+
+/**
+ * Alterar o material (dados, links, público e arquivos). Depois da aprovação,
+ * só quem aprova altera — senão o que chega a "Publicado" não seria o que foi
+ * aprovado. Quem não aprova devolve o conteúdo publicado para revisão (ou pede
+ * a quem aprova que devolva um aprovado) e ele precisa de nova aprovação.
+ */
+export function canChangeContent(ctx: AccessContext, c: ContentItem) {
+  if (!canEditContent(ctx, c)) return false;
+  return !isContentApproved(c) || hasPermission(ctx, "marketing.approve");
+}
+
+/**
+ * Quais etapas o perfil pode escolher a partir da etapa atual.
+ * "Publicado" só vem depois de "Aprovado" (para todos os perfis): a aprovação
+ * não pode ser pulada, fica no histórico e avisa a diretoria.
+ */
 export function allowedContentStatuses(ctx: AccessContext, c: ContentItem): ContentStatus[] {
   const all: ContentStatus[] = ["briefing", "production", "review", "approved", "published", "cancelled"];
+  const approver = hasPermission(ctx, "marketing.approve");
   return all.filter((s) => {
     if (s === c.status) return false;
-    if (s === "approved") return hasPermission(ctx, "marketing.approve");
+    if (s === "approved") return approver;
     if (s === "cancelled") return hasPermission(ctx, "marketing.archive");
-    if (c.status === "approved" && !hasPermission(ctx, "marketing.approve")) return s === "published" && canEditContent(ctx, c);
+    if (s === "published") return c.status === "approved" && (approver || canEditContent(ctx, c));
+    if (c.status === "approved" && !approver) return false;
     return canEditContent(ctx, c);
   });
 }
@@ -158,7 +203,13 @@ export function allowedContentStatuses(ctx: AccessContext, c: ContentItem): Cont
 /* --------------------------- Ensino e Extensão -------------------------- */
 
 export function canSeeProject(ctx: AccessContext, p: ExtensionProject) {
-  return p.responsibleId === ctx.user.id || canSeeRecord(ctx, "extension", p);
+  if (p.responsibleId === ctx.user.id && hasPermission(ctx, "extension.view")) return true;
+  return canSeeRecord(ctx, "extension", p);
+}
+
+/** Lista de presença (dados pessoais): somente quem pode editar o projeto. */
+export function canSeeAttendees(ctx: AccessContext, p: ExtensionProject) {
+  return canSeeProject(ctx, p) && (canEditProject(ctx, p) || hasPermission(ctx, "extension.admin"));
 }
 
 export function canEditProject(ctx: AccessContext, p: ExtensionProject) {

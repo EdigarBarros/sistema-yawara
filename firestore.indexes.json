@@ -1,0 +1,527 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "campaigns",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "readers",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "readers",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "documents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "readers",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "meetings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "readers",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "contents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "readers",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "projects",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "readers",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "recipientId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "auditLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "module",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "at",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "auditLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "actorId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "at",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "auditLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "resourceId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "at",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "auditLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "outcome",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "at",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "searchIndex",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "terms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "at",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "invitations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "financeEntries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "eventId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "uploads",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "campaigns",
+      "fieldPath": "history",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "campaigns",
+      "fieldPath": "description",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "campaigns",
+      "fieldPath": "notes",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "campaigns",
+      "fieldPath": "access",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "sales",
+      "fieldPath": "history",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "buyers",
+      "fieldPath": "name",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "buyers",
+      "fieldPath": "contact",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "buyers",
+      "fieldPath": "notes",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "buyers",
+      "fieldPath": "receipt",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "events",
+      "fieldPath": "history",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "events",
+      "fieldPath": "tasks",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "events",
+      "fieldPath": "schedule",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "events",
+      "fieldPath": "suppliers",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "events",
+      "fieldPath": "description",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "events",
+      "fieldPath": "objective",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "events",
+      "fieldPath": "notes",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "events",
+      "fieldPath": "access",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "documents",
+      "fieldPath": "history",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "documents",
+      "fieldPath": "versions",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "documents",
+      "fieldPath": "description",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "documents",
+      "fieldPath": "access",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "documents",
+      "fieldPath": "links",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "meetings",
+      "fieldPath": "history",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "meetings",
+      "fieldPath": "agenda",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "meetings",
+      "fieldPath": "decisions",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "meetings",
+      "fieldPath": "actions",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "meetings",
+      "fieldPath": "summary",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "meetings",
+      "fieldPath": "access",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "meetings",
+      "fieldPath": "guests",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "financeEntries",
+      "fieldPath": "history",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "financeEntries",
+      "fieldPath": "notes",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "financeEntries",
+      "fieldPath": "receipt",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "contents",
+      "fieldPath": "history",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "contents",
+      "fieldPath": "briefing",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "contents",
+      "fieldPath": "notes",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "contents",
+      "fieldPath": "links",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "contents",
+      "fieldPath": "files",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "contents",
+      "fieldPath": "access",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "projects",
+      "fieldPath": "history",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "projects",
+      "fieldPath": "speakers",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "projects",
+      "fieldPath": "schedule",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "projects",
+      "fieldPath": "description",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "projects",
+      "fieldPath": "objective",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "projects",
+      "fieldPath": "report",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "projects",
+      "fieldPath": "access",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "private",
+      "fieldPath": "attendees",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "auditLogs",
+      "fieldPath": "details",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "auditLogs",
+      "fieldPath": "summary",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "idempotency",
+      "fieldPath": "result",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "idempotency",
+      "fieldPath": "expireAt",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "notifications",
+      "fieldPath": "expireAt",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "uploads",
+      "fieldPath": "expireAt",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "auditLogs",
+      "fieldPath": "expireAt",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "financeEntries",
+      "fieldPath": "receiptHistory",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "buyers",
+      "fieldPath": "receiptHistory",
+      "indexes": []
+    }
+  ]
+}

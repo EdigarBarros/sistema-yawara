@@ -19,12 +19,26 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/form";
 import { FilePicker } from "@/components/shared/pickers";
+import { isLinkFile } from "@/lib/file-links";
 import { AudiencePicker, AudienceSummary } from "@/components/shared/audience";
 import { DemoNotice } from "@/components/shared/states";
 import { DetailList } from "@/components/shared/page";
+import { FormAlert } from "@/components/shared/form-alert";
+import { isDemoMode, isFirebaseMode } from "@/lib/mode";
+import { DOCUMENT_ACCEPT, DOCUMENT_FORMATS_LABEL, documentFileProblem } from "@/services/firebase/documents";
 
 export const DOC_SCOPES = ["department", "board", "all", "roles", "people"] as const;
 export const DOC_SCOPE_LABELS = { all: "Todos os integrantes autorizados" };
+
+/** Seletor de arquivo de documentos: no modo Firebase, mostra e aplica os formatos e o limite conferidos pelo servidor. */
+export const DOCUMENT_FILE_HINT = isDemoMode ? "PDF, imagens, planilhas ou textos — até 25 MB." : `${DOCUMENT_FORMATS_LABEL} — até 25 MB.`;
+export const DOCUMENT_FILE_ACCEPT = isFirebaseMode ? DOCUMENT_ACCEPT : undefined;
+
+/** Modo Firebase: confere tipo e tamanho antes do envio (o servidor confere de novo, pelo conteúdo). */
+export function documentFileError(file: File | null): string | undefined {
+  if (!file || isDemoMode) return undefined;
+  return documentFileProblem(file) ?? undefined;
+}
 
 const schema = z.object({
   name: requiredText("o nome do documento", 3),
@@ -58,7 +72,7 @@ function AddDocumentBody({ onOpenChange, links, defaultCategoryId, stay, onCreat
   const router = useRouter();
   const access = useAccess();
   const dir = useDirectory();
-  const { data: categories } = useDocumentCategories();
+  const { data: categories, isError: categoriesFailed } = useDocumentCategories();
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string>();
   const [serverError, setServerError] = useState<string>();
@@ -79,13 +93,18 @@ function AddDocumentBody({ onOpenChange, links, defaultCategoryId, stay, onCreat
   const accessValue = useWatch({ control, name: "access" });
   const departmentId = useWatch({ control, name: "departmentId" });
 
+  // O arquivo vai como argumento: um reenvio após falha de conexão só reaproveita a requisição se nada mudou.
   const create = useAction(
-    (v: Values) =>
+    (v: Values, chosen: File) =>
       services.documents.create(
         { ...v, access: v.access.scope === "department" ? { ...v.access, departmentId: v.departmentId } : v.access, links },
-        file,
+        chosen,
       ),
-    { success: "Documento adicionado", successDescription: "Disponível apenas nesta demonstração local, neste navegador.", silentError: true },
+    {
+      success: "Documento adicionado",
+      successDescription: isDemoMode ? "Disponível apenas nesta demonstração local, neste navegador." : "Disponível para o público escolhido.",
+      silentError: true,
+    },
   );
 
   const onSubmit = handleSubmit(async (v) => {
@@ -93,9 +112,14 @@ function AddDocumentBody({ onOpenChange, links, defaultCategoryId, stay, onCreat
       setFileError("Escolha um arquivo do seu computador ou celular.");
       return;
     }
+    const problem = documentFileError(file);
+    if (problem) {
+      setFileError(problem);
+      return;
+    }
     setServerError(undefined);
     try {
-      const doc = await create.run(v);
+      const doc = await create.run(v, file);
       onOpenChange(false);
       onCreated?.(doc.id);
       if (!stay) router.push(`/documentos/${doc.id}`);
@@ -109,7 +133,11 @@ function AddDocumentBody({ onOpenChange, links, defaultCategoryId, stay, onCreat
       size="lg"
       modal
       title="Adicionar documento"
-      description="O arquivo fica somente neste navegador nesta etapa — não é enviado a nenhum servidor."
+      description={
+        isDemoMode
+          ? "O arquivo fica somente neste navegador nesta etapa — não é enviado a nenhum servidor."
+          : "O arquivo é conferido pelo servidor e só pode ser aberto por quem tem acesso ao documento."
+      }
       footer={
         <>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
@@ -130,10 +158,11 @@ function AddDocumentBody({ onOpenChange, links, defaultCategoryId, stay, onCreat
             file={file}
             onChange={(f) => {
               setFile(f);
-              setFileError(undefined);
+              setFileError(documentFileError(f));
               if (f && !getValues("name")) setValue("name", f.name.replace(/\.[^.]+$/, ""), { shouldValidate: true });
             }}
-            hint="PDF, imagens, planilhas ou textos — até 25 MB."
+            accept={DOCUMENT_FILE_ACCEPT}
+            hint={DOCUMENT_FILE_HINT}
           />
           {fileError && (
             <p role="alert" className="mt-1.5 text-xs font-medium text-danger">
@@ -144,8 +173,8 @@ function AddDocumentBody({ onOpenChange, links, defaultCategoryId, stay, onCreat
             <DetailList
               className="mt-3"
               items={[
-                { label: "Formato", value: fileExtension(file.name) },
-                { label: "Tamanho", value: formatBytes(file.size) },
+                { label: "Formato", value: isLinkFile(file) ? "Link externo" : fileExtension(file.name) },
+                { label: "Tamanho", value: isLinkFile(file) ? "—" : formatBytes(file.size) },
                 { label: "Autor do envio", value: access.user?.name },
                 { label: "Data do envio", value: "Registrada ao salvar" },
               ]}
@@ -160,7 +189,11 @@ function AddDocumentBody({ onOpenChange, links, defaultCategoryId, stay, onCreat
           <Field label="Descrição" optional className="sm:col-span-2">
             <Textarea rows={2} {...register("description")} />
           </Field>
-          <Field label="Categoria" required error={formState.errors.categoryId?.message}>
+          <Field
+            label="Categoria"
+            required
+            error={categoriesFailed ? "Não foi possível carregar as categorias. Feche e abra o formulário para tentar de novo." : formState.errors.categoryId?.message}
+          >
             <Select {...register("categoryId")}>
               <option value="">Selecione…</option>
               {categories?.map((c) => (
@@ -205,16 +238,16 @@ function AddDocumentBody({ onOpenChange, links, defaultCategoryId, stay, onCreat
             )}
           />
           <div className="rounded-lg border border-line bg-sunken px-4 py-3">
-            <AudienceSummary audience={accessValue} departmentId={departmentId} labels={DOC_SCOPE_LABELS} alwaysIncluded={access.user ? [access.user.id] : []} />
+            <AudienceSummary module="documents" audience={accessValue} departmentId={departmentId} labels={DOC_SCOPE_LABELS} alwaysIncluded={access.user ? [access.user.id] : []} />
           </div>
         </section>
 
-        <DemoNotice>Compartilhamento simulado. A autorização real e o armazenamento no Firebase Storage serão implementados no backend.</DemoNotice>
-        {serverError && (
-          <p role="alert" className="rounded-lg border border-danger/35 bg-danger/10 px-3.5 py-2.5 text-[13px] text-danger">
-            {serverError}
-          </p>
+        {isDemoMode ? (
+          <DemoNotice>Compartilhamento simulado. A autorização real e o armazenamento no Firebase Storage serão implementados no backend.</DemoNotice>
+        ) : (
+          <p className="text-[12px] text-fg-subtle">O acesso vale também para o arquivo: só o público escolhido, quem enviou e quem administra Documentos conseguem abri-lo ou baixá-lo.</p>
         )}
+        <FormAlert message={serverError} />
       </form>
     </DialogContent>
   );

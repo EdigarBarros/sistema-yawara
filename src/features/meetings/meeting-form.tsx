@@ -5,16 +5,18 @@ import { useRouter } from "next/navigation";
 import { Controller, get, useFieldArray, useForm, useWatch, type Path } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowLeft, ArrowRight, Check, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Plus, Trash2, UserPlus } from "lucide-react";
 import type { Meeting, MeetingMode } from "@/types";
 import { services } from "@/services";
 import { useAction } from "@/hooks/use-action";
-import { useDocuments } from "@/hooks/use-data";
+import { useAccess } from "@/hooks/use-access";
+import { useDocuments, useEvents } from "@/hooks/use-data";
 import { MEETING_MODE_LABELS } from "@/lib/labels";
 import { emptyAudience } from "@/lib/permissions";
 import { audienceError, audienceSchema, dateField, requiredText, timeField } from "@/lib/validation";
 import { liveRegister } from "@/lib/forms";
 import { formatDate } from "@/lib/format";
+import { isDemoMode } from "@/lib/mode";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/form";
 import { Panel } from "@/components/shared/page";
@@ -22,6 +24,10 @@ import { Stepper } from "@/components/shared/stepper";
 import { MemberMultiPicker, MemberSelect } from "@/components/shared/pickers";
 import { AudiencePicker, AudienceSummary } from "@/components/shared/audience";
 import { DemoNotice } from "@/components/shared/states";
+
+/** Limites dos convidados externos (os mesmos do servidor). */
+const MAX_GUESTS = 50;
+const MAX_GUEST_LENGTH = 80;
 
 const schema = z
   .object({
@@ -32,6 +38,18 @@ const schema = z
     mode: z.enum(["presencial", "online", "hibrida"]),
     location: requiredText("o local ou link", 2),
     participantIds: z.array(z.string()).min(1, "Selecione pelo menos um participante."),
+    guests: z
+      .array(
+        z.object({
+          value: z
+            .string()
+            .trim()
+            .max(MAX_GUEST_LENGTH, `O nome pode ter no máximo ${MAX_GUEST_LENGTH} caracteres.`)
+            .refine((v) => v === "" || v.length >= 2, "Informe o nome completo (mínimo de 2 caracteres)."),
+        }),
+      )
+      .refine((list) => list.filter((g) => g.value.trim()).length <= MAX_GUESTS, `Informe no máximo ${MAX_GUESTS} convidados externos.`),
+    eventId: z.string(),
     agenda: z.array(z.object({ value: z.string() })),
     summary: z.string().trim().max(4000),
     decisions: z.array(z.object({ value: z.string() })),
@@ -45,8 +63,8 @@ const schema = z
 type Values = z.infer<typeof schema>;
 
 const STEPS: { key: string; title: string; description: string; fields: Path<Values>[] }[] = [
-  { key: "dados", title: "Informações", description: "Título, data e local", fields: ["title", "date", "startTime", "endTime", "mode", "location"] },
-  { key: "participantes", title: "Participantes", description: "Quem participou", fields: ["participantIds"] },
+  { key: "dados", title: "Informações", description: "Título, data e local", fields: ["title", "date", "startTime", "endTime", "mode", "location", "eventId"] },
+  { key: "participantes", title: "Participantes", description: "Quem participou", fields: ["participantIds", "guests"] },
   { key: "pauta", title: "Pauta e discussões", description: "Pauta, resumo e decisões", fields: ["summary"] },
   { key: "encaminhamentos", title: "Encaminhamentos", description: "Responsáveis e documentos", fields: [] },
   { key: "visibilidade", title: "Visibilidade", description: "Quem pode consultar", fields: ["access"] },
@@ -62,6 +80,8 @@ function toValues(m?: Meeting): Values {
       mode: "presencial",
       location: "",
       participantIds: [],
+      guests: [],
+      eventId: "",
       agenda: [{ value: "" }],
       summary: "",
       decisions: [{ value: "" }],
@@ -77,6 +97,8 @@ function toValues(m?: Meeting): Values {
     mode: m.mode,
     location: m.location,
     participantIds: m.participantIds,
+    guests: (m.guests ?? []).map((value) => ({ value })),
+    eventId: m.eventId ?? "",
     agenda: m.agenda.length ? m.agenda.map((value) => ({ value })) : [{ value: "" }],
     summary: m.summary,
     decisions: m.decisions.length ? m.decisions.map((value) => ({ value })) : [{ value: "" }],
@@ -86,31 +108,47 @@ function toValues(m?: Meeting): Values {
   };
 }
 
-function ListEditor({ label, placeholder, fields, onAdd, onRemove, register, name }: {
+function ListEditor({ label, placeholder, fields, onAdd, onRemove, register, name, addLabel = "Adicionar item", addIcon = <Plus />, allowEmpty = false, maxItems, itemErrors, maxLength }: {
   label: string;
   placeholder: string;
   fields: { id: string }[];
   onAdd: () => void;
   onRemove: (i: number) => void;
   register: ReturnType<typeof liveRegister<Values>>;
-  name: "agenda" | "decisions";
+  name: "agenda" | "decisions" | "guests";
+  addLabel?: string;
+  addIcon?: React.ReactNode;
+  /** Permite remover todos os itens (lista opcional). */
+  allowEmpty?: boolean;
+  maxItems?: number;
+  itemErrors?: (string | undefined)[];
+  maxLength?: number;
 }) {
   return (
     <div>
       <p className="mb-2 text-[13px] font-medium">{label}</p>
       <ol className="space-y-2">
         {fields.map((f, i) => (
-          <li key={f.id} className="flex items-center gap-2">
-            <span className="w-6 shrink-0 text-right font-mono text-[12px] text-fg-subtle">{i + 1}.</span>
-            <Input placeholder={placeholder} aria-label={`${label} ${i + 1}`} {...register(`${name}.${i}.value` as Path<Values>)} />
-            <Button size="icon-sm" variant="ghost" aria-label={`Remover item ${i + 1}`} onClick={() => onRemove(i)} disabled={fields.length === 1}>
-              <Trash2 />
-            </Button>
+          <li key={f.id}>
+            <div className="flex items-center gap-2">
+              <span className="w-6 shrink-0 text-right font-mono text-[12px] text-fg-subtle">{i + 1}.</span>
+              <Input
+                placeholder={placeholder}
+                aria-label={`${label} ${i + 1}`}
+                aria-invalid={itemErrors?.[i] ? true : undefined}
+                maxLength={maxLength}
+                {...register(`${name}.${i}.value` as Path<Values>)}
+              />
+              <Button size="icon-sm" variant="ghost" aria-label={`Remover item ${i + 1}`} onClick={() => onRemove(i)} disabled={!allowEmpty && fields.length === 1}>
+                <Trash2 />
+              </Button>
+            </div>
+            {itemErrors?.[i] && <p className="mt-1 ml-8 text-xs font-medium text-danger">{itemErrors[i]}</p>}
           </li>
         ))}
       </ol>
-      <Button size="sm" variant="ghost" className="mt-2" onClick={onAdd}>
-        <Plus /> Adicionar item
+      <Button size="sm" variant="ghost" className="mt-2" onClick={onAdd} disabled={maxItems !== undefined && fields.length >= maxItems}>
+        {addIcon} {addLabel}
       </Button>
     </div>
   );
@@ -119,17 +157,26 @@ function ListEditor({ label, placeholder, fields, onAdd, onRemove, register, nam
 /** Registro e edição de reunião em etapas. */
 export function MeetingForm({ meeting }: { meeting?: Meeting }) {
   const router = useRouter();
+  const access = useAccess();
   const [step, setStep] = useState(0);
   const { data: documents } = useDocuments();
+  const canSeeEvents = access.canModule("events");
+  const eventsQuery = useEvents(canSeeEvents);
   const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: toValues(meeting) });
   const register = liveRegister(form);
   const { control, trigger, handleSubmit, formState } = form;
   const errors = formState.errors;
   const agenda = useFieldArray({ control, name: "agenda" });
   const decisions = useFieldArray({ control, name: "decisions" });
+  const guests = useFieldArray({ control, name: "guests" });
   const actions = useFieldArray({ control, name: "actions" });
   const accessValue = useWatch({ control, name: "access" });
   const participants = useWatch({ control, name: "participantIds" });
+  const selectedEventId = useWatch({ control, name: "eventId" });
+  // Eventos que o perfil pode ver (cancelados só aparecem se já estiverem vinculados).
+  const eventOptions = (eventsQuery.data ?? []).filter((e) => e.status !== "cancelled" || e.id === selectedEventId || e.id === meeting?.eventId).sort((a, b) => b.date.localeCompare(a.date));
+  // O evento já vinculado continua como opção mesmo quando não aparece na lista (restrito ao perfil ou ainda carregando).
+  const linkedEventHidden = !!meeting?.eventId && !eventOptions.some((e) => e.id === meeting.eventId);
 
   const save = useAction(
     (v: Values) => {
@@ -141,6 +188,8 @@ export function MeetingForm({ meeting }: { meeting?: Meeting }) {
         mode: v.mode,
         location: v.location,
         participantIds: v.participantIds,
+        guests: v.guests.map((g) => g.value.trim()).filter(Boolean),
+        eventId: v.eventId || undefined,
         agenda: v.agenda.map((a) => a.value),
         summary: v.summary,
         decisions: v.decisions.map((d) => d.value),
@@ -209,20 +258,67 @@ export function MeetingForm({ meeting }: { meeting?: Meeting }) {
               <Field label="Local ou link" required className="sm:col-span-2" error={errors.location?.message}>
                 <Input placeholder="Sala da Atlética ou videochamada" {...register("location")} />
               </Field>
+              <Field
+                label="Evento relacionado"
+                optional
+                className="sm:col-span-3"
+                error={errors.eventId?.message}
+                hint={
+                  !canSeeEvents
+                    ? "Seu perfil não tem acesso aos eventos."
+                    : eventsQuery.isError
+                      ? "Não foi possível carregar os eventos. Tente novamente mais tarde."
+                      : "Quando a reunião trata de um evento. Aparecem os eventos que o seu perfil pode ver."
+                }
+              >
+                <Select {...register("eventId")}>
+                  <option value="">{eventsQuery.isLoading ? "Carregando eventos…" : "Nenhum evento"}</option>
+                  {linkedEventHidden && <option value={meeting!.eventId}>{eventsQuery.isLoading ? "Evento vinculado (carregando…)" : "Evento vinculado (não disponível para o seu perfil)"}</option>}
+                  {eventOptions.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.name} · {formatDate(e.date)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
             </div>
           </Panel>
         )}
 
         {step === 1 && (
-          <Panel title="Participantes" description="Escolha na lista de integrantes (fictícios).">
-            <Controller
-              control={control}
-              name="participantIds"
-              render={({ field }) => <MemberMultiPicker value={field.value} onChange={field.onChange} invalid={!!errors.participantIds} />}
-            />
-            {errors.participantIds && <p className="mt-1.5 text-xs font-medium text-danger">{errors.participantIds.message}</p>}
-            <p className="mt-2 text-[12.5px] text-fg-muted">{participants.length} participante(s) selecionado(s).</p>
-          </Panel>
+          <>
+            <Panel title="Participantes" description={isDemoMode ? "Escolha na lista de integrantes (fictícios)." : "Escolha entre os integrantes ativos da Central."}>
+              <Controller
+                control={control}
+                name="participantIds"
+                render={({ field }) => <MemberMultiPicker value={field.value} onChange={field.onChange} invalid={!!errors.participantIds} />}
+              />
+              {errors.participantIds && <p className="mt-1.5 text-xs font-medium text-danger">{errors.participantIds.message}</p>}
+              <p className="mt-2 text-[12.5px] text-fg-muted">{participants.length} participante(s) selecionado(s).</p>
+            </Panel>
+            <Panel title="Convidados externos" description="Pessoas de fora da Central que participaram (ex.: palestrantes, representantes de outras entidades).">
+              {guests.fields.length === 0 && <p className="mb-1 text-[13px] text-fg-subtle">Nenhum convidado externo.</p>}
+              <ListEditor
+                label="Nomes dos convidados"
+                placeholder="Nome do convidado"
+                name="guests"
+                fields={guests.fields}
+                onAdd={() => guests.append({ value: "" })}
+                onRemove={guests.remove}
+                register={register}
+                addLabel="Adicionar convidado"
+                addIcon={<UserPlus />}
+                allowEmpty
+                maxItems={MAX_GUESTS}
+                maxLength={MAX_GUEST_LENGTH}
+                itemErrors={guests.fields.map((_, i) => errors.guests?.[i]?.value?.message)}
+              />
+              {(errors.guests?.root?.message ?? errors.guests?.message) && <p className="mt-1.5 text-xs font-medium text-danger">{errors.guests?.root?.message ?? errors.guests?.message}</p>}
+              <p className="mt-2 text-[12px] text-fg-subtle">
+                Registre apenas o nome. Convidados não precisam ter conta na Central e não recebem acesso ao registro; outros dados pessoais não devem ser anotados aqui.
+              </p>
+            </Panel>
+          </>
         )}
 
         {step === 2 && (
@@ -306,7 +402,7 @@ export function MeetingForm({ meeting }: { meeting?: Meeting }) {
               )}
             />
             <div className="mt-4 rounded-lg border border-line bg-sunken px-4 py-3">
-              <AudienceSummary audience={accessValue} alwaysIncluded={participants} />
+              <AudienceSummary module="meetings" audience={accessValue} alwaysIncluded={participants} />
               <p className="mt-2 text-[12px] text-fg-subtle">Participantes com acesso à Secretaria também podem consultar.</p>
             </div>
             <DemoNotice className="mt-4">{meeting ? "As alterações ficam registradas no histórico." : "A reunião será salva como rascunho. Depois, envie a ata para aprovação."}</DemoNotice>

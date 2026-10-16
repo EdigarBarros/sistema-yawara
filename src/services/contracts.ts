@@ -34,6 +34,10 @@ import type {
   FinanceCategory,
   FinanceEntry,
   ID,
+  AuditPage,
+  AuditQuery,
+  FileRef,
+  Invitation,
   InstitutionalDocument,
   InstitutionSettings,
   Meeting,
@@ -67,15 +71,29 @@ export interface DemoProfile {
   department: Department | undefined;
 }
 
+export interface InvitationPreview {
+  name: string;
+  email: string;
+  roleName: string;
+  expiresAt: string;
+}
+
 export interface AuthService {
+  /** "demo": perfis fictícios sem senha; "firebase": Firebase Authentication. */
+  readonly mode: "demo" | "firebase";
   /**
-   * Login por e-mail e senha. Nesta etapa só aceita e-mails de perfis de
-   * demonstração e NÃO verifica senha — a tela deixa isso explícito.
+   * Login por e-mail e senha. Demonstração: só aceita e-mails de perfis
+   * fictícios e NÃO verifica senha. Firebase: autenticação real.
+   * `remember` = manter a sessão neste dispositivo (padrão) ou só nesta aba.
    */
-  signInWithPassword(email: string, password: string): Promise<DemoProfile>;
+  signInWithPassword(email: string, password: string, options?: { remember?: boolean }): Promise<DemoProfile>;
   listDemoProfiles(): Promise<DemoProfile[]>;
-  /** Recuperação de senha: indisponível sem backend. */
-  requestPasswordReset(email: string): Promise<{ available: false }>;
+  /** Firebase: envia o e-mail oficial de redefinição (resposta neutra, sem revelar se o e-mail existe). */
+  requestPasswordReset(email: string): Promise<{ available: boolean }>;
+  signOut(): Promise<void>;
+  previewInvitation(token: string): Promise<InvitationPreview>;
+  /** Cria a conta a partir do convite e já inicia a sessão. */
+  acceptInvitation(token: string, password: string): Promise<{ email: string }>;
 }
 
 /* ----------------------------- Organização ------------------------------ */
@@ -111,14 +129,33 @@ export interface MemberInput {
   status: "active" | "inactive";
 }
 
+export interface InviteInput {
+  name: string;
+  email: string;
+  roleId: ID;
+  /** Departamentos adicionais (além do departamento do cargo). */
+  departmentIds: ID[];
+}
+
+export interface InvitationResult {
+  invitation: Invitation;
+  /** Link de uso único para enviar à pessoa. Só é exibido uma vez (null em reenvios da mesma requisição). */
+  link: string | null;
+}
+
 export interface OrganizationService {
   snapshot(): Promise<OrganizationSnapshot>;
   createRole(input: RoleInput): Promise<Role>;
   updateRole(id: ID, input: Partial<RoleInput>): Promise<Role>;
   createDepartment(input: DepartmentInput): Promise<Department>;
   updateDepartment(id: ID, input: Partial<DepartmentInput>): Promise<Department>;
+  /** Somente demonstração. Com o Firebase, integrantes entram por convite. */
   createMember(input: MemberInput): Promise<Member>;
-  updateMember(id: ID, input: Partial<MemberInput>): Promise<Member>;
+  updateMember(id: ID, input: Partial<MemberInput> & { departmentIds?: ID[] }): Promise<Member>;
+  listInvitations(): Promise<Invitation[]>;
+  inviteMember(input: InviteInput): Promise<InvitationResult>;
+  renewInvitation(id: ID): Promise<InvitationResult>;
+  revokeInvitation(id: ID): Promise<Invitation>;
 }
 
 /* ------------------------------ Campanhas ------------------------------- */
@@ -134,6 +171,8 @@ export interface CampaignInput {
   endDate?: DateOnly;
   notes?: string;
   access: CampaignAccess;
+  /** Evento relacionado (opcional). */
+  eventId?: ID;
 }
 
 export type CampaignUpdateInput = Partial<Omit<CampaignInput, "quantity" | "unitPrice">>;
@@ -162,6 +201,8 @@ export interface ConfirmPaymentInput {
 }
 
 export interface CampaignService {
+  /** Avisa quando a campanha ou as vendas dela mudam (tempo real). Retorna a função para cancelar. */
+  subscribe?(campaignId: ID, onChange: () => void): () => void;
   list(): Promise<Campaign[]>;
   get(id: ID): Promise<Campaign>;
   /** Vendas de uma campanha. Dados do comprador vêm `null` quando o perfil não pode consultá-los. */
@@ -263,6 +304,10 @@ export interface MeetingInput {
   mode: MeetingMode;
   location: string;
   participantIds: ID[];
+  /** Participantes externos (apenas nomes). */
+  guests?: string[];
+  /** Evento relacionado (opcional). */
+  eventId?: ID;
   agenda: string[];
   summary: string;
   decisions: string[];
@@ -322,6 +367,8 @@ export interface ContentInput {
   briefing: string;
   notes?: string;
   links: ContentLink[];
+  /** Quem pode ver o conteúdo (padrão: todos os integrantes com acesso ao Marketing). */
+  access?: Audience;
 }
 
 export interface MarketingService {
@@ -385,6 +432,8 @@ export interface NotificationService {
   list(): Promise<AppNotification[]>;
   markRead(id: ID): Promise<void>;
   markAllRead(): Promise<void>;
+  /** Avisa quando chegam notificações novas (tempo real). Retorna a função para cancelar. */
+  subscribe?(onChange: () => void): () => void;
 }
 
 export interface SearchService {
@@ -394,8 +443,40 @@ export interface SearchService {
 /* ------------------------------- Arquivos ------------------------------- */
 
 export interface FileService {
-  /** URL temporária para visualizar/baixar um arquivo escolhido nesta sessão, ou null. */
+  /** Demonstração: URL temporária de um arquivo escolhido nesta sessão, ou null. */
   getObjectUrl(blobId?: string): string | null;
+  /** O conteúdo do arquivo pode ser aberto neste ambiente? */
+  isAvailable(file: FileRef | null | undefined): boolean;
+  /**
+   * Abre (ou baixa) o arquivo. Firebase: o download é autenticado e só
+   * funciona para quem pode ver o registro; nenhuma URL pública é criada.
+   */
+  open(file: FileRef, options?: { download?: boolean }): Promise<void>;
+  /** URL local (blob:) para pré-visualizar o arquivo na página. Quem chama deve revogá-la ao desmontar. */
+  loadObjectUrl(file: FileRef): Promise<string>;
+}
+
+/* ------------------------------- Auditoria ------------------------------ */
+
+export interface ExportRecordInput {
+  module: ModuleKey;
+  resourceType: string;
+  resourceId: ID;
+  /** Ex.: "PDF interno com dados dos compradores (todos os números)". Sem dados pessoais. */
+  summary: string;
+  /** A exportação incluiu dados pessoais? */
+  personalData: boolean;
+}
+
+export interface AuditService {
+  /** Registros de auditoria (mais recentes primeiro), paginados. Exige `audit.view`. */
+  list(query: AuditQuery): Promise<AuditPage>;
+  /**
+   * Registra na auditoria que um arquivo foi exportado (PDF/CSV/PNG gerado no
+   * navegador a partir de dados que o perfil já podia ver). Melhor esforço:
+   * falhas não impedem a exportação. Demonstração: não faz nada.
+   */
+  recordExport(input: ExportRecordInput): Promise<void>;
 }
 
 export interface Services {
@@ -412,4 +493,5 @@ export interface Services {
   notifications: NotificationService;
   search: SearchService;
   files: FileService;
+  audit: AuditService;
 }

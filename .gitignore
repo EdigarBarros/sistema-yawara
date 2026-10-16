@@ -4,6 +4,27 @@ out/
 coverage/
 *.tsbuildinfo
 next-env.d.ts
-.env*
 .DS_Store
 npm-debug.log*
+
+# Variáveis de ambiente (os modelos .example são versionados)
+.env*
+!.env.example
+functions/.env*
+!functions/.env.example
+
+# Firebase
+.firebase/
+.firebaserc
+firebase-debug*.log
+firestore-debug.log
+storage-debug.log
+ui-debug.log
+functions/lib/
+emulator-data/
+firebase.*.local.json
+
+# Credenciais nunca devem ir para o repositório
+*service-account*.json
+*serviceAccount*.json
+*-firebase-adminsdk-*.json

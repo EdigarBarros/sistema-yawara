@@ -27,6 +27,8 @@ export interface FinanceEntry {
   paymentMethod?: PaymentMethod;
   status: EntryStatus;
   receipt?: FileRef;
+  /** Firebase: comprovantes substituídos (nunca apagados). */
+  receiptHistory?: FileRef[];
   notes?: string;
   createdBy: ID;
   createdAt: ISODateTime;

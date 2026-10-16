@@ -2,7 +2,6 @@ import type { DocumentInput, DocumentService } from "../contracts";
 import type { InstitutionalDocument } from "@/types";
 import type { DemoDB } from "@/data/demo/seed";
 import type { AccessContext } from "@/lib/permissions";
-import { hasPermission } from "@/lib/permissions";
 import { AUDIENCE_SCOPE_LABELS, DOCUMENT_STATUS } from "@/lib/labels";
 import { newId } from "@/lib/utils";
 import { commit, getDB } from "./db";
@@ -21,7 +20,7 @@ import {
   ServiceError,
   validateAudience,
 } from "./context";
-import { canEditDocument, canSeeDocument } from "@/lib/policies";
+import { canEditDocument, canMarkDocumentCurrent, canSeeDocument } from "@/lib/policies";
 
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 
@@ -104,7 +103,7 @@ export const localDocuments: DocumentService = {
       const doc = visibleDoc(db, ctx, id);
       if (!canEditDocument(ctx, doc)) throw new ServiceError("forbidden", "Seu perfil não pode editar este documento.");
       if (input.name !== undefined && input.name.trim().length < 3) throw new ServiceError("invalid", "Informe o nome do documento.");
-      if (input.status === "current" && doc.status !== "current" && !hasPermission(ctx, "documents.approve") && doc.createdBy !== ctx.user.id) {
+      if (input.status === "current" && doc.status !== "current" && !canMarkDocumentCurrent(ctx, doc)) {
         throw new ServiceError("forbidden", "Seu perfil não pode marcar documentos como vigentes.");
       }
       const statusChanged = input.status && input.status !== doc.status;
@@ -146,9 +145,15 @@ export const localDocuments: DocumentService = {
       if (!canEditDocument(ctx, doc)) throw new ServiceError("forbidden", "Seu perfil não pode enviar novas versões deste documento.");
       if (doc.status === "archived") throw new ServiceError("conflict", "Restaure o documento antes de enviar uma nova versão.");
       const version = doc.versions.length + 1;
+      // Como no servidor: documento vigente com versão nova de quem não valida volta para "Em elaboração".
+      const awaitingValidation = doc.status === "current" && !canMarkDocumentCurrent(ctx, doc);
       doc.versions.push({ version, file: storeFile(file), uploadedBy: ctx.user.id, uploadedAt: now(), note: note?.trim() || undefined });
       doc.updatedAt = now();
       doc.history.push(historyEntry(ctx.user.id, "version", `Versão ${version} enviada; versões anteriores mantidas`));
+      if (awaitingValidation) {
+        doc.status = "draft";
+        doc.history.push(historyEntry(ctx.user.id, "status", `Nova versão aguardando validação: situação alterada para ${DOCUMENT_STATUS.draft.label}`));
+      }
       return clone(doc);
     });
   },
@@ -174,9 +179,10 @@ export const localDocuments: DocumentService = {
       const doc = visibleDoc(db, ctx, id);
       if (doc.createdBy !== ctx.user.id) requirePermission(ctx, "documents.archive", "Seu perfil não pode restaurar documentos.");
       if (doc.status !== "archived") throw new ServiceError("conflict", "O documento não está arquivado.");
-      doc.status = "current";
+      // Como no servidor: volta vigente só para quem pode marcar como vigente; senão, em elaboração.
+      doc.status = canMarkDocumentCurrent(ctx, doc) ? "current" : "draft";
       doc.updatedAt = now();
-      doc.history.push(historyEntry(ctx.user.id, "restored", "Documento restaurado"));
+      doc.history.push(historyEntry(ctx.user.id, "restored", doc.status === "current" ? "Documento restaurado" : "Documento restaurado (em elaboração)"));
       return clone(doc);
     });
   },

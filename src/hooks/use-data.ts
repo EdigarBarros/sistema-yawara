@@ -21,7 +21,7 @@ export function useOrganization() {
 
 /** Acesso rápido a nomes de integrantes, cargos e departamentos. */
 export function useDirectory() {
-  const { data, isLoading } = useOrganization();
+  const { data, isLoading, isError, error, refetch } = useOrganization();
   return useMemo(() => {
     const members = data?.members ?? [];
     const roles = data?.roles ?? [];
@@ -30,6 +30,9 @@ export function useDirectory() {
     const roleMap = new Map(roles.map((r) => [r.id, r]));
     const depMap = new Map(departments.map((d) => [d.id, d]));
     return {
+      /** Falha ao carregar a estrutura (sem dados anteriores). */
+      error: isError && !data ? error : null,
+      refetch,
       loading: isLoading,
       members,
       roles,
@@ -49,7 +52,7 @@ export function useDirectory() {
         return r ? depMap.get(r.departmentId) : undefined;
       },
     };
-  }, [data, isLoading]);
+  }, [data, isLoading, isError, error, refetch]);
 }
 
 export function useSettings() {
@@ -57,9 +60,9 @@ export function useSettings() {
   return useQuery({ queryKey: [uid, "settings"], queryFn: () => services.settings.get(), enabled: uid !== "anon" });
 }
 
-export function useCampaigns() {
+export function useCampaigns(enabled = true) {
   const uid = useUid();
-  return useQuery({ queryKey: [uid, "campaigns"], queryFn: () => services.campaigns.list() });
+  return useQuery({ queryKey: [uid, "campaigns"], queryFn: () => services.campaigns.list(), enabled });
 }
 export function useCampaign(id: ID) {
   const uid = useUid();

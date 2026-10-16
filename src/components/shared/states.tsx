@@ -1,8 +1,15 @@
+"use client";
+
 import type { ReactNode } from "react";
-import { AlertTriangle, FlaskConical, Inbox, Loader2, Lock, RotateCcw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { usePathname } from "next/navigation";
+import { AlertTriangle, FlaskConical, Inbox, Loader2, Lock, PowerOff, RotateCcw, SearchX } from "lucide-react";
+import type { ModuleKey } from "@/types";
+import { Button, ButtonLink } from "@/components/ui/button";
+import { ServiceError } from "@/services/errors";
 import { Skeleton } from "@/components/ui/misc";
+import { useAccess } from "@/hooks/use-access";
 import { cn } from "@/lib/utils";
+import { moduleForPath, restrictedNotice } from "./module-route";
 
 export function EmptyState({
   icon,
@@ -48,17 +55,59 @@ export function ErrorState({ message, onRetry, className }: { message: string; o
   );
 }
 
-/** Exibido quando o perfil demonstrativo não tem acesso à área. */
-export function RestrictedState({ title = "Área não disponível para este perfil", description }: { title?: string; description?: ReactNode }) {
-  return (
-    <EmptyState
-      icon={<Lock />}
-      title={title}
-      description={
-        description ?? "O perfil de demonstração em uso não tem permissão para esta área. Troque de perfil no topo da tela para experimentar outras visões."
-      }
-    />
-  );
+/**
+ * Falha ao abrir um registro (página de detalhe). Sem permissão e "não
+ * encontrado" não oferecem "Tentar novamente" — repetir não muda o resultado.
+ */
+export function RecordErrorState({
+  error,
+  notFound,
+  backHref,
+  backLabel = "Voltar à lista",
+  onRetry,
+}: {
+  error: unknown;
+  notFound: string;
+  backHref?: string;
+  backLabel?: string;
+  onRetry?: () => void;
+}) {
+  const code = error instanceof ServiceError ? error.code : null;
+  const back = backHref ? <ButtonLink href={backHref}>{backLabel}</ButtonLink> : undefined;
+  if (!error || code === "not_found") {
+    return (
+      <EmptyState
+        icon={<SearchX />}
+        title={notFound}
+        description={error instanceof ServiceError ? error.message : "O registro pode ter sido removido ou o link está incorreto."}
+        action={back}
+      />
+    );
+  }
+  if (code === "forbidden") {
+    return (
+      <EmptyState
+        icon={<Lock />}
+        title="Registro não disponível para o seu perfil"
+        description={`${(error as ServiceError).message} Se precisar de acesso, fale com quem criou o registro ou com a presidência.`}
+        action={back}
+      />
+    );
+  }
+  const message = error instanceof Error && error.message ? error.message : "Não foi possível carregar os dados agora. Tente novamente.";
+  return <ErrorState message={message} onRetry={onRetry} />;
+}
+
+/**
+ * Exibido quando o perfil não tem acesso à área. Se o módulo da área (deduzido
+ * da rota, ou informado em `module`) estiver desativado nas Configurações, o
+ * aviso diz isso em vez de falar em permissão do cargo.
+ */
+export function RestrictedState({ title, description, module }: { title?: string; description?: ReactNode; module?: ModuleKey }) {
+  const pathname = usePathname();
+  const access = useAccess();
+  const notice = restrictedNotice({ module: module ?? moduleForPath(pathname), moduleEnabled: access.moduleEnabled, title, description });
+  return <EmptyState icon={notice.disabled ? <PowerOff /> : <Lock />} title={notice.title} description={notice.description} />;
 }
 
 export function FullPageLoader({ label = "Carregando a Central…" }: { label?: string }) {

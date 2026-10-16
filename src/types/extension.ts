@@ -40,7 +40,15 @@ export interface ExtensionProject {
   location: string;
   speakers: Speaker[];
   schedule: ScheduleItem[];
+  /**
+   * Lista de presença (dados pessoais). Com o Firebase, só vem preenchida para
+   * quem pode editar o projeto; para os demais perfis vem vazia e
+   * `attendeesRestricted` = true.
+   */
   attendees: Attendee[];
+  /** Quantidade de inscritos — disponível mesmo quando a lista é restrita. */
+  attendeeCount?: number;
+  attendeesRestricted?: boolean;
   certificateStatus: CertificateStatus;
   certificateHours?: number;
   report?: string;

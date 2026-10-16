@@ -20,6 +20,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/form";
 import { MemberMultiPicker } from "@/components/shared/pickers";
 import { AudiencePicker, AudienceSummary } from "@/components/shared/audience";
+import { FormAlert } from "@/components/shared/form-alert";
 import { eventSchema, type EventFormValues } from "./schemas";
 
 export const EVENT_SCOPES = ["department", "board", "all", "roles", "people"] as const;
@@ -209,7 +210,7 @@ function EventFormBody({ onOpenChange, event }: Props) {
             )}
           />
           <div className="rounded-lg border border-line bg-sunken px-4 py-3">
-            <AudienceSummary audience={accessValue} departmentId={departmentId} alwaysIncluded={responsibleIds} />
+            <AudienceSummary module="events" audience={accessValue} departmentId={departmentId} alwaysIncluded={responsibleIds} />
             <p className="mt-2 text-[12px] text-fg-subtle">Os responsáveis designados sempre têm acesso.</p>
           </div>
         </Section>
@@ -218,11 +219,7 @@ function EventFormBody({ onOpenChange, event }: Props) {
           <Textarea rows={2} {...register("notes")} />
         </Field>
 
-        {serverError && (
-          <p role="alert" className="rounded-lg border border-danger/35 bg-danger/10 px-3.5 py-2.5 text-[13px] text-danger">
-            {serverError}
-          </p>
-        )}
+        <FormAlert message={serverError} />
       </form>
     </DialogContent>
   );

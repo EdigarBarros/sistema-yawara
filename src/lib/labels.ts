@@ -3,6 +3,7 @@
  * Centralizados aqui para que a mesma situação tenha sempre o mesmo nome e
  * a mesma cor em qualquer tela.
  */
+import { isDemoMode } from "./mode";
 import type {
   ActivityType,
   AudienceScope,
@@ -46,6 +47,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   extension: "Ensino e Extensão",
   organization: "Diretoria e organização",
   settings: "Configurações",
+  audit: "Auditoria",
 };
 
 export const ACTION_LABELS: Record<PermissionAction, string> = {
@@ -224,7 +226,7 @@ export const PROJECT_STATUS: Record<ProjectStatus, StatusMeta> = {
 export const CERTIFICATE_STATUS: Record<CertificateStatus, StatusMeta> = {
   not_started: { label: "Não iniciados", tone: "neutral" },
   in_progress: { label: "Em preparação", tone: "info" },
-  issued: { label: "Emitidos (demonstração)", tone: "ok" },
+  issued: { label: isDemoMode ? "Emitidos (demonstração)" : "Emitidos", tone: "ok" },
 };
 
 export const HISTORY_ACTION_LABELS: Record<HistoryAction, string> = {
