@@ -76,7 +76,9 @@ Blaze, ative com `scripts/enable-ttl.sh`.
 1. Crie uma conta em vercel.com (pode entrar com o GitHub) e importe o
    repositório `sistema-yawara`. O framework é detectado como Next.js.
 2. Settings → **Functions** → Function Region: **São Paulo (gru1)**, perto do
-   Firestore (deixa as operações mais rápidas).
+   Firestore (deixa as operações mais rápidas). A versão do Node.js vem do
+   `package.json` (`engines.node: 22.x`); não a troque para 20.x: o servidor
+   precisa do Node 22.12 ou superior.
 3. Settings → **Environment Variables** (Production):
 
    | Variável | Valor |
