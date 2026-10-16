@@ -26,7 +26,7 @@ As duas usam **o mesmo código de servidor** (`functions/src`), as mesmas regras
 
 ## Como rodar localmente
 
-Requisitos: **Node.js 20.9 ou superior** (22 recomendado) e npm. Para os emuladores do Firebase: **Java 21** e a CLI do Firebase (instalada como dependência de desenvolvimento).
+Requisitos: **Node.js 22.12 ou superior** (o servidor carrega pacotes ESM via `require`) e npm. Para os emuladores do Firebase: **Java 21** e a CLI do Firebase (instalada como dependência de desenvolvimento).
 
 ### Modo demonstração
 
