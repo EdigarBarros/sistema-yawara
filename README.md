@@ -7,11 +7,20 @@ O aplicativo tem dois modos, escolhidos pela variável `NEXT_PUBLIC_DATA_SOURCE`
 | Modo | Para quê | Onde ficam os dados |
 |---|---|---|
 | `demo` (padrão) | Apresentação e testes de interface | Dados **fictícios**, só no navegador (localStorage). Perfis simulados, sem senha |
-| `firebase` | Uso real | Firebase Authentication, Cloud Firestore, Cloud Storage e Cloud Functions. Login com e-mail e senha, contas só por convite |
+| `firebase` | Uso real | Firebase Authentication e Cloud Firestore; operações do servidor na rota de API do aplicativo (ou em Cloud Functions). Login com e-mail e senha, contas só por convite |
 
 Os dois modos **nunca se misturam**: no modo `firebase` não há perfis de demonstração, seletor "Demo" nem dados fictícios, e os dados de demonstração nunca são copiados para um projeto real.
 
-> **Situação atual.** O backend foi implementado e testado **somente com o Firebase Emulator Suite**. Nenhum projeto Firebase real foi criado ou configurado: isso depende do responsável pela Atlética (ver [Implantação](docs/backend/implantacao.md)).
+Há dois jeitos de colocar o modo `firebase` no ar:
+
+| Implantação | Firebase | Servidor | Arquivos | Custo |
+|---|---|---|---|---|
+| **Gratuita (recomendada)** — [guia](docs/backend/implantacao-gratuita.md) | plano Spark | rota `src/app/api/[api]/route.ts` na hospedagem (ex.: Vercel Hobby) | links (Google Drive, OneDrive…) | R$ 0 |
+| Plano Blaze — [guia](docs/backend/implantacao.md) | plano Blaze | Cloud Functions | envio para o Cloud Storage | por uso |
+
+As duas usam **o mesmo código de servidor** (`functions/src`), as mesmas regras e os mesmos testes. A escolha é feita por variáveis (`NEXT_PUBLIC_API_TRANSPORT`, `NEXT_PUBLIC_FILE_STORAGE` — ver `.env.example`).
+
+> **Situação atual.** O backend foi implementado e testado **somente com o Firebase Emulator Suite**. Nada foi publicado num projeto real: isso depende do responsável pela Atlética.
 
 ---
 
@@ -104,11 +113,13 @@ src/
   services/
     contracts.ts         interfaces usadas pelas telas
     local/               modo demonstração (navegador)
-    firebase/            modo Firebase (leituras com regras + chamadas às Cloud Functions)
+    firebase/            modo Firebase (leituras com regras + chamadas ao servidor)
     index.ts             escolhe a implementação pelo modo
   lib/                   permissões, políticas, marcadores de acesso, modelo do Firestore (compartilhado com o servidor)
   data/demo/             dados fictícios (só para o modo demo e o seed do emulador)
-functions/               Cloud Functions (todas as gravações, validação, auditoria, arquivos)
+  app/api/[api]/         rota de API do servidor (implantação gratuita)
+functions/               código do servidor: todas as gravações, validação, auditoria, arquivos
+                         (roda na rota acima ou como Cloud Functions)
 firestore.rules          regras do Firestore (fechado por padrão)
 storage.rules            regras do Storage
 firestore.indexes.json   índices e TTL
@@ -118,7 +129,7 @@ docs/backend/            documentação técnica do backend
 ```
 
 - **As telas nunca acessam os dados diretamente**: chamam `services.*` (via React Query).
-- **Toda gravação de dados de negócio passa pelas Cloud Functions**, que conferem identidade, conta ativa, permissões e regras de negócio, gravam em transação, registram auditoria e aplicam idempotência. O navegador só lê (com as regras de segurança) e marca as próprias notificações como lidas.
+- **Toda gravação de dados de negócio passa pelo servidor** (rota de API ou Cloud Functions), que confere identidade, conta ativa, permissões e regras de negócio, gravam em transação, registram auditoria e aplicam idempotência. O navegador só lê (com as regras de segurança) e marca as próprias notificações como lidas.
 - A visibilidade de cada registro (pessoas, cargos, departamentos ou todos) é calculada no servidor e aplicada pelas regras.
 
 Documentação completa:
@@ -126,7 +137,8 @@ Documentação completa:
 - [Arquitetura do backend](docs/backend/arquitetura.md)
 - [Modelo de dados](docs/backend/modelo-de-dados.md)
 - [Segurança, permissões e privacidade (LGPD)](docs/backend/seguranca.md)
-- [Implantação e operação](docs/backend/implantacao.md)
+- [Implantação gratuita (Spark + Vercel)](docs/backend/implantacao-gratuita.md)
+- [Implantação com o plano Blaze](docs/backend/implantacao.md)
 - [Custos e faturamento](docs/backend/custos.md)
 - [Relatório técnico final da Etapa 2](docs/backend/relatorio-final.md)
 
@@ -134,17 +146,15 @@ Documentação completa:
 
 ## O que depende do responsável pela Atlética
 
-Nada disso pode ser feito pelo código sozinho:
+Nada disso pode ser feito pelo código sozinho. No caminho **gratuito** ([passo a passo](docs/backend/implantacao-gratuita.md)):
 
-1. Criar os projetos Firebase (recomendado: desenvolvimento e produção separados) e o app web.
-2. Ativar o plano **Blaze** e configurar um alerta de orçamento (Cloud Functions e o agendador exigem o plano). Ver [custos.md](docs/backend/custos.md).
-3. Configurar o Authentication: e-mail/senha, **desativar a criação de contas pelo cliente**, domínio autorizado e modelo de e-mail em português.
-4. Criar o Firestore e o Storage em `southamerica-east1`, publicar regras, índices e funções, ativar o TTL e o CORS do bucket.
-5. Registrar o App Check (reCAPTCHA Enterprise) e, depois de validar, ativar a exigência (`ENFORCE_APP_CHECK=true`).
-6. Configurar a hospedagem (Firebase App Hosting ou outra) com as variáveis de `.env.example`.
-7. Rodar `npm run bootstrap` **uma vez** para criar a estrutura inicial e o convite do primeiro administrador.
+1. No projeto Firebase (plano Spark): ativar login por e-mail/senha, criar o Firestore em `southamerica-east1` e registrar o app da Web.
+2. Gerar a chave da conta de serviço (guardada fora do repositório).
+3. Publicar regras e índices do Firestore (`firebase deploy --only firestore:rules,firestore:indexes`).
+4. Criar a conta gratuita na hospedagem (ex.: Vercel), importar o repositório e preencher as variáveis de ambiente.
+5. Rodar `npm run bootstrap` **uma vez** para criar a estrutura inicial e o convite do primeiro administrador.
 
-Passo a passo em [implantacao.md](docs/backend/implantacao.md).
+No plano Blaze, ver [implantacao.md](docs/backend/implantacao.md).
 
 ## Fora do escopo
 
@@ -157,6 +167,7 @@ Passo a passo em [implantacao.md](docs/backend/implantacao.md).
 ## Limitações conhecidas
 
 - **Modo demo:** dados só no navegador atual; arquivos enviados somem ao recarregar; perfis trocáveis por qualquer pessoa.
+- **Implantação gratuita:** arquivos são links (o acesso a eles é controlado pelo serviço onde estão); não há envio de arquivos para a Central.
 - **Modo Firebase:** as listagens carregam até 500 registros visíveis por módulo (suficiente para o porte da Atlética; acima disso será preciso paginar na interface). Mudanças de cargo ou permissão chegam à sessão aberta em segundos, mas uma consulta já carregada só é refeita ao navegar.
 - O bingo está apenas preparado na estrutura de dados.
 - PDFs, CSVs e PNGs são gerados no navegador e não têm valor oficial.

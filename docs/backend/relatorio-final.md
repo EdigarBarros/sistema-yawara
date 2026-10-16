@@ -1,6 +1,6 @@
 # Relatório técnico final — Etapa 2 (backend Firebase)
 
-Situação em 16/10/2026. Tudo o que está descrito como **testado** foi executado
+Situação em 16/10/2026 (atualizado com a implantação gratuita). Tudo o que está descrito como **testado** foi executado
 com o **Firebase Emulator Suite** (projeto `demo-yawara`) e dados fictícios.
 **Nenhum projeto Firebase real foi criado, configurado ou publicado.** Os
 passos que dependem do responsável pela Atlética estão na seção 9.
@@ -11,9 +11,18 @@ passos que dependem do responsável pela Atlética estão na seção 9.
   (`NEXT_PUBLIC_DATA_SOURCE`): `demo` (dados fictícios no navegador) e
   `firebase` (dados reais). Os modos nunca se misturam e os dados fictícios
   nunca são copiados para um projeto real.
-- Backend completo em Firebase: Authentication, Cloud Firestore, Cloud
-  Storage, Cloud Functions (2ª geração, `southamerica-east1`), App Check
-  (opcional/configurável), regras de segurança, índices e TTL.
+- Backend completo em Firebase, com **dois jeitos de implantar**, ambos com o
+  mesmo código de servidor (`functions/src`), as mesmas regras e os mesmos
+  testes:
+  - **Gratuito (recomendado):** Firebase no plano Spark (Authentication e
+    Firestore) e as operações do servidor na rota `src/app/api/[api]/route.ts`
+    do aplicativo, numa hospedagem gratuita (ex.: Vercel). Arquivos são
+    **links** (Google Drive, OneDrive…), porque o Cloud Storage exige o Blaze.
+    Guia: [implantacao-gratuita.md](implantacao-gratuita.md).
+  - **Plano Blaze:** Cloud Functions (2ª geração, `southamerica-east1`), Cloud
+    Storage para os arquivos, rotina diária de limpeza. Guia:
+    [implantacao.md](implantacao.md).
+- Regras de segurança, índices, TTL e App Check (opcional) valem para os dois.
 - Documentação: [arquitetura](arquitetura.md), [modelo de dados](modelo-de-dados.md),
   [segurança e LGPD](seguranca.md), [implantação](implantacao.md) e
   [custos](custos.md).
@@ -24,7 +33,9 @@ passos que dependem do responsável pela Atlética estão na seção 9.
   Cada registro com público configurável guarda `readers` (marcadores
   calculados pelo servidor); cada pessoa tem `userAccess/{uid}` com permissões
   e marcadores, também calculado só pelo servidor.
-- **Gravações** só pelas Cloud Functions chamáveis (`authApi`,
+- **Gravações** só pelo servidor: na implantação gratuita, pela rota de API
+  (que confere o token de login, com revogação, e opcionalmente o App Check);
+  no plano Blaze, pelas Cloud Functions chamáveis (`authApi`,
   `organizationApi`, `systemApi`, `campaignsApi`, `eventsApi`, `documentsApi`,
   `meetingsApi`, `financeApi`, `marketingApi`, `extensionApi`) e pela rotina
   diária `cleanupUploads`. Cada operação: autor e permissões conferidos dentro
@@ -56,14 +67,15 @@ passos que dependem do responsável pela Atlética estão na seção 9.
 
 | Suíte | Comando | Resultado |
 |---|---|---|
-| Unitários (políticas, readers ≡ políticas sobre toda a demonstração, regras de tela) | `npm test` | **113/113** (19 arquivos) |
+| Unitários (políticas, readers ≡ políticas sobre toda a demonstração, regras de tela, transporte da rota) | `npm test` | **116/116** (19 arquivos) |
 | Regras do Firestore e do Storage | `npm run test:rules` | **32/32** (2 arquivos) |
-| Cloud Functions de ponta a ponta no emulador | `npm run test:functions` | **254/254** (15 arquivos) |
+| Servidor de ponta a ponta no emulador (inclui arquivos por link) | `npm run test:functions` | **259/259** (16 arquivos) |
 | TypeScript (app e funções) e ESLint | `npm run typecheck`, `npm run functions:typecheck`, `npm run lint` | sem erros |
 | Build de produção | `npm run build` (modo demo e modo Firebase) | ok |
 
 **Testes no navegador (Playwright, app em modo Firebase contra os
-emuladores):** rifas (venda real, confirmação, assessor sem dados do
+emuladores; os principais repetidos na implantação gratuita, com a rota de
+API e arquivos por link):** rifas (venda real, confirmação, assessor sem dados do
 comprador, duas pessoas vendendo o mesmo número → uma venda e um conflito);
 convite e criação de conta; desativação em tempo real; envio e download real
 de PDF; arquivo falso recusado; auditoria; busca respeitando o acesso;
@@ -96,9 +108,15 @@ tentou quebrá-la. Principais correções:
 
 ## 6. Riscos e limitações conhecidos
 
-- **Storage e módulo desativado:** as regras do Storage não conferem se o
-  módulo está desativado (limite de consultas por regra). Os arquivos seguem
-  acessíveis só a quem já vê o registro e conhece o caminho exato.
+- **Arquivos por link (implantação gratuita):** a Central guarda só o nome e o
+  link; quem controla o acesso ao arquivo é o serviço onde ele está (Drive,
+  OneDrive…). Revogar o acesso na Central não revoga o compartilhamento lá, e
+  um link apagado ou movido deixa de abrir. Use pastas da Atlética, não
+  pessoais.
+- **Storage e módulo desativado (só no plano Blaze):** as regras do Storage
+  não conferem se o módulo está desativado (limite de consultas por regra). Os
+  arquivos seguem acessíveis só a quem já vê o registro e conhece o caminho
+  exato.
 - **Listagens:** até 500 registros visíveis por módulo, sem paginação na
   interface (suficiente para o porte atual).
 - **Convites:** quem pode convidar descobre se um e-mail já pertence a um
@@ -106,15 +124,19 @@ tentou quebrá-la. Principais correções:
   repetidos.
 - **Aprovação de Marketing:** quem aprova aprova o conteúdo como está naquele
   momento; não há bloqueio de versão entre abrir e aprovar.
-- **Primeira chamada lenta** depois de inatividade (funções sem instância
-  mínima, para não gerar custo ocioso).
+- **Primeira chamada lenta** depois de inatividade (a rota da hospedagem
+  gratuita e as funções do Blaze "dormem" sem uso, para não gerar custo).
+- **Cotas do plano gratuito:** se a cota diária do Firestore acabar, o banco
+  recusa operações até a virada do dia (sem cobrança).
 - PDFs, CSVs e PNGs são gerados no navegador e não têm valor oficial; não há
   pagamento real, integração bancária nem publicação automática em redes.
 
 ## 7. Custos
 
-Cloud Functions, o Storage e o agendador exigem o plano **Blaze** (pagamento
-por uso). Para dezenas de integrantes, o uso esperado fica perto das
+**Implantação gratuita: R$ 0**, dentro das cotas do plano Spark (50 mil
+leituras e 20 mil gravações por dia no Firestore, 1 GiB) e do plano gratuito
+da hospedagem. No plano Blaze: Cloud Functions, o Storage e o agendador são
+pagos por uso. Para dezenas de integrantes, o uso esperado fica perto das
 franquias gratuitas; o Storage em `southamerica-east1` cobra desde o primeiro
 GB (valores baixos). Detalhes e controles em [custos.md](custos.md). Configure
 alertas de orçamento antes de ativar.
@@ -122,23 +144,25 @@ alertas de orçamento antes de ativar.
 ## 8. Como rodar e implantar
 
 - Local com emuladores: README, seção "Modo Firebase com emuladores".
-- Implantação: [implantacao.md](implantacao.md) (passo a passo).
+- Implantação gratuita: [implantacao-gratuita.md](implantacao-gratuita.md).
+- Implantação no plano Blaze: [implantacao.md](implantacao.md).
 - Observação deste ambiente de desenvolvimento: os emuladores precisaram rodar
   sem o proxy de rede da máquina (`env -u HTTPS_PROXY …`) para as regras do
   Storage consultarem o Firestore. Isso não afeta um projeto real.
 
 ## 9. O que depende do responsável pela Atlética
 
-1. Criar os projetos Firebase (desenvolvimento e produção) e o app web.
-2. Ativar o plano Blaze e os alertas de orçamento.
-3. Authentication: e-mail/senha, **desativar a criação de contas pelo
-   cliente**, domínio autorizado, modelo de e-mail em português.
-4. Criar Firestore e Storage em `southamerica-east1`; publicar regras,
-   índices e funções; ativar TTL e CORS do bucket.
-5. App Check (reCAPTCHA Enterprise) e, depois de validar,
-   `ENFORCE_APP_CHECK=true`.
-6. Hospedagem (App Hosting ou outra) com as variáveis de `.env.example`.
-7. Rodar `npm run bootstrap` uma vez para criar a estrutura inicial e o
+Caminho gratuito (detalhes em [implantacao-gratuita.md](implantacao-gratuita.md)):
+
+1. No projeto Firebase (plano Spark): login por e-mail/senha, Firestore em
+   `southamerica-east1`, app da Web registrado.
+2. Gerar a chave da conta de serviço e guardá-la fora do repositório.
+3. Publicar regras e índices do Firestore.
+4. Conta gratuita na hospedagem (ex.: Vercel), repositório importado,
+   variáveis de ambiente preenchidas, região São Paulo.
+5. Rodar `npm run bootstrap` uma vez para criar a estrutura inicial e o
    convite do primeiro administrador.
-8. Enviar os arquivos de marca definitivos (escudo em SVG, mascote em PNG
+6. Enviar os arquivos de marca definitivos (escudo em SVG, mascote em PNG
    transparente, cores e fontes oficiais).
+
+No plano Blaze, os passos estão em [implantacao.md](implantacao.md).

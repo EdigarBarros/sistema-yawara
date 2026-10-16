@@ -1,0 +1,138 @@
+# Implantação gratuita (Firebase Spark + hospedagem gratuita)
+
+Este é o caminho **sem custo**: o Firebase fica no plano gratuito (**Spark**)
+e o aplicativo, junto com as operações do servidor, roda numa hospedagem
+gratuita de Next.js (recomendado: **Vercel**, plano Hobby).
+
+| Peça | Onde roda | Custo |
+|---|---|---|
+| Login (Authentication, e-mail e senha) | Firebase Spark | gratuito |
+| Banco de dados (Cloud Firestore) e regras de segurança | Firebase Spark | gratuito dentro da cota diária |
+| Telas e operações do servidor (rota `/api/...`) | Vercel (Hobby) | gratuito |
+| Arquivos | **Links** (Google Drive, OneDrive…) | gratuito |
+
+O que muda em relação ao plano Blaze (ver [implantacao.md](implantacao.md)):
+
+- **Não há Cloud Functions.** As mesmas operações do servidor (as mesmas
+  regras, transações, auditoria e testes) rodam na rota
+  `src/app/api/[api]/route.ts` do aplicativo, na hospedagem.
+- **Não há Cloud Storage** (exige o Blaze). Documentos, comprovantes e artes
+  são informados como **links** de compartilhamento. Quem controla o acesso a
+  cada arquivo é o serviço onde ele está: compartilhe só com quem deve ver.
+- Não há a rotina diária de limpeza (ela só existe para envios de arquivos).
+
+> Nada aqui foi feito num projeto real durante o desenvolvimento: tudo foi
+> testado com os emuladores do Firebase. Os passos abaixo exigem acesso de
+> proprietário ao projeto Firebase e à conta da hospedagem.
+
+## 1. Firebase (plano Spark)
+
+1. Console do Firebase → seu projeto. Confirme que o plano é **Spark**
+   (gratuito). Não é preciso cadastrar cartão.
+2. **Authentication** → Começar → Método de login → **E-mail/senha**: ativar.
+   - Configurações → Domínios autorizados: adicione o domínio da hospedagem
+     (ex.: `central-yawara.vercel.app`).
+   - Modelos de e-mail → Redefinição de senha: idioma português.
+   - Se a opção existir no seu projeto, desative a criação de contas pelo
+     cliente ("inscrição"). Se não existir, não há problema: uma conta criada
+     por fora não tem cadastro na Central e não lê nada; o aceite de convite
+     nunca reaproveita essas contas.
+3. **Firestore Database** → Criar banco → modo de **produção** → local
+   `southamerica-east1` (São Paulo). O local não pode ser trocado depois.
+4. Configurações do projeto → Seus apps → **App da Web** (ícone `</>`) →
+   registre o app e copie a configuração (`apiKey`, `authDomain`,
+   `projectId`, `messagingSenderId`, `appId`). Esses valores são públicos por
+   natureza (vão para o navegador).
+5. Configurações do projeto → **Contas de serviço** → "Gerar nova chave
+   privada". Baixa um arquivo JSON com a chave **administrativa**.
+   - **Nunca** coloque esse arquivo no repositório, num e-mail ou em grupo de
+     mensagens. Guarde-o fora da pasta do projeto.
+   - Ele será usado em dois lugares: nas variáveis de ambiente do servidor na
+     hospedagem (passo 3) e no script de configuração inicial (passo 4).
+
+## 2. Regras e índices do Firestore
+
+Publicar regras e índices não tem custo. No computador, dentro da pasta do
+projeto:
+
+```bash
+npx firebase login
+cp .firebaserc.example .firebaserc        # edite com o id real do projeto
+npx firebase use default
+npx firebase deploy --only firestore:rules,firestore:indexes
+```
+
+Não publique `storage` nem `functions` neste modo (exigem o Blaze).
+
+O arquivo de índices também liga a exclusão automática (TTL) de registros
+técnicos antigos (controle de requisições, notificações). Se o console
+recusar a política de TTL no plano gratuito, nada quebra: esses registros só
+deixam de ser apagados sozinhos (ocupam pouco espaço).
+
+## 3. Hospedagem (Vercel, plano Hobby)
+
+1. Crie uma conta em vercel.com (pode entrar com o GitHub) e importe o
+   repositório `sistema-yawara`. O framework é detectado como Next.js.
+2. Settings → **Functions** → Function Region: **São Paulo (gru1)**, perto do
+   Firestore (deixa as operações mais rápidas).
+3. Settings → **Environment Variables** (Production):
+
+   | Variável | Valor |
+   |---|---|
+   | `NEXT_PUBLIC_DATA_SOURCE` | `firebase` |
+   | `NEXT_PUBLIC_API_TRANSPORT` | `route` |
+   | `NEXT_PUBLIC_FILE_STORAGE` | `links` |
+   | `NEXT_PUBLIC_FIREBASE_API_KEY` | do app da Web |
+   | `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | do app da Web |
+   | `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | do app da Web |
+   | `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | do app da Web |
+   | `NEXT_PUBLIC_FIREBASE_APP_ID` | do app da Web |
+   | `FIREBASE_PROJECT_ID` | `project_id` do JSON da conta de serviço |
+   | `FIREBASE_CLIENT_EMAIL` | `client_email` do JSON |
+   | `FIREBASE_PRIVATE_KEY` | `private_key` do JSON (o texto inteiro, de `-----BEGIN` a `END PRIVATE KEY-----`) |
+   | `FILE_STORAGE` | `links` |
+   | `APP_BASE_URL` | endereço público do site (ex.: `https://central-yawara.vercel.app`) — usado nos links de convite |
+
+   As variáveis **sem** `NEXT_PUBLIC_` ficam só no servidor e nunca chegam ao
+   navegador. Nunca dê o prefixo `NEXT_PUBLIC_` à chave privada.
+4. Deploy. Depois de publicado, abra `/login` para conferir.
+
+> Outras hospedagens com suporte a Next.js (ex.: Netlify) também servem: as
+> variáveis são as mesmas. O plano Hobby da Vercel é para uso não comercial;
+> confira os limites atuais do plano escolhido.
+
+## 4. Estrutura inicial e primeiro administrador
+
+Uma única vez, no computador, com o JSON da conta de serviço:
+
+```bash
+GOOGLE_APPLICATION_CREDENTIALS=/caminho/fora/do/projeto/chave.json \
+  npm run bootstrap -- --project <id-do-projeto> \
+  --admin-email <email-do-primeiro-admin> --admin-name "<Nome>" \
+  --app-url https://central-yawara.vercel.app
+```
+
+O script só cria o que não existe (nunca apaga ou substitui), não grava dados
+fictícios e mostra **uma vez** o link do convite do primeiro administrador.
+Essa pessoa abre o link, cria a senha e, pela própria Central, convida os
+demais integrantes.
+
+## 5. Cotas gratuitas e cuidados
+
+- **Firestore (Spark):** 50 mil leituras, 20 mil gravações e 20 mil exclusões
+  por dia, e 1 GiB armazenado. Para dezenas de integrantes, o uso esperado
+  fica bem abaixo disso. Se a cota do dia acabar, o banco recusa novas
+  operações até a virada do dia (não há cobrança).
+- **Authentication:** login por e-mail e senha é gratuito.
+- **Hospedagem:** confira no painel da Vercel o uso do mês.
+- **Arquivos por link:** use pastas compartilhadas da Atlética (não pessoais),
+  para que os arquivos não se percam quando alguém sair da gestão.
+- **Chave da conta de serviço:** se vazar, gere outra (Contas de serviço →
+  excluir a chave antiga) e atualize a variável na hospedagem.
+
+## 6. Se um dia quiser o plano Blaze
+
+O código das Cloud Functions e o envio de arquivos pelo Storage continuam no
+projeto. Basta seguir [implantacao.md](implantacao.md) e trocar as variáveis
+`NEXT_PUBLIC_API_TRANSPORT=functions` e `NEXT_PUBLIC_FILE_STORAGE=storage`
+(e `FILE_STORAGE`, que deixa de ser `links`).
