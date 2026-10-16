@@ -17,10 +17,10 @@ regras permitem e grava apenas `notifications/{id}.readAt`.
 | `members/{uid}` | Nome, cargo, departamentos adicionais, situação | conta ativa |
 | `memberPrivate/{uid}` | E-mail de acesso, origem do cadastro, desativação | o próprio ou `organization.edit` |
 | `userAccess/{uid}` | Retrato de autorização (permissões e marcadores) | o próprio ou `organization.admin` |
-| `invitations/{id}` | Convite (hash do token, validade, situação) | `organization.create`/`edit` |
-| `campaigns/{id}` | Campanha + `readers` + `stats` | `campaigns.view` + público |
-| `campaigns/{id}/sales/{saleId}` | Parte pública da venda (números, situação, pagamento) | quem vê a campanha |
-| `campaigns/{id}/buyers/{saleId}` | Nome, contato, observações, comprovante + `readers` | público "dados dos compradores" + criador + vendedor |
+| `invitations/{id}` | Convite (hash do token, validade, situação; e-mail só até o aceite; reserva transitória `accepting` com `claimId`/`claimedAt`) | `organization.create`/`edit` |
+| `campaigns/{id}` | Campanha + `readers` + `stats` (+ `buyersSyncPending`/`buyersSyncToken`, internos do servidor) | `campaigns.view` + público |
+| `campaigns/{id}/sales/{saleId}` | Parte pública da venda (números, situação, pagamento; histórico com texto neutro) | quem vê a campanha |
+| `campaigns/{id}/buyers/{saleId}` | Nome, contato, observações, comprovante, motivos de cancelamento/pagamento desfeito + `readers` + `viewReaders` (cópia de quem vê a campanha) | quem vê a campanha **e** está no público "dados dos compradores" (ou é criador/vendedor) |
 | `campaigns/{id}/numbers/{00042}` | Trava do número (venda ativa dona do número) | ninguém (servidor) |
 | `events/{id}` | Evento com tarefas, programação e fornecedores + `readers` | `events.view` + público |
 | `documents/{id}` | Metadados e versões + `readers` | `documents.view` + público |
@@ -33,8 +33,8 @@ regras permitem e grava apenas `notifications/{id}.readAt`.
 | `notifications/{eventKey}__{uid}` | Notificação de um destinatário | o destinatário |
 | `auditLogs/{id}` | Auditoria (servidor) | `audit.view` |
 | `searchIndex/{kind}__{id}` | Termos de busca + `readers` | ninguém (busca via função) |
-| `uploads/{id}` | Tíquete de envio de arquivo | ninguém (lido pelas regras do Storage) |
-| `idempotency/{uid}__{requestId}` | Resultado de requisição concluída | ninguém |
+| `uploads/{id}` | Tíquete de envio de arquivo (`pending` → `finalizing` → `finalized` → `attached`; ou `rejected`/`discarded`) | ninguém (lido pelas regras do Storage) |
+| `idempotency/{uid}__{requestId}` | Resultado de requisição concluída + resumo (`payloadHash`) dos dados enviados | ninguém |
 | `counters/{PREFIXO-ANO}` | Sequência dos códigos legíveis | ninguém |
 
 ### Rifas: números e concorrência
@@ -60,14 +60,23 @@ regras permitem e grava apenas `notifications/{id}.readAt`.
 |---|---|
 | `staging/{uid}/{uploadId}/{nome}` | ninguém (só o envio pelo dono, com tíquete) |
 | `documents/{docId}/v{n}/{uploadId}-{nome}` | quem vê o documento |
-| `campaigns/{id}/receipts/{saleId}/{uploadId}-{nome}` | quem vê os dados do comprador |
+| `campaigns/{id}/receipts/{saleId}/{uploadId}-{nome}` | quem vê os dados do comprador **e** a campanha |
 | `finance/{entryId}/{uploadId}-{nome}` | `finance.view` |
 | `marketing/{contentId}/{uploadId}-{nome}` | quem vê o conteúdo |
 
 Limites e formatos (conferidos pela assinatura binária, não pela extensão):
 documentos 25 MB (PDF, imagens, Office/ODF, TXT/CSV); comprovantes de venda
 10 MB e financeiros 15 MB (PDF e imagens); marketing 50 MB (PDF, imagens,
-vídeos MP4/MOV, Office). SVG e HTML não são aceitos.
+vídeos MP4/MOV, Office). SVG e HTML não são aceitos. O nome salvo recebe a
+extensão do tipo **real** detectado (um texto enviado como `ata.html` vira
+`ata.txt`), e o arquivo definitivo tem `Content-Disposition: attachment`.
+
+Ciclo do tíquete: a operação reserva o tíquete numa transação (`finalizing`,
+com o `requestId` que reservou), confere e copia o arquivo (`finalized`) e o
+anexa na transação da operação (`attached`). A cópia temporária em `staging/`
+só é apagada depois da confirmação: se a operação falhar, a cópia definitiva
+é apagada e o tíquete volta a `pending` (o mesmo envio pode ser repetido).
+Tíquetes vencidos (validade + 30 min) são recusados.
 
 Versões de documentos nunca são apagadas; um comprovante substituído vai para
 `receiptHistory`. Arquivamento não é exclusão.

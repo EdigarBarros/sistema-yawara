@@ -102,10 +102,15 @@ Regras obrigatórias:
    `campaign_closed__<id>`) para não duplicar. Sem dados pessoais no texto.
 9. **Códigos legíveis**: `await nextCode(tx, ctx, "RIFA")` no início da `run`.
 10. **Arquivos**: o cliente envia `uploadId`; na `prepare`, chame
-    `finalizeUpload(actor, uploadId, purpose, destDir, ctx)` (confere o
-    conteúdo real e move para `destDir`); na `run`, grave o `FileRef` e chame
-    `markAttached(tx, uploadId, recurso)`. Se a transação falhar, o arquivo
-    definitivo é apagado automaticamente.
+    `finalizeUpload(actor, uploadId, purpose, destDir, ctx)` (reserva o
+    tíquete em transação, confere o conteúdo real e copia para `destDir`); na
+    `run`, grave o `FileRef` e chame `markAttached(tx, uploadId, recurso)`. Se
+    a operação falhar — na transação ou na própria preparação —, o arquivo
+    definitivo é apagado e o tíquete volta a `pending` (a cópia temporária só
+    sai depois da confirmação, via `ctx.afterCommit`). Na `prepare`, comece com
+    `if (await alreadyCompleted(actor.uid, ctx.requestId)) …` para que um
+    reenvio de requisição concluída não mova arquivos nem seja recusado por um
+    estado posterior.
 11. **Campos opcionais**: o SDK de funções chamáveis envia `undefined` como
     `null`. Nos esquemas do servidor, campos opcionais aceitam `null`
     (`.nullish()`); convenção: chave ausente = "não alterar", `null` = "limpar".
@@ -113,7 +118,11 @@ Regras obrigatórias:
     internos. Erros inesperados viram mensagem genérica (o log não inclui o
     payload).
 13. **Idempotência**: automática por `requestId` (o despachante grava
-    `idempotency/{uid}__{requestId}`). A `run` deve retornar só referências.
+    `idempotency/{uid}__{requestId}` com o resumo dos dados validados). Um
+    reenvio com outros dados é recusado (conflito). A `run` deve retornar só
+    referências, e a `present` deve conferir de novo a visibilidade (ela roda
+    também nas repetições). Erro lançado pela `present` depois da confirmação
+    não é auditado como recusa.
 
 ## Convenções do cliente (src/services/firebase)
 

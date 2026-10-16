@@ -30,6 +30,17 @@
 - Troca de cargo também revoga as sessões abertas (força nova autenticação).
 - Contas criadas por fora (ex.: alguém que conseguisse criar um usuário no
   Auth) não têm `userAccess` e, portanto, não leem nada.
+- Aceite de convite: o servidor primeiro **reserva** o convite numa transação
+  (situação `accepting`, uma reserva por e-mail de cada vez) e só então mexe
+  no Auth. Uma conta do Auth que já exista com o e-mail convidado e não tenha
+  cadastro na Central **nunca é reaproveitada**: é removida (com registro na
+  auditoria) e o integrante nasce com uma conta nova — sessões abertas antes
+  do aceite não valem para o novo integrante. Se algo falhar depois da
+  reserva, a conta criada é apagada e o convite volta a pendente.
+- Links revogados ou já usados mostram a mensagem específica sem revelar
+  nome, e-mail ou cargo do convite. O e-mail sai do convite quando ele é
+  aceito (e dos convites antigos da mesma pessoa); a fonte passa a ser
+  `memberPrivate`.
 
 ## Modelo de permissões
 
@@ -67,6 +78,10 @@ do público configurado.
 - Ninguém altera o próprio cargo, os próprios departamentos ou desativa a
   própria conta; ninguém altera integrantes com permissões que não possui.
 - Atribuir ou convidar para um cargo exige possuir todas as permissões dele.
+  Sem `organization.admin`, também não é possível atribuir, convidar, renovar
+  convite ou reativar alguém num cargo de **alcance** maior que o próprio:
+  diretoria, nível acima do seu, outro departamento principal ou
+  departamentos adicionais que o próprio cargo não alcança.
 - Sempre resta pelo menos um integrante ativo com `organization.admin`.
 
 Todas cobertas por testes em `functions/test/organization.test.ts`.
@@ -121,9 +136,26 @@ o público dos registros.
   lançamentos, projetos). Etapas de aprovação não podem ser puladas: a ata só
   é aprovada por quem tem `meetings.approve`, e um conteúdo de Marketing só
   chega a "Publicado" depois de "Aprovado" (por quem tem `marketing.approve`).
+  Depois de "Aprovado" (e em "Publicado"), só quem aprova altera dados e
+  arquivos do conteúdo; quem não aprova devolve o conteúdo para revisão e ele
+  precisa de nova aprovação. Uma nova versão enviada por quem não pode marcar
+  um documento como "Vigente" o devolve para "Em elaboração".
+- **Rifas:** só quem já vê os dados do comprador transfere uma venda para
+  outro responsável, e o responsável (ao registrar ou transferir) precisa
+  estar ativo e poder vender na campanha — ele passa a ver o comprador. Forma
+  de pagamento de venda já paga só muda por quem confirma recebimentos.
+  Motivos de cancelamento e de pagamento desfeito ficam nos dados restritos
+  do comprador; o histórico público usa texto neutro.
 - **Arquivos:** tamanho exato, tipo real conferido pela assinatura binária,
-  cópia definitiva sem token público, compensação se a operação falhar e
-  limpeza diária de envios abandonados.
+  nome salvo com a extensão do tipo real, cópia definitiva sem token público
+  e com download forçado, tíquete reservado em transação (um envio nunca é
+  anexado a dois registros), compensação se a operação falhar (inclusive na
+  preparação) e limpeza diária de envios abandonados sem corrida com
+  operações em andamento.
+- **Repetição de requisição:** o mesmo `requestId` só devolve o resultado
+  guardado se os dados forem os mesmos (senão: conflito), e a resposta confere
+  de novo se o autor ainda pode ver o registro. Conta ou cargo desativados
+  depois da operação recebem recusa (auditada).
 
 ## Auditoria
 
