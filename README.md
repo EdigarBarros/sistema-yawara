@@ -128,6 +128,7 @@ Documentação completa:
 - [Segurança, permissões e privacidade (LGPD)](docs/backend/seguranca.md)
 - [Implantação e operação](docs/backend/implantacao.md)
 - [Custos e faturamento](docs/backend/custos.md)
+- [Relatório técnico final da Etapa 2](docs/backend/relatorio-final.md)
 
 ---
 
