@@ -72,4 +72,9 @@ export interface FileRef {
   path?: string;
   /** Firebase: resumo SHA-256 do conteúdo, calculado pelo servidor. */
   sha256?: string;
+  /**
+   * Implantação gratuita (sem Cloud Storage): link do arquivo informado pela
+   * pessoa (https). Nesse caso `size` é 0 e `mimeType` é "text/uri-list".
+   */
+  url?: string;
 }

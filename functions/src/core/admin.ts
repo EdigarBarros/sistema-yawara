@@ -27,12 +27,15 @@ function appOptions(): AppOptions | undefined {
   const projectId = process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+  const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || undefined;
   if (projectId && clientEmail && privateKey) {
     // Painéis de hospedagem costumam guardar as quebras de linha da chave como "\n".
-    return { credential: cert({ projectId, clientEmail, privateKey: privateKey.replace(/\\n/g, "\n") }), projectId };
+    return { credential: cert({ projectId, clientEmail, privateKey: privateKey.replace(/\\n/g, "\n") }), projectId, storageBucket };
   }
-  // Cloud Functions (credenciais do ambiente) ou emuladores (só o projeto).
-  return projectId ? { projectId } : undefined;
+  // Cloud Functions e `firebase emulators:exec` definem FIREBASE_CONFIG (projeto e bucket): o SDK lê sozinho.
+  if (process.env.FIREBASE_CONFIG) return undefined;
+  // Outros ambientes com emuladores: só o projeto (e o bucket, se houver).
+  return projectId ? { projectId, storageBucket } : undefined;
 }
 
 if (getApps().length === 0) initializeApp(appOptions());

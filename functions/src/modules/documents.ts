@@ -62,7 +62,7 @@ import { requireModuleEnabled, requirePermission, type Actor } from "../core/act
 import { auditInTx } from "../core/audit";
 import { alreadyCompleted, mutation, type RunContext } from "../core/dispatch";
 import { fail } from "../core/errors";
-import { finalizeUpload, markAttached } from "../core/files";
+import { fileLinkSchema, markAttached, ONE_FILE_SOURCE, resolveFile } from "../core/files";
 import { appendHistory, historyEntry } from "../core/history";
 import { notify } from "../core/notify";
 import { requireDoc, toDTO } from "../core/records";
@@ -128,15 +128,21 @@ const createSchema = strict({
     access: audienceSchema,
   }),
   uploadId: uploadIdSchema.nullish(),
-});
+  /** Implantação gratuita: link do arquivo em vez de envio. */
+  link: fileLinkSchema.nullish(),
+}).refine((v) => !(v.uploadId && v.link), ONE_FILE_SOURCE);
 
 const updateSchema = strict({ id: docId, input: strict(documentFields).partial() });
 const setAccessSchema = strict({ id: docId, access: audienceSchema });
 const addVersionSchema = strict({
   id: docId,
-  uploadId: uploadIdSchema,
+  uploadId: uploadIdSchema.nullish(),
+  /** Implantação gratuita: link do arquivo da nova versão. */
+  link: fileLinkSchema.nullish(),
   note: z.string({ error: "Observação inválida." }).trim().max(300, "A observação pode ter no máximo 300 caracteres.").nullish(),
-});
+})
+  .refine((v) => !(v.uploadId && v.link), ONE_FILE_SOURCE)
+  .refine((v) => !!(v.uploadId || v.link), "Envie o arquivo da nova versão (ou informe o link).");
 const idSchema = strict({ id: docId });
 
 /* ------------------------------- auxiliares ------------------------------ */
@@ -369,20 +375,20 @@ export const documentsActions = {
   create: mutation({
     module: "documents",
     schema: createSchema,
-    async prepare(actor, { uploadId }, ctx): Promise<CreatePrepared> {
+    async prepare(actor, { uploadId, link }, ctx): Promise<CreatePrepared> {
       // Conferência antecipada (repetida dentro da transação) para não mover arquivos à toa.
       requirePermission(actor, "documents.create", "Seu perfil não pode adicionar documentos.");
       const id = newDocumentId(actor.uid, ctx.requestId);
-      if (!uploadId || (await alreadyCompleted(actor.uid, ctx.requestId))) return { docId: id, file: null };
-      const file = await finalizeUpload(actor, uploadId, "document", `documents/${id}/v1`, ctx);
+      if ((!uploadId && !link) || (await alreadyCompleted(actor.uid, ctx.requestId))) return { docId: id, file: null };
+      const file = await resolveFile(actor, { uploadId, link }, "document", `documents/${id}/v1`, ctx);
       return { docId: id, file };
     },
-    async run(tx, actor, { input, uploadId }, ctx, prepared): Promise<DocumentRefResult> {
+    async run(tx, actor, { input, uploadId, link }, ctx, prepared): Promise<DocumentRefResult> {
       actor = actor!;
       requirePermission(actor, "documents.create", "Seu perfil não pode adicionar documentos.");
       const id = newDocumentId(actor.uid, ctx.requestId);
       if (prepared.docId !== id) fail("conflict", "Requisição inconsistente. Atualize a página e tente novamente.");
-      if (uploadId && !prepared.file) fail("conflict", "O arquivo enviado não pôde ser anexado. Envie o arquivo novamente.");
+      if ((uploadId || link) && !prepared.file) fail("conflict", "O arquivo enviado não pôde ser anexado. Envie o arquivo novamente.");
       const access = sanitizeAudience(input.access);
       const links = cleanLinks(input.links);
 
@@ -549,7 +555,7 @@ export const documentsActions = {
   addVersion: mutation({
     module: "documents",
     schema: addVersionSchema,
-    async prepare(actor, { id, uploadId }, ctx): Promise<VersionPrepared> {
+    async prepare(actor, { id, uploadId, link }, ctx): Promise<VersionPrepared> {
       if (await alreadyCompleted(actor.uid, ctx.requestId)) return { version: 0, file: null };
       // Conferência antecipada (repetida dentro da transação) e pasta da próxima versão.
       const snap = await db.doc(`documents/${id}`).get();
@@ -560,7 +566,7 @@ export const documentsActions = {
       if (doc.status === "archived") fail("conflict", "Restaure o documento antes de enviar uma nova versão.");
       if (doc.versions.length >= MAX_VERSIONS) fail("conflict", `Este documento atingiu o limite de ${MAX_VERSIONS} versões. Crie um novo documento.`);
       const version = nextVersionNumber(doc);
-      const file = await finalizeUpload(actor, uploadId, "document", `documents/${id}/v${version}`, ctx);
+      const file = await resolveFile(actor, { uploadId, link }, "document", `documents/${id}/v${version}`, ctx);
       return { version, file };
     },
     async run(tx, actor, { id, uploadId, note }, ctx, prepared): Promise<DocumentRefResult> {
@@ -604,7 +610,7 @@ export const documentsActions = {
 
       // Escritas
       writeDocument(tx, ref, next, categoryName(catSnap));
-      markAttached(tx, uploadId, `documents/${id}`);
+      if (uploadId) markAttached(tx, uploadId, `documents/${id}`);
       audit(tx, actor, ctx, "addVersion", id, `Versão ${version} enviada para o documento ${next.name}${awaitingValidation ? " (aguardando validação)" : ""}`, {
         version,
         status,

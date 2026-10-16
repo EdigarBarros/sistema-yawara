@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/form";
 import { FilePicker } from "@/components/shared/pickers";
+import { isLinkFile } from "@/lib/file-links";
 import { AudiencePicker, AudienceSummary } from "@/components/shared/audience";
 import { DemoNotice } from "@/components/shared/states";
 import { DetailList } from "@/components/shared/page";
@@ -172,8 +173,8 @@ function AddDocumentBody({ onOpenChange, links, defaultCategoryId, stay, onCreat
             <DetailList
               className="mt-3"
               items={[
-                { label: "Formato", value: fileExtension(file.name) },
-                { label: "Tamanho", value: formatBytes(file.size) },
+                { label: "Formato", value: isLinkFile(file) ? "Link externo" : fileExtension(file.name) },
+                { label: "Tamanho", value: isLinkFile(file) ? "—" : formatBytes(file.size) },
                 { label: "Autor do envio", value: access.user?.name },
                 { label: "Data do envio", value: "Registrada ao salvar" },
               ]}

@@ -46,7 +46,7 @@ import { auditInTx } from "../core/audit";
 import { nextCode } from "../core/counters";
 import { alreadyCompleted, mutation, query, type RunContext } from "../core/dispatch";
 import { fail } from "../core/errors";
-import { finalizeUpload, markAttached } from "../core/files";
+import { fileLinkSchema, markAttached, ONE_FILE_SOURCE, resolveFile } from "../core/files";
 import { appendHistory, historyEntry } from "../core/history";
 import { requireDoc, toDTO } from "../core/records";
 import { indexRecord, searchEntryFor } from "../core/search-index";
@@ -123,7 +123,9 @@ const createSchema = strict({
     status: z.enum(["pending", "settled"], { error: "Situação inválida. Registre como pendente ou realizado." }),
   }),
   uploadId: uploadId.nullish(),
-});
+  /** Implantação gratuita: link do comprovante em vez de envio. */
+  link: fileLinkSchema.nullish(),
+}).refine((v) => !(v.uploadId && v.link), ONE_FILE_SOURCE);
 
 const updateSchema = strict({
   id: docId("Lançamento inválido."),
@@ -137,7 +139,9 @@ const statusSchema = strict({
   reason: z.string({ error: "Informe o motivo do cancelamento." }).trim().max(300, "Use no máximo 300 caracteres no motivo.").nullish(),
 });
 
-const attachSchema = strict({ id: docId("Lançamento inválido."), uploadId });
+const attachSchema = strict({ id: docId("Lançamento inválido."), uploadId: uploadId.nullish(), link: fileLinkSchema.nullish() })
+  .refine((v) => !(v.uploadId && v.link), ONE_FILE_SOURCE)
+  .refine((v) => !!(v.uploadId || v.link), "Envie o comprovante (ou informe o link).");
 
 const eventSchema = strict({ eventId: docId("Evento inválido.") });
 
@@ -300,9 +304,9 @@ export const financeActions = {
   create: mutation({
     module: "finance",
     schema: createSchema,
-    async prepare(actor, { input, uploadId: upload }, ctx): Promise<CreatePrepared> {
+    async prepare(actor, { input, uploadId: upload, link }, ctx): Promise<CreatePrepared> {
       const entryId = newEntryId(actor.uid, ctx.requestId);
-      if (!upload) return { entryId, file: null };
+      if (!upload && !link) return { entryId, file: null };
       // Conferência antecipada (repetida na transação) para não mover arquivos à toa.
       requireFinanceView(actor);
       requirePermission(actor, "finance.register", "Seu perfil não pode registrar lançamentos.");
@@ -310,10 +314,10 @@ export const financeActions = {
         requirePermission(actor, "finance.approve", "Seu perfil não pode registrar já como recebido/pago. Registre como pendente para confirmação.");
       }
       if (await alreadyCompleted(actor.uid, ctx.requestId)) return { entryId, file: null };
-      const file = await finalizeUpload(actor, upload, "financeReceipt", `finance/${entryId}`, ctx);
+      const file = await resolveFile(actor, { uploadId: upload, link }, "financeReceipt", `finance/${entryId}`, ctx);
       return { entryId, file };
     },
-    async run(tx, actor, { input, uploadId: upload }, ctx, prepared): Promise<EntryResult> {
+    async run(tx, actor, { input, uploadId: upload, link }, ctx, prepared): Promise<EntryResult> {
       actor = actor!;
       requireFinanceView(actor);
       requirePermission(actor, "finance.register", "Seu perfil não pode registrar lançamentos.");
@@ -322,7 +326,7 @@ export const financeActions = {
       }
       const id = newEntryId(actor.uid, ctx.requestId);
       if (prepared.entryId !== id) fail("conflict", "Requisição inconsistente. Atualize a página e tente novamente.");
-      if (upload && !prepared.file) fail("conflict", "O comprovante enviado não pôde ser anexado. Envie o arquivo novamente.");
+      if ((upload || link) && !prepared.file) fail("conflict", "O comprovante enviado não pôde ser anexado. Envie o arquivo novamente.");
       const eventId = input.eventId || undefined;
       const campaignId = input.campaignId || undefined;
 
@@ -529,13 +533,13 @@ export const financeActions = {
   attachReceipt: mutation({
     module: "finance",
     schema: attachSchema,
-    async prepare(actor, { id, uploadId: upload }, ctx): Promise<FileRef | null> {
+    async prepare(actor, { id, uploadId: upload, link }, ctx): Promise<FileRef | null> {
       // Conferência antecipada (repetida na transação) para não mover arquivos à toa.
       requireFinanceView(actor);
       requireCanAttach(actor);
       if (await alreadyCompleted(actor.uid, ctx.requestId)) return null;
       if (!(await entryRef(id).get()).exists) fail("not_found", "Lançamento não encontrado(a). Pode ter sido removido(a) ou não estar disponível para o seu perfil.");
-      return finalizeUpload(actor, upload, "financeReceipt", `finance/${id}`, ctx);
+      return resolveFile(actor, { uploadId: upload, link }, "financeReceipt", `finance/${id}`, ctx);
     },
     async run(tx, actor, { id, uploadId: upload }, ctx, file): Promise<EntryResult> {
       actor = actor!;
@@ -549,6 +553,7 @@ export const financeActions = {
       // Regras
       if (current.status === "cancelled") fail("conflict", "Não é possível anexar comprovante a um lançamento cancelado. Reabra-o como pendente antes.");
       if (current.receipt?.path && current.receipt.path === file.path) return { id };
+      if (current.receipt?.url && current.receipt.url === file.url) return { id };
       const replaced = current.receipt;
       // O comprovante anterior nunca é apagado: vai para o histórico de comprovantes.
       const receiptHistory = replaced ? [...(current.receiptHistory ?? []), replaced] : current.receiptHistory;
@@ -560,7 +565,7 @@ export const financeActions = {
       // Escritas
       tx.update(ref, { receipt: file, ...(receiptHistory?.length ? { receiptHistory } : {}), updatedAt: ctx.now, history });
       indexRecord(tx, searchEntryFor.finance({ ...current, receipt: file, updatedAt: ctx.now, history }));
-      markAttached(tx, upload, `financeEntries/${id}`);
+      if (upload) markAttached(tx, upload, `financeEntries/${id}`);
       audit(
         tx,
         actor,

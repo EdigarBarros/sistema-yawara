@@ -24,7 +24,7 @@ import { ServiceError } from "../errors";
 import { firebase } from "./app";
 import { callApi, isRetriable, takeRequestId } from "./call";
 import { mapFirestoreError } from "./convert";
-import { contentTypeOf, uploadFile } from "./files";
+import { contentTypeOf, isLinkFile, uploadFile } from "./files";
 import { getVisible, listVisible } from "./queries";
 import { whenAccess } from "./session";
 
@@ -83,6 +83,8 @@ function marketingTypeOf(file: File): string | null {
 
 /** Problema do arquivo escolhido (tipo ou tamanho), ou `null` quando pode ser enviado. */
 export function marketingFileProblem(file: File): string | null {
+  // Link (implantação gratuita): o servidor confere o endereço.
+  if (isLinkFile(file)) return null;
   if (file.size <= 0) return `O arquivo “${file.name}” está vazio.`;
   if (file.size > MARKETING_MAX_BYTES) return `O arquivo “${file.name}” é maior que 50 MB. Cada arquivo deve ter no máximo 50 MB.`;
   if (!marketingTypeOf(file)) return `Formato não aceito em “${file.name}”. Formatos aceitos: ${MARKETING_FORMATS_LABEL}.`;
@@ -187,10 +189,12 @@ export const firebaseMarketing: MarketingService = {
       const problem = marketingFileProblem(file);
       if (problem) throw new ServiceError("invalid", problem);
     }
+    const linkFiles = files.filter(isLinkFile);
+    const links = await Promise.all(linkFiles.map(async (f) => ({ name: f.name, url: (await f.text()).trim() })));
     let uploadIds = uploadedByRequest.get(rid);
     if (!uploadIds) {
       uploadIds = [];
-      for (const file of files) {
+      for (const file of files.filter((f) => !isLinkFile(f))) {
         const type = marketingTypeOf(file)!;
         const blob = file.type === type ? file : new Blob([file], { type });
         uploadIds.push(await uploadFile("marketingFile", blob, { name: file.name, targetId: contentId }));
@@ -198,7 +202,7 @@ export const firebaseMarketing: MarketingService = {
       uploadedByRequest.set(rid, uploadIds);
     }
     try {
-      const item = normalize(await callApi<ContentItem>("marketing", "addFiles", { id: contentId, uploadIds }, rid));
+      const item = normalize(await callApi<ContentItem>("marketing", "addFiles", { id: contentId, uploadIds, links }, rid));
       uploadedByRequest.delete(rid);
       return item;
     } catch (error) {

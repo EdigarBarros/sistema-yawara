@@ -24,7 +24,7 @@ import { ServiceError } from "../errors";
 import { firebase } from "./app";
 import { callApi, takeRequestId } from "./call";
 import { fromSnap, mapFirestoreError } from "./convert";
-import { contentTypeOf, uploadFile } from "./files";
+import { contentTypeOf, fileSource, isLinkFile } from "./files";
 import { getVisible, listVisible } from "./queries";
 import { useFirebaseSession, whenAccess } from "./session";
 
@@ -92,6 +92,8 @@ function documentTypeOf(file: File | Blob, name?: string): DocumentMime | null {
 
 /** Problema do arquivo escolhido (tipo ou tamanho), ou `null` quando pode ser enviado. */
 export function documentFileProblem(file: File | Blob, name?: string): string | null {
+  // Link (implantação gratuita): o servidor confere o endereço.
+  if (isLinkFile(file)) return null;
   if (file.size <= 0) return "O arquivo está vazio.";
   if (file.size > DOCUMENT_MAX_BYTES) return "O arquivo é maior que 25 MB. Escolha um arquivo menor.";
   if (!documentTypeOf(file, name)) return `Formato não aceito. Formatos aceitos: ${DOCUMENT_FORMATS_LABEL}.`;
@@ -100,6 +102,7 @@ export function documentFileProblem(file: File | Blob, name?: string): string | 
 
 /** Confere tipo e tamanho e devolve o conteúdo com o tipo aceito, pronto para o envio. */
 function acceptableFile(file: File | Blob, name?: string): { blob: Blob; name: string } {
+  if (isLinkFile(file)) return { blob: file, name: fileNameOf(file, name) || "documento" };
   const problem = documentFileProblem(file, name);
   if (problem) throw new ServiceError("invalid", problem);
   const type = documentTypeOf(file, name)!;
@@ -221,8 +224,8 @@ export const firebaseDocuments: DocumentService = {
   async create(input, file, fileName) {
     const rid = takeRequestId();
     const upload = file ? acceptableFile(file, fileName) : null;
-    const uploadId = upload ? await uploadFile("document", upload.blob, { name: upload.name, targetId: await expectedDocumentId(rid) }) : null;
-    return normalize(await callApi<InstitutionalDocument>("documents", "create", { input: createPayload(input), uploadId }, rid));
+    const source = upload ? await fileSource("document", upload.blob, { name: upload.name, targetId: await expectedDocumentId(rid) }) : {};
+    return normalize(await callApi<InstitutionalDocument>("documents", "create", { input: createPayload(input), ...source }, rid));
   },
 
   async update(id, input) {
@@ -241,8 +244,8 @@ export const firebaseDocuments: DocumentService = {
     const rid = takeRequestId();
     safeId(id);
     const upload = acceptableFile(file);
-    const uploadId = await uploadFile("document", upload.blob, { name: upload.name, targetId: id });
-    return normalize(await callApi<InstitutionalDocument>("documents", "addVersion", { id, uploadId, note: note?.trim() || null }, rid));
+    const source = await fileSource("document", upload.blob, { name: upload.name, targetId: id });
+    return normalize(await callApi<InstitutionalDocument>("documents", "addVersion", { id, ...source, note: note?.trim() || null }, rid));
   },
 
   async archive(id) {

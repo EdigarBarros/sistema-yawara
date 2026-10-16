@@ -1,13 +1,16 @@
 "use client";
 
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import { Check, FileUp, Paperclip, Search, X } from "lucide-react";
+import { Check, FileUp, Link2, Paperclip, Search, X } from "lucide-react";
 import type { ID } from "@/types";
 import { useDirectory } from "@/hooks/use-data";
 import { Avatar } from "@/components/ui/misc";
 import { Select } from "@/components/ui/form";
 import { cn, matchesQuery } from "@/lib/utils";
 import { fileExtension, formatBytes } from "@/lib/format";
+import { isLinkFile } from "@/lib/file-links";
+import { usesFileLinks } from "@/lib/mode";
+import { LinkPicker } from "./file-link";
 
 /* ---------------------------- Seleção de pessoas ---------------------------- */
 
@@ -152,12 +155,32 @@ interface FilePickerProps {
 }
 
 /**
- * Seleção de arquivo local. O arquivo NÃO é enviado a nenhum servidor nesta
- * etapa — fica apenas na memória do navegador.
+ * Seleção de arquivo. Modo demonstração: fica na memória do navegador. Modo
+ * Firebase com Storage: enviado ao servidor pela operação. Implantação
+ * gratuita (sem Storage): a pessoa informa o LINK do arquivo.
  */
 export function FilePicker({ file, onChange, accept, hint, label = "Escolher arquivo" }: FilePickerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+
+  if (file && isLinkFile(file)) {
+    return (
+      <div className="flex items-center gap-3 rounded-lg border border-line-strong bg-sunken px-3 py-2.5">
+        <div className="grid size-9 shrink-0 place-items-center rounded-md bg-surface-3 text-gold-fg">
+          <Link2 className="size-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-medium">{file.name}</p>
+          <p className="text-[11.5px] text-fg-subtle">Link do arquivo</p>
+        </div>
+        <button type="button" onClick={() => onChange(null)} className="grid size-8 place-items-center rounded-md text-fg-subtle hover:bg-surface-2 hover:text-fg" aria-label="Remover link">
+          <X className="size-4" />
+        </button>
+      </div>
+    );
+  }
+
+  if (!file && usesFileLinks) return <LinkPicker onChange={onChange} />;
 
   if (file) {
     return (
@@ -237,8 +260,8 @@ export function FileRow({
       <div className="min-w-0 flex-1">
         <p className="truncate text-[13px] font-medium">{name}</p>
         <p className="text-[11.5px] text-fg-subtle">
-          {fileExtension(name)}
-          {size !== undefined && ` · ${formatBytes(size)}`}
+          {size === 0 ? "link" : fileExtension(name)}
+          {size !== undefined && size > 0 && ` · ${formatBytes(size)}`}
           {meta && <> · {meta}</>}
         </p>
       </div>

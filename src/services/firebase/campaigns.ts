@@ -23,7 +23,7 @@ import { ServiceError } from "../errors";
 import { firebase } from "./app";
 import { callApi, takeRequestId } from "./call";
 import { fromSnap, mapFirestoreError } from "./convert";
-import { uploadFile } from "./files";
+import { fileSource } from "./files";
 import { getVisible, listVisible } from "./queries";
 import { hasPerm, useFirebaseSession, whenAccess } from "./session";
 
@@ -200,8 +200,8 @@ export const firebaseCampaigns: CampaignService = {
   async confirmPayment(saleId, input) {
     const rid = takeRequestId();
     const campaignId = campaignOf(saleId);
-    const uploadId = input.receipt ? await uploadFile("saleReceipt", input.receipt, { targetId: saleId }) : undefined;
-    return remember(await callApi<Sale>("campaigns", "confirmPayment", { campaignId, saleId, paymentMethod: input.paymentMethod, uploadId }, rid));
+    const source = input.receipt ? await fileSource("saleReceipt", input.receipt, { targetId: saleId }) : {};
+    return remember(await callApi<Sale>("campaigns", "confirmPayment", { campaignId, saleId, paymentMethod: input.paymentMethod, ...source }, rid));
   },
 
   async revertPayment(saleId, reason) {

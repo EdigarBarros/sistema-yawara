@@ -12,13 +12,14 @@ import { canEditEntry } from "@/lib/policies";
 import { ENTRY_TYPE_LABELS, PAYMENT_METHOD_LABELS, entryStatusMeta } from "@/lib/labels";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { isDemoMode } from "@/lib/mode";
+import { isDemoMode, usesFileLinks } from "@/lib/mode";
 import { Sheet, SheetContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/misc";
 import { DetailList, SectionTitle } from "@/components/shared/page";
 import { FileRow } from "@/components/shared/pickers";
 import { FileActions } from "@/components/shared/file-actions";
+import { AttachLinkDialog } from "@/components/shared/file-link";
 import { HistoryTimeline } from "@/components/shared/history";
 import { askReason, confirmAction } from "@/components/shared/confirm";
 import { EntryFormDialog } from "./entry-form-dialog";
@@ -42,6 +43,7 @@ export function EntrySheet({ entry, onOpenChange }: { entry: FinanceEntry | null
   const { data: campaigns } = useCampaigns();
   const [editOpen, setEditOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [linkOpen, setLinkOpen] = useState(false);
 
   const settle = useAction((id: string) => services.finance.setStatus(id, "settled"), { success: (e) => (e.type === "income" ? "Recebimento confirmado" : "Pagamento confirmado") });
   const reopen = useAction((id: string) => services.finance.setStatus(id, "pending"), { success: "Lançamento reaberto como pendente" });
@@ -175,9 +177,10 @@ export function EntrySheet({ entry, onOpenChange }: { entry: FinanceEntry | null
                   canAttach &&
                   entry.status !== "cancelled" && (
                     <>
-                      <Button size="sm" variant="ghost" onClick={() => fileRef.current?.click()} loading={attach.pending}>
+                      <Button size="sm" variant="ghost" onClick={() => (usesFileLinks ? setLinkOpen(true) : fileRef.current?.click())} loading={attach.pending}>
                         <Paperclip /> {entry.receipt ? "Substituir" : "Anexar"}
                       </Button>
+                      <AttachLinkDialog open={linkOpen} onOpenChange={setLinkOpen} title="Link do comprovante" onSubmit={(f) => attach.runSafe(entry.id, f)} />
                       <input
                         ref={fileRef}
                         type="file"

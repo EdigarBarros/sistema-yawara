@@ -7,6 +7,7 @@ import { Archive, ArchiveRestore, CalendarDays, ClipboardList, Download, Externa
 import type { FileRef } from "@/types";
 import { services } from "@/services";
 import { downloadName } from "@/services/firebase/files";
+import { isSafeLink } from "@/lib/file-links";
 import { useAccess } from "@/hooks/use-access";
 import { useAction } from "@/hooks/use-action";
 import { useDirectory, useDocument, useDocumentCategories } from "@/hooks/use-data";
@@ -37,6 +38,7 @@ type FilePreviewState = ReturnType<typeof useFileObjectUrl>;
 
 function Preview({ file, sample, preview }: { file: FileRef | null; sample: boolean; preview: FilePreviewState }) {
   if (!file) return <Placeholder text="Este registro não tem arquivo anexado." />;
+  if (file.url) return <Placeholder text="Este arquivo está guardado fora da Central (link). Use “Abrir link” para vê-lo no serviço onde está." />;
   if (!services.files.isAvailable(file)) {
     if (!isDemoMode) return <Placeholder text="O arquivo desta versão não está disponível no armazenamento." />;
     return (
@@ -80,6 +82,15 @@ function CurrentFileButtons({ file, url }: { file: FileRef | null; url: string |
   if (!file) return null;
   const outline = "inline-flex h-[38px] items-center gap-2 rounded-lg border border-line-strong px-4 text-[13.5px] font-semibold hover:bg-surface-2";
   const primary = "inline-flex h-[38px] items-center gap-2 rounded-lg bg-gold px-4 text-[13.5px] font-semibold text-gold-ink hover:bg-gold-hover";
+  if (file.url) {
+    // Link externo (implantação gratuita): o acesso é controlado pelo serviço onde o arquivo está.
+    if (!isSafeLink(file.url)) return null;
+    return (
+      <a href={file.url} target="_blank" rel="noopener noreferrer" className={primary}>
+        <ExternalLink className="size-4" /> Abrir link
+      </a>
+    );
+  }
   if (url) {
     return (
       <>
@@ -182,7 +193,7 @@ export default function DocumentDetailPage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-4">
-          <Panel title="Pré-visualização" description={current.file ? `${current.file.name} · ${formatBytes(current.file.size)}` : undefined}>
+          <Panel title="Pré-visualização" description={current.file ? `${current.file.name} · ${current.file.url ? "link externo" : formatBytes(current.file.size)}` : undefined}>
             <Preview file={current.file} sample={doc.sample} preview={preview} />
           </Panel>
           {doc.description && (
@@ -243,8 +254,8 @@ export default function DocumentDetailPage() {
               items={[
                 { label: "Categoria", value: category ?? "—" },
                 { label: "Departamento", value: dir.department(doc.departmentId)?.name ?? "—" },
-                { label: "Formato", value: current.file ? fileExtension(current.file.name) : "—" },
-                { label: "Tamanho", value: current.file ? formatBytes(current.file.size) : "—" },
+                { label: "Formato", value: current.file ? (current.file.url ? "Link externo" : fileExtension(current.file.name)) : "—" },
+                { label: "Tamanho", value: current.file ? (current.file.url ? "—" : formatBytes(current.file.size)) : "—" },
                 { label: "Autor do envio", value: dir.memberName(doc.createdBy) },
                 { label: "Data do envio", value: formatDateTime(doc.createdAt) },
                 { label: "Situação", value: DOCUMENT_STATUS[doc.status].label },

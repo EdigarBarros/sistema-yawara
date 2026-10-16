@@ -69,7 +69,7 @@ import { auditInTx } from "../core/audit";
 import { nextCode } from "../core/counters";
 import { mutation, query, type RunContext } from "../core/dispatch";
 import { fail } from "../core/errors";
-import { finalizeUpload, markAttached } from "../core/files";
+import { fileLinkSchema, markAttached, ONE_FILE_SOURCE, resolveFile } from "../core/files";
 import { appendHistory, historyEntry } from "../core/history";
 import { notify } from "../core/notify";
 import { indexRecord, searchEntryFor } from "../core/search-index";
@@ -201,9 +201,11 @@ const confirmPaymentInput = z.strictObject(
     ...saleRefShape,
     paymentMethod: z.enum(PAYMENT_METHODS, "Informe a forma de pagamento."),
     uploadId: z.string().regex(/^[a-f0-9]{32}$/, "Envio de arquivo inválido.").optional(),
+    /** Implantação gratuita: link do comprovante em vez de envio. */
+    link: fileLinkSchema.nullish(),
   },
   UNKNOWN_FIELDS,
-);
+).refine((v) => !(v.uploadId && v.link), ONE_FILE_SOURCE);
 
 const reasonInput = (message: string) =>
   z.strictObject({ ...saleRefShape, reason: z.string(message).trim().min(3, message).max(300, "Use no máximo 300 caracteres no motivo.") }, UNKNOWN_FIELDS);
@@ -982,10 +984,10 @@ export const campaignsActions = {
     module: "campaigns",
     schema: confirmPaymentInput,
     async prepare(actor, input, ctx) {
-      if (!input.uploadId) return null;
+      if (!input.uploadId && !input.link) return null;
       // Conferência antecipada (a permissão é verificada de novo dentro da transação).
       requirePermission(actor, "campaigns.approve", "Seu perfil não pode confirmar recebimentos.");
-      return finalizeUpload(actor, input.uploadId, "saleReceipt", `campaigns/${input.campaignId}/receipts/${input.saleId}`, ctx);
+      return resolveFile(actor, input, "saleReceipt", `campaigns/${input.campaignId}/receipts/${input.saleId}`, ctx);
     },
     async run(tx, actor, { campaignId, saleId, paymentMethod: method, uploadId }, ctx, receipt: FileRef | null) {
       actor = actor!;
@@ -1010,7 +1012,8 @@ export const campaignsActions = {
           historyEntry(actor.uid, "payment", `Pagamento confirmado (${PAYMENT_METHOD_LABELS[method]})${receipt ? " com comprovante anexado" : ""}`, ctx.now),
         ),
       };
-      const replaced = receipt && current.receipt && current.receipt.path !== receipt.path ? current.receipt : undefined;
+      const sameFile = (a: FileRef, b: FileRef) => (a.path ?? a.url) === (b.path ?? b.url);
+      const replaced = receipt && current.receipt && !sameFile(current.receipt, receipt) ? current.receipt : undefined;
       writeSale(tx, s, next, replaced);
       syncLocks(tx, campaignId, next, locks);
       tx.update(s.campaignRef, { stats: applyDelta(s.stats, current, next) });

@@ -11,7 +11,7 @@ import { useCampaigns, useDirectory, useEvents } from "@/hooks/use-data";
 import { allowedContentStatuses, canChangeContent, canEditContent } from "@/lib/policies";
 import { CHANNEL_LABELS, CONTENT_FLOW, CONTENT_STATUS, CONTENT_TYPE_LABELS } from "@/lib/labels";
 import { formatDate, formatDateTime } from "@/lib/format";
-import { isDemoMode } from "@/lib/mode";
+import { isDemoMode, usesFileLinks } from "@/lib/mode";
 import { cn } from "@/lib/utils";
 import { MARKETING_ACCEPT } from "@/services/firebase/marketing";
 import { Sheet, SheetContent } from "@/components/ui/dialog";
@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/misc";
 import { DetailList, SectionTitle } from "@/components/shared/page";
 import { FileRow } from "@/components/shared/pickers";
 import { FileActions } from "@/components/shared/file-actions";
+import { AttachLinkDialog } from "@/components/shared/file-link";
 import { AudienceSummary } from "@/components/shared/audience";
 import { HistoryTimeline } from "@/components/shared/history";
 import { DemoNotice } from "@/components/shared/states";
@@ -51,6 +52,7 @@ export function ContentSheet({ item, onOpenChange }: { item: ContentItem | null;
   const { data: events } = useEvents(access.canModule("events"));
   const [editOpen, setEditOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [linkOpen, setLinkOpen] = useState(false);
   const move = useAction((id: string, s: ContentStatus) => services.marketing.setStatus(id, s), { success: (c) => `Etapa: ${CONTENT_STATUS[c.status].label}` });
   const attach = useAction((id: string, files: File[]) => services.marketing.addFiles(id, files), {
     success: isDemoMode ? "Arquivos anexados (somente neste navegador)" : "Arquivos anexados",
@@ -166,9 +168,10 @@ export function ContentSheet({ item, onOpenChange }: { item: ContentItem | null;
                 action={
                   editable && (
                     <>
-                      <Button size="sm" variant="ghost" loading={attach.pending} onClick={() => fileRef.current?.click()}>
+                      <Button size="sm" variant="ghost" loading={attach.pending} onClick={() => (usesFileLinks ? setLinkOpen(true) : fileRef.current?.click())}>
                         <Paperclip /> Anexar
                       </Button>
+                      <AttachLinkDialog open={linkOpen} onOpenChange={setLinkOpen} title="Link do arquivo" onSubmit={(f) => attach.runSafe(item.id, [f])} />
                       <input
                         ref={fileRef}
                         type="file"

@@ -13,6 +13,7 @@ import { getBlob, ref, uploadBytesResumable } from "firebase/storage";
 import type { FileRef } from "@/types";
 import { useUploads } from "@/stores/uploads";
 import type { FileService } from "../contracts";
+import { isLinkFile, isSafeLink } from "@/lib/file-links";
 import { ServiceError } from "../errors";
 import { firebase } from "./app";
 import { callApi } from "./call";
@@ -86,6 +87,31 @@ export function contentTypeOf(file: File | Blob, name?: string) {
   return MIME_BY_EXT[ext] ?? "application/octet-stream";
 }
 
+/* ---------------------- arquivos como link (plano gratuito) ---------------------- */
+
+export { isLinkFile, isSafeLink, LINK_MIME, makeLinkFile } from "@/lib/file-links";
+
+export interface FileLinkInput {
+  name: string;
+  url: string;
+}
+
+/**
+ * Origem do arquivo para uma operação: o link (plano gratuito) ou o `uploadId`
+ * do envio ao Cloud Storage (plano Blaze).
+ */
+export async function fileSource(
+  purpose: UploadPurpose,
+  file: File | Blob,
+  options: { name?: string; targetId?: string } = {},
+): Promise<{ uploadId: string } | { link: FileLinkInput }> {
+  if (isLinkFile(file)) {
+    const name = options.name ?? (file instanceof File ? file.name : "arquivo");
+    return { link: { name, url: (await file.text()).trim() } };
+  }
+  return { uploadId: await uploadFile(purpose, file, options) };
+}
+
 /**
  * Envia um arquivo e devolve o `uploadId` para a operação que vai anexá-lo.
  * O progresso aparece no indicador de envios; o envio pode ser cancelado.
@@ -134,10 +160,12 @@ export const firebaseFiles: FileService = {
   },
 
   isAvailable(file) {
-    return !!file?.path;
+    return !!(file?.path || file?.url);
   },
 
   async loadObjectUrl(file) {
+    // Link externo: não há como pré-visualizar aqui (o acesso é controlado pelo serviço do link).
+    if (file.url) throw new ServiceError("unavailable", "Este arquivo é um link externo: abra-o pelo botão.");
     if (!file.path) throw new ServiceError("unavailable", "Este registro não tem arquivo anexado.");
     try {
       const blob = await getBlob(ref(firebase().storage, file.path));
@@ -150,6 +178,13 @@ export const firebaseFiles: FileService = {
   },
 
   async open(file: FileRef, options) {
+    if (file.url) {
+      // Link externo (implantação gratuita): abre em nova aba; o serviço do link controla o acesso.
+      if (!isSafeLink(file.url)) throw new ServiceError("invalid", "O link deste arquivo não é válido.");
+      window.open(file.url, "_blank", "noopener,noreferrer");
+      void options;
+      return;
+    }
     if (!file.path) throw new ServiceError("unavailable", "Este registro não tem arquivo anexado.");
     // Abre a janela ainda dentro do clique (evita bloqueio de pop-up) e a preenche depois do download.
     const win = !options?.download && typeof window !== "undefined" ? window.open("", "_blank") : null;

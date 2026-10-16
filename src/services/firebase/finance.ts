@@ -25,7 +25,7 @@ import { ServiceError } from "../errors";
 import { firebase } from "./app";
 import { callApi, takeRequestId } from "./call";
 import { fromSnap, mapFirestoreError } from "./convert";
-import { uploadFile } from "./files";
+import { fileSource, isLinkFile } from "./files";
 import { getVisible } from "./queries";
 import { hasPerm, useFirebaseSession, whenAccess } from "./session";
 
@@ -73,6 +73,8 @@ function safeId(id: string, label = "Lançamento não encontrado.") {
 
 /** Confere o comprovante antes do envio (só para avisar mais cedo — a conferência que vale é a do servidor). */
 function acceptableReceipt(file: File): Blob {
+  // Link (implantação gratuita): o servidor confere o endereço.
+  if (isLinkFile(file)) return file;
   if (file.size <= 0) throw new ServiceError("invalid", "O comprovante está vazio.");
   if (file.size > RECEIPT_MAX_BYTES) throw new ServiceError("invalid", "O comprovante deve ter no máximo 15 MB.");
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
@@ -153,8 +155,8 @@ export const firebaseFinance: FinanceService = {
   async create(input, receipt) {
     const rid = takeRequestId();
     const blob = receipt ? acceptableReceipt(receipt) : null;
-    const uploadId = receipt && blob ? await uploadFile("financeReceipt", blob, { name: receipt.name, targetId: await expectedEntryId(rid) }) : null;
-    return normalize(await callApi<FinanceEntryWithReceipts>("finance", "create", { input: entryPayload(input), uploadId }, rid));
+    const source = receipt && blob ? await fileSource("financeReceipt", blob, { name: receipt.name, targetId: await expectedEntryId(rid) }) : {};
+    return normalize(await callApi<FinanceEntryWithReceipts>("finance", "create", { input: entryPayload(input), ...source }, rid));
   },
 
   async update(id, input) {
@@ -173,7 +175,7 @@ export const firebaseFinance: FinanceService = {
     const rid = takeRequestId();
     safeId(id);
     const blob = acceptableReceipt(receipt);
-    const uploadId = await uploadFile("financeReceipt", blob, { name: receipt.name, targetId: id });
-    return normalize(await callApi<FinanceEntryWithReceipts>("finance", "attachReceipt", { id, uploadId }, rid));
+    const source = await fileSource("financeReceipt", blob, { name: receipt.name, targetId: id });
+    return normalize(await callApi<FinanceEntryWithReceipts>("finance", "attachReceipt", { id, ...source }, rid));
   },
 };

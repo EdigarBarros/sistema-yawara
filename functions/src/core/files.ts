@@ -27,6 +27,7 @@ import type { FileRef } from "@/types";
 import type { Actor } from "./actor";
 import { bucket, db, nowISO, Timestamp, timestampInDays } from "./admin";
 import type { PrepareContext } from "./dispatch";
+import { z } from "zod";
 import { fail } from "./errors";
 
 type StorageFile = ReturnType<ReturnType<typeof bucket>["file"]>;
@@ -361,3 +362,62 @@ export async function finalizeUpload(actor: Actor, uploadId: string, purpose: Up
 export function markAttached(tx: Transaction, uploadId: string, resource: string) {
   tx.update(db.doc(`uploads/${uploadId}`), { status: "attached", attachedTo: resource, attachedAt: nowISO() });
 }
+
+/* ------------------------------------------------------------------------
+ * ARQUIVOS COMO LINK (implantação gratuita, sem Cloud Storage)
+ * ------------------------------------------------------------------------
+ * A pessoa informa o nome e o link do arquivo (Google Drive, OneDrive…). A
+ * Central guarda só esses dados; quem controla o acesso ao arquivo é o serviço
+ * onde ele está. Só links https são aceitos (nunca javascript:, data: etc.).
+ */
+export const LINK_MIME = "text/uri-list";
+
+function isSafeHttpsUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !!url.hostname && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
+export const fileLinkSchema = z
+  .object({
+    name: z
+      .string({ error: "Informe o nome do arquivo." })
+      .trim()
+      .min(1, "Informe o nome do arquivo.")
+      .max(200, "O nome do arquivo pode ter no máximo 200 caracteres."),
+    url: z
+      .string({ error: "Informe o link do arquivo." })
+      .trim()
+      .max(2000, "O link do arquivo é longo demais.")
+      .refine(isSafeHttpsUrl, "Informe um link válido, começando com https:// (ex.: link de compartilhamento do Google Drive)."),
+  })
+  .strict();
+
+export type FileLink = z.infer<typeof fileLinkSchema>;
+
+/** Referência de arquivo guardada para um link. */
+export function linkFileRef(link: FileLink): FileRef {
+  return { name: safeFileName(link.name), size: 0, mimeType: LINK_MIME, url: new URL(link.url).toString() };
+}
+
+/**
+ * Arquivo de uma operação: link (implantação gratuita) ou envio pelo Storage.
+ * `null` quando nenhum dos dois foi informado.
+ */
+export async function resolveFile(
+  actor: Actor,
+  source: { uploadId?: string | null; link?: FileLink | null },
+  purpose: UploadPurpose,
+  destDir: string,
+  ctx: PrepareContext,
+): Promise<FileRef | null> {
+  if (source.link) return linkFileRef(source.link);
+  if (source.uploadId) return finalizeUpload(actor, source.uploadId, purpose, destDir, ctx);
+  return null;
+}
+
+/** Mensagem para quando arquivo e link chegam juntos. */
+export const ONE_FILE_SOURCE = "Informe o arquivo OU o link, não os dois.";

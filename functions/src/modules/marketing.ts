@@ -46,7 +46,7 @@ import { auditInTx } from "../core/audit";
 import { nextCode } from "../core/counters";
 import { alreadyCompleted, mutation, type RunContext } from "../core/dispatch";
 import { fail } from "../core/errors";
-import { finalizeUpload, markAttached } from "../core/files";
+import { fileLinkSchema, finalizeUpload, linkFileRef, markAttached } from "../core/files";
 import { appendHistory, historyEntry } from "../core/history";
 import { notify, resolveRecipients } from "../core/notify";
 import { requireDoc, toDTO } from "../core/records";
@@ -167,10 +167,14 @@ const addFilesSchema = strict({
   id: docId,
   uploadIds: z
     .array(z.string({ error: "Envio de arquivo inválido." }).regex(/^[a-f0-9]{32}$/, "Envio de arquivo inválido."), { error: "Escolha pelo menos um arquivo." })
-    .min(1, "Escolha pelo menos um arquivo.")
     .max(MAX_FILES_PER_CALL, `Envie no máximo ${MAX_FILES_PER_CALL} arquivos por vez.`)
-    .refine((ids) => new Set(ids).size === ids.length, "O mesmo arquivo foi enviado mais de uma vez."),
-});
+    .refine((ids) => new Set(ids).size === ids.length, "O mesmo arquivo foi enviado mais de uma vez.")
+    .default([]),
+  /** Implantação gratuita: links dos arquivos em vez de envio. */
+  links: z.array(fileLinkSchema).max(MAX_FILES_PER_CALL, `Informe no máximo ${MAX_FILES_PER_CALL} links por vez.`).default([]),
+})
+  .refine((v) => v.uploadIds.length + v.links.length > 0, "Escolha pelo menos um arquivo.")
+  .refine((v) => v.uploadIds.length + v.links.length <= MAX_FILES_PER_CALL, `Envie no máximo ${MAX_FILES_PER_CALL} arquivos por vez.`);
 
 /* ------------------------------- auxiliares ------------------------------ */
 
@@ -516,7 +520,7 @@ export const marketingActions = {
      * despachante devolve o resultado guardado (mesmo que o conteúdo tenha sido
      * aprovado depois).
      */
-    async prepare(actor, { id: contentId, uploadIds }, ctx): Promise<FileRef[]> {
+    async prepare(actor, { id: contentId, uploadIds, links }, ctx): Promise<FileRef[]> {
       if (await alreadyCompleted(actor.uid, ctx.requestId)) return [];
       const snap = await db.doc(`contents/${contentId}`).get();
       if (!snap.exists) fail("not_found", "Conteúdo não encontrado. Pode ter sido removido ou não estar disponível para o seu perfil.");
@@ -527,7 +531,7 @@ export const marketingActions = {
       const results = await Promise.allSettled(uploadIds.map((uploadId) => finalizeUpload(actor, uploadId, "marketingFile", `marketing/${contentId}`, ctx)));
       const failed = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
       if (failed) throw failed.reason;
-      return results.map((r) => (r as PromiseFulfilledResult<FileRef>).value);
+      return [...results.map((r) => (r as PromiseFulfilledResult<FileRef>).value), ...links.map(linkFileRef)];
     },
     async run(tx, actor, { id: contentId, uploadIds }, ctx, files): Promise<ContentRef> {
       actor = actor!;
@@ -538,8 +542,9 @@ export const marketingActions = {
       requireChangeable(actor, current);
 
       // O mesmo arquivo nunca é anexado duas vezes (ex.: requisição repetida com outro identificador).
-      const known = new Set(current.files.map((f) => f.path).filter(Boolean));
-      const fresh = files.filter((f) => !known.has(f.path));
+      const key = (f: FileRef) => f.path ?? f.url;
+      const known = new Set(current.files.map(key).filter(Boolean));
+      const fresh = files.filter((f, i) => !known.has(key(f)) && files.findIndex((g) => key(g) === key(f)) === i);
       if (fresh.length === 0) return { id: contentId };
       if (current.files.length + fresh.length > MAX_FILES) {
         fail("conflict", `Este conteúdo já tem ${current.files.length} arquivos; o limite é ${MAX_FILES} por conteúdo.`);
