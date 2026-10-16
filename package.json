@@ -5,6 +5,11 @@
   "engines": {
     "node": "22.x"
   },
+  "overrides": {
+    "jwks-rsa": {
+      "jose": "^5.10.0"
+    }
+  },
   "description": "Central Yawara — plataforma interna da Atlética Yawara de Psicologia (Next.js + Firebase)",
   "scripts": {
     "dev": "next dev",

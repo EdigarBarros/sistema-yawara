@@ -44,10 +44,10 @@ describe("documentos com link", () => {
   it("cria e adiciona versão por link; nada vai para o Storage", async () => {
     const doc = await documents<InstitutionalDocument>("create", "sec", { input: docInput(), link: link() });
     expect(doc.versions[0].file).toMatchObject({ name: "Estatuto assinado.pdf", size: 0, mimeType: "text/uri-list", url: DRIVE });
-    expect(doc.versions[0].file.path).toBeUndefined();
+    expect(doc.versions[0].file!.path).toBeUndefined();
 
     const v2 = await documents<InstitutionalDocument>("addVersion", "sec", { id: doc.id, link: link("https://onedrive.live.com/arquivo-ficticio", "Estatuto v2.pdf") });
-    expect(v2.versions.map((v) => v.file.url)).toEqual([DRIVE, "https://onedrive.live.com/arquivo-ficticio"]);
+    expect(v2.versions.map((v) => v.file!.url)).toEqual([DRIVE, "https://onedrive.live.com/arquivo-ficticio"]);
     const [files] = await bucket().getFiles({ prefix: "documents/" });
     expect(files).toHaveLength(0);
   });
