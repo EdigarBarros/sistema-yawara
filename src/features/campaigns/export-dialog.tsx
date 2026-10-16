@@ -48,19 +48,20 @@ function ExportDialogBody({ onOpenChange, campaign, slots, initialFormat = "pdf"
     setBusy(true);
     try {
       const ctx = { campaign, slots, scope, audience: effectiveAudience, memberName: dir.memberName, generatedBy: access.user?.name ?? "—" };
-      const n = format === "csv" ? exportCsv(ctx) : format === "pdf" ? await exportPdf(ctx) : await exportPng(ctx);
       if (effectiveAudience === "internal") {
-        // Registro na auditoria (melhor esforço: não impede a exportação). Sem dados pessoais no resumo.
-        void services.audit
+        // Registro na auditoria ANTES de gerar e entregar o arquivo (fechar a aba logo após o download não
+        // perde o registro). Melhor esforço: nunca lança erro nem impede a exportação. Sem dados pessoais no resumo.
+        await services.audit
           .recordExport({
             module: "campaigns",
             resourceType: "campaign",
             resourceId: campaign.id,
-            summary: `${format.toUpperCase()} interno com dados dos compradores (${SCOPE_LABELS[scope].toLowerCase()}, ${n} número(s)) da campanha ${campaign.code}`,
+            summary: `${format.toUpperCase()} interno com dados dos compradores (${SCOPE_LABELS[scope].toLowerCase()}, ${count} número(s)) da campanha ${campaign.code}`,
             personalData: true,
           })
           .catch(() => undefined);
       }
+      const n = format === "csv" ? exportCsv(ctx) : format === "pdf" ? await exportPdf(ctx) : await exportPng(ctx);
       notifySuccess(
         `Arquivo ${format.toUpperCase()} gerado`,
         `${n} número(s) · ${effectiveAudience === "public" ? "sem dados pessoais" : "com dados dos compradores"}. Verifique a pasta de downloads.`,

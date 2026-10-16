@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ChoiceCards, Field, Input, Segmented, Select, Textarea } from "@/components/ui/form";
 import { FilePicker, MemberSelect } from "@/components/shared/pickers";
+import { FormAlert } from "@/components/shared/form-alert";
 import { RAFFLE_INCOME_HELP, RECEIPT_ACCEPT, RECEIPT_HINT } from "./receipt";
 
 /** Maior valor aceito pelo servidor: R$ 10.000.000,00 (em centavos). */
@@ -283,11 +284,7 @@ function EntryFormBody({ onOpenChange, type = "income", entry, onSaved }: Props)
         <Field label="Observações" optional>
           <Textarea rows={2} {...register("notes")} />
         </Field>
-        {serverError && (
-          <p role="alert" className="rounded-lg border border-danger/35 bg-danger/10 px-3.5 py-2.5 text-[13px] text-danger">
-            {serverError}
-          </p>
-        )}
+        <FormAlert message={serverError} />
       </form>
     </DialogContent>
   );

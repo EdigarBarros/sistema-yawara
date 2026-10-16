@@ -95,6 +95,9 @@ export default function MeetingDetailPage() {
   const pdf = async () => {
     setGenerating(true);
     try {
+      // Registro na auditoria ANTES de entregar o arquivo (fechar a aba logo após o download não perde o
+      // registro). Melhor esforço: nunca lança erro nem impede a exportação. Sem dados pessoais no resumo.
+      await services.audit.recordExport({ module: "meetings", resourceType: "meeting", resourceId: m.id, summary: "PDF da ata", personalData: false }).catch(() => undefined);
       await exportMeetingPdf({
         meeting: m,
         memberName: dir.memberName,
@@ -103,8 +106,6 @@ export default function MeetingDetailPage() {
         eventName,
         generatedBy: access.user?.name ?? "—",
       });
-      // Registro na auditoria (melhor esforço: não impede a exportação). Sem dados pessoais no resumo.
-      void services.audit.recordExport({ module: "meetings", resourceType: "meeting", resourceId: m.id, summary: "PDF da ata", personalData: false }).catch(() => undefined);
       notifySuccess("PDF da ata gerado", isDemoMode ? "Gerado neste navegador a partir dos dados da demonstração." : "PDF gerado no navegador a partir dos dados registrados.");
     } catch (e) {
       notifyError(e, "Não foi possível gerar o PDF.");

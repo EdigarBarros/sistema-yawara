@@ -23,6 +23,8 @@ import { Badge } from "@/components/ui/misc";
 import { DetailList, PageHeader, Panel } from "@/components/shared/page";
 import { DemoNotice, ErrorState, InlineLoader, RestrictedState } from "@/components/shared/states";
 import { confirmAction } from "@/components/shared/confirm";
+import { FormAlert } from "@/components/shared/form-alert";
+import { changedInstitutionFields, INSTITUTION_FIELDS } from "./institution";
 
 const SECTIONS = [
   { key: "instituicao", label: "Dados institucionais", icon: Landmark },
@@ -53,18 +55,6 @@ function ModeNotice({ children, className }: { children: React.ReactNode; classN
 
 /* ------------------------------- Dados institucionais ------------------------------- */
 
-const INSTITUTION_FIELDS: { key: keyof InstitutionSettings; label: string; wide?: boolean }[] = [
-  { key: "legalName", label: "Razão social / nome completo", wide: true },
-  { key: "shortName", label: "Nome curto" },
-  { key: "systemName", label: "Nome do sistema" },
-  { key: "course", label: "Curso" },
-  { key: "institution", label: "Instituição de ensino" },
-  { key: "city", label: "Cidade" },
-  { key: "email", label: "E-mail de contato" },
-  { key: "instagram", label: "Instagram" },
-  { key: "motto", label: "Lema / hashtag" },
-];
-
 function InstitutionSection() {
   const access = useAccess();
   const { data, isError, error: loadError, refetch } = useSettings();
@@ -72,9 +62,12 @@ function InstitutionSection() {
   const [error, setError] = useState<string>();
   const editable = access.can("settings.edit");
   const value = form ?? data?.institution;
-  const save = useAction((data: InstitutionSettings) => services.settings.updateInstitution(data), { success: "Dados institucionais salvos", silentError: true, onSuccess: () => setForm(null) });
+  const save = useAction((changes: Partial<InstitutionSettings>) => services.settings.updateInstitution(changes), { success: "Dados institucionais salvos", silentError: true, onSuccess: () => setForm(null) });
   if (!value && isError) return <ErrorState message={errorMessage(loadError, "Não foi possível carregar as configurações.")} onRetry={() => void refetch()} />;
   if (!value) return <InlineLoader />;
+  // Só os campos alterados são enviados: a auditoria registra exatamente o que mudou.
+  const changes = changedInstitutionFields(data?.institution ?? {}, form);
+  const hasChanges = Object.keys(changes).length > 0;
   return (
     <Panel
       title="Dados institucionais"
@@ -84,13 +77,13 @@ function InstitutionSection() {
           <Button
             variant="primary"
             size="sm"
-            disabled={!form}
+            disabled={!hasChanges}
             loading={save.pending}
             onClick={async () => {
-              if (!form) return;
+              if (!hasChanges) return;
               setError(undefined);
               try {
-                await save.run(form);
+                await save.run(changes);
               } catch (e) {
                 setError(errorMessage(e));
               }
@@ -108,7 +101,7 @@ function InstitutionSection() {
           </Field>
         ))}
       </div>
-      {error && <p className="mt-3 text-[13px] text-danger">{error}</p>}
+      <FormAlert message={error} className="mt-3" />
       {!editable && <ModeNotice className="mt-4">Seu perfil pode consultar, mas não editar estes dados.</ModeNotice>}
     </Panel>
   );

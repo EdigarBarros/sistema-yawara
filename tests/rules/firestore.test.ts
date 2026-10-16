@@ -14,9 +14,18 @@ const NOW = "2026-10-14T12:00:00.000Z";
 
 const audiences = {
   all: { scope: "all" as const, roleIds: [], userIds: [] },
+  board: { scope: "board" as const, roleIds: [], userIds: [] },
   dept: (departmentId: string) => ({ scope: "department" as const, departmentId, roleIds: [], userIds: [] }),
+  roles: (...roleIds: string[]) => ({ scope: "roles" as const, roleIds, userIds: [] }),
   people: (...userIds: string[]) => ({ scope: "people" as const, roleIds: [], userIds }),
 };
+
+/** Grava `settings/system` (como o servidor) com os módulos informados. */
+async function setModules(modules: Record<string, boolean> | null) {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), "settings/system"), modules ? { institution: { shortName: "Atlética" }, modules } : { institution: { shortName: "Atlética" } });
+  });
+}
 
 beforeAll(async () => {
   env = await createEnv();
@@ -116,6 +125,40 @@ describe("campanhas e dados de compradores", () => {
     await assertSucceeds(getDocs(query(collection(fs("evt"), "campaigns/c-evt/buyers"), where("readers", "array-contains-any", tokens("evt")))));
     await assertFails(getDocs(collection(fs("evt"), "campaigns/c-evt/buyers")));
   });
+  it("dados de compradores exigem ver a campanha (público dos compradores mais amplo que o da campanha)", async () => {
+    // Campanha só do Financeiro; dados dos compradores liberados para a diretoria.
+    const restrita = { access: { view: audiences.roles("diretor-financeiro"), sell: audiences.roles("diretor-financeiro"), buyerData: audiences.board }, departmentId: "financeiro", createdBy: "fin" };
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, "campaigns/c-fin"), { name: "Rifa do Financeiro", ...restrita, readers: campaignReaders(restrita), updatedAt: NOW });
+      await setDoc(doc(db, "campaigns/c-fin/sales/s9"), { numbers: [9], status: "pending", sellerId: "fin", registeredById: "fin" });
+      await setDoc(doc(db, "campaigns/c-fin/buyers/s9"), { name: "Comprador Sigiloso", contact: "0000", readers: buyerReaders(restrita, { sellerId: "fin", registeredById: "fin" }) });
+    });
+    // mkt é da diretoria (está no público dos compradores), mas não vê a campanha.
+    if (!buyerReaders(restrita, { sellerId: "fin", registeredById: "fin" }).some((t) => tokens("mkt").includes(t))) throw new Error("cenário: mkt deveria estar no público dos compradores");
+    await assertFails(getDoc(doc(fs("mkt"), "campaigns/c-fin")));
+    await assertFails(getDocs(collection(fs("mkt"), "campaigns/c-fin/sales")));
+    await assertFails(getDoc(doc(fs("mkt"), "campaigns/c-fin/buyers/s9")));
+    await assertFails(getDocs(query(collection(fs("mkt"), "campaigns/c-fin/buyers"), where("readers", "array-contains-any", tokens("mkt")))));
+    // Quem vê a campanha e está no público dos compradores continua lendo; quem administra campanhas também.
+    await assertSucceeds(getDoc(doc(fs("fin"), "campaigns/c-fin/buyers/s9")));
+    await assertSucceeds(getDocs(query(collection(fs("fin"), "campaigns/c-fin/buyers"), where("readers", "array-contains-any", tokens("fin")))));
+    await assertSucceeds(getDoc(doc(fs("pres"), "campaigns/c-fin/buyers/s9")));
+  });
+
+  it("vendedor que sai do público da campanha perde o acesso ao comprador", async () => {
+    // ass vendeu (está nos `readers` do comprador), mas a campanha agora é só de evt.
+    const estreita = { access: { view: audiences.people("evt"), sell: audiences.people("evt"), buyerData: audiences.people("evt") }, departmentId: "eventos", createdBy: "evt" };
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, "campaigns/c-estreita"), { name: "Rifa", ...estreita, readers: campaignReaders(estreita), updatedAt: NOW });
+      await setDoc(doc(db, "campaigns/c-estreita/buyers/s1"), { name: "Comprador", contact: "0000", readers: buyerReaders(estreita, { sellerId: "ass", registeredById: "ass" }) });
+    });
+    await assertFails(getDoc(doc(fs("ass"), "campaigns/c-estreita/buyers/s1")));
+    await assertFails(getDocs(query(collection(fs("ass"), "campaigns/c-estreita/buyers"), where("readers", "array-contains-any", tokens("ass")))));
+    await assertSucceeds(getDoc(doc(fs("evt"), "campaigns/c-estreita/buyers/s1")));
+  });
+
   it("travas de números e gravações de vendas são exclusivas do servidor", async () => {
     await assertFails(getDoc(doc(fs("pres"), "campaigns/c-evt/numbers/00001")));
     await assertFails(setDoc(doc(fs("evt"), "campaigns/c-evt/numbers/00003"), { saleId: "fake" }));
@@ -150,6 +193,67 @@ describe("financeiro, auditoria, extensão e coleções internas", () => {
     await assertFails(getDoc(doc(fs("ass"), "uploads/u1")));
     await assertFails(getDoc(doc(fs("pres"), "idempotency/x")));
     await assertFails(setDoc(doc(fs("pres"), "counters/RIFA-2026"), { value: 1 }));
+  });
+});
+
+describe("módulos desativados nas configurações", () => {
+  it("sem o documento de configurações, sem a lista de módulos ou sem a chave do módulo: módulo conta como ativo", async () => {
+    // beforeEach não grava settings/system.
+    await assertSucceeds(getDoc(doc(fs("ass"), "campaigns/c-all")));
+    await setModules(null);
+    await assertSucceeds(getDoc(doc(fs("ass"), "campaigns/c-all")));
+    await assertSucceeds(getDoc(doc(fs("fin"), "financeEntries/f1")));
+    await setModules({ events: true });
+    await assertSucceeds(getDoc(doc(fs("ass"), "campaigns/c-all")));
+    await assertSucceeds(getDoc(doc(fs("ext"), "projects/p1/private/attendance")));
+    await setModules({ campaigns: true, finance: true, extension: true });
+    await assertSucceeds(getDocs(collection(fs("ass"), "campaigns/c-evt/sales")));
+    await assertSucceeds(getDoc(doc(fs("evt"), "campaigns/c-evt/buyers/s1")));
+    await assertSucceeds(getDoc(doc(fs("fin"), "financeEntries/f1")));
+    await assertSucceeds(getDoc(doc(fs("ext"), "projects/p1")));
+  });
+
+  it("Campanhas desativado: campanhas, vendas e compradores ficam ilegíveis (inclusive para quem administra)", async () => {
+    await setModules({ campaigns: false });
+    await assertFails(getDoc(doc(fs("ass"), "campaigns/c-all")));
+    await assertFails(getDocs(query(collection(fs("ass"), "campaigns"), where("readers", "array-contains-any", tokens("ass")))));
+    await assertFails(getDocs(collection(fs("pres"), "campaigns")));
+    await assertFails(getDocs(collection(fs("ass"), "campaigns/c-evt/sales")));
+    await assertFails(getDoc(doc(fs("evt"), "campaigns/c-evt/buyers/s1")));
+    await assertFails(getDoc(doc(fs("pres"), "campaigns/c-evt/buyers/s1")));
+    // Os demais módulos seguem normais.
+    await assertSucceeds(getDoc(doc(fs("fin"), "financeEntries/f1")));
+    await assertSucceeds(getDoc(doc(fs("ext"), "projects/p1")));
+  });
+
+  it("Financeiro desativado: lançamentos ficam ilegíveis", async () => {
+    await setModules({ finance: false });
+    await assertFails(getDoc(doc(fs("fin"), "financeEntries/f1")));
+    await assertFails(getDocs(collection(fs("pres"), "financeEntries")));
+    await assertSucceeds(getDoc(doc(fs("ass"), "campaigns/c-all")));
+  });
+
+  it("Ensino e Extensão desativado: projetos e listas de presença ficam ilegíveis", async () => {
+    await setModules({ extension: false });
+    await assertFails(getDoc(doc(fs("ext"), "projects/p1")));
+    await assertFails(getDoc(doc(fs("ext"), "projects/p1/private/attendance")));
+    await assertFails(getDocs(query(collection(fs("ext"), "projects"), where("readers", "array-contains-any", tokens("ext")))));
+  });
+
+  it("Documentos, Eventos, Reuniões e Marketing desativados: registros ficam ilegíveis", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      for (const path of ["documents/d1", "events/e1", "meetings/m1", "contents/k1"]) await setDoc(doc(db, path), { name: "Registro", readers: ["all"], updatedAt: NOW });
+    });
+    await assertSucceeds(getDoc(doc(fs("pres"), "documents/d1")));
+    await assertSucceeds(getDoc(doc(fs("pres"), "events/e1")));
+    await assertSucceeds(getDoc(doc(fs("pres"), "meetings/m1")));
+    await assertSucceeds(getDoc(doc(fs("pres"), "contents/k1")));
+    await setModules({ documents: false, events: false, meetings: false, marketing: false });
+    await assertFails(getDoc(doc(fs("pres"), "documents/d1")));
+    await assertFails(getDoc(doc(fs("pres"), "events/e1")));
+    await assertFails(getDoc(doc(fs("pres"), "meetings/m1")));
+    await assertFails(getDoc(doc(fs("pres"), "contents/k1")));
   });
 });
 

@@ -3,9 +3,11 @@
 import { useState } from "react";
 import type { Audience, InstitutionalDocument } from "@/types";
 import { services } from "@/services";
+import { useAccess } from "@/hooks/use-access";
 import { useAction } from "@/hooks/use-action";
 import { useDirectory, useDocumentCategories } from "@/hooks/use-data";
 import { errorMessage } from "@/lib/notify";
+import { canMarkDocumentCurrent } from "@/lib/policies";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/form";
@@ -43,6 +45,9 @@ function ErrorLine({ error }: { error?: string }) {
 
 export const EditDocumentDialog = wrap(function EditBody({ onOpenChange, doc }: Props) {
   const dir = useDirectory();
+  const { ctx } = useAccess();
+  // "Vigente" exige documents.approve ou ser quem criou (o servidor confere de novo).
+  const canValidate = !!ctx && canMarkDocumentCurrent(ctx, doc);
   const { data: categories, isError: categoriesFailed } = useDocumentCategories();
   const [form, setForm] = useState({
     name: doc.name,
@@ -115,9 +120,15 @@ export const EditDocumentDialog = wrap(function EditBody({ onOpenChange, doc }: 
           </Select>
         </Field>
         {doc.status !== "archived" && (
-          <Field label="Situação" required>
+          <Field
+            label="Situação"
+            required
+            hint={!canValidate && doc.status !== "current" ? "Só quem valida documentos (ou quem o criou) pode marcá-lo como vigente." : undefined}
+          >
             <Select value={form.status} onChange={set("status")}>
-              <option value="current">Vigente</option>
+              <option value="current" disabled={!canValidate && doc.status !== "current"}>
+                Vigente
+              </option>
               <option value="draft">Em elaboração</option>
             </Select>
           </Field>
@@ -182,12 +193,18 @@ export const ShareDocumentDialog = wrap(function ShareBody({ onOpenChange, doc }
 /* -------------------------------- Nova versão -------------------------------- */
 
 export const NewVersionDialog = wrap(function VersionBody({ onOpenChange, doc }: Props) {
+  const { ctx } = useAccess();
   const [file, setFile] = useState<File | null>(null);
   const [note, setNote] = useState("");
   const [error, setError] = useState<string>();
+  // Documento vigente + perfil que não valida: a nova versão deixa o documento "Em elaboração" (regra do servidor).
+  const needsValidation = doc.status === "current" && !(ctx && canMarkDocumentCurrent(ctx, doc));
   const save = useAction((chosen: File, text: string) => services.documents.addVersion(doc.id, chosen, text), {
     success: (d) => `Versão ${d.versions.length} enviada`,
-    successDescription: "As versões anteriores continuam disponíveis no histórico.",
+    successDescription: (d) =>
+      doc.status === "current" && d.status === "draft"
+        ? "O documento ficou “Em elaboração” até que alguém que valida documentos o marque como vigente. As versões anteriores continuam disponíveis."
+        : "As versões anteriores continuam disponíveis no histórico.",
     silentError: true,
   });
   return (
@@ -233,6 +250,12 @@ export const NewVersionDialog = wrap(function VersionBody({ onOpenChange, doc }:
         <Field label="O que mudou?" optional>
           <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex.: correção do artigo 5º aprovada em reunião" />
         </Field>
+        {needsValidation && (
+          <p className="rounded-lg border border-warn/30 bg-warn/[0.08] px-3.5 py-3 text-[12.5px] leading-relaxed text-fg-muted">
+            Este documento está vigente. Como seu perfil não valida documentos, a nova versão deixa o documento “Em elaboração” até que alguém que valida
+            documentos (ou quem o criou) o marque como vigente de novo.
+          </p>
+        )}
       </div>
       <ErrorLine error={error} />
     </DialogContent>

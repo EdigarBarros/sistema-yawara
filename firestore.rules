@@ -17,6 +17,8 @@ rules_version = '2';
  *     do usuário (`userAccess.tokens`), ou quando ele tem `<módulo>.admin`.
  *     Consultas precisam filtrar por `readers array-contains-any <tokens>`
  *     (as regras não filtram resultados: uma consulta ampla é recusada).
+ *  5. Módulo desativado em `settings/system.modules` não é lido por ninguém
+ *     (nem por quem administra o módulo), como no servidor.
  *
  * Ver docs/backend/seguranca.md para o modelo completo.
  */
@@ -52,9 +54,20 @@ service cloud.firestore {
       return access().tokens;
     }
 
-    /** Registro com público: permissão de ver o módulo + (admin do módulo ou público compatível). */
+    /**
+     * Módulo ativo nas configurações. Sem o documento ou sem a chave, o módulo
+     * conta como ativo (mesma regra do servidor: só `false` desativa).
+     */
+    function moduleOn(module) {
+      let settingsPath = /databases/$(database)/documents/settings/system;
+      return !exists(settingsPath)
+        || get(settingsPath).data.get('modules', {}).get(module, true) != false;
+    }
+
+    /** Registro com público: módulo ativo + permissão de ver o módulo + (admin do módulo ou público compatível). */
     function visible(module, data) {
       return can(module + '.view')
+        && moduleOn(module)
         && (can(module + '.admin') || data.readers.hasAny(myTokens()));
     }
 
@@ -132,9 +145,11 @@ service cloud.firestore {
       }
 
       // Dados pessoais do comprador e comprovante. `readers` = público
-      // "dados dos compradores" + criador + quem vendeu/registrou.
+      // "dados dos compradores" + criador + quem vendeu/registrou. Também exige
+      // que a própria campanha seja visível para quem lê (quem sai do público
+      // da campanha perde o acesso aos compradores dela).
       match /buyers/{saleId} {
-        allow get, list: if can('campaigns.view')
+        allow get, list: if campaignVisible(campaignId)
           && (can('campaigns.admin') || resource.data.readers.hasAny(myTokens()));
         allow write: if false;
       }
@@ -172,7 +187,7 @@ service cloud.firestore {
     // um evento, para a diretoria do departamento, é servida pelo servidor
     // (financeApi.listForEvent), que aplica a política específica.
     match /financeEntries/{entryId} {
-      allow read: if can('finance.view');
+      allow read: if can('finance.view') && moduleOn('finance');
       allow write: if false;
     }
 

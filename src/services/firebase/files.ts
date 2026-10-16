@@ -38,6 +38,48 @@ const MIME_BY_EXT: Record<string, string> = {
   mov: "video/quicktime",
 };
 
+/** Extensão canônica de cada tipo aceito (a mesma que o servidor grava no nome). */
+const EXT_BY_MIME: Record<string, string> = {
+  "application/pdf": "pdf",
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "text/plain": "txt",
+  "text/csv": "csv",
+  "video/mp4": "mp4",
+  "video/quicktime": "mov",
+  [MIME_BY_EXT.docx]: "docx",
+  [MIME_BY_EXT.xlsx]: "xlsx",
+  [MIME_BY_EXT.pptx]: "pptx",
+  [MIME_BY_EXT.odt]: "odt",
+  [MIME_BY_EXT.ods]: "ods",
+  [MIME_BY_EXT.odp]: "odp",
+};
+
+/**
+ * Nome usado ao baixar: a extensão sempre corresponde ao tipo conferido pelo
+ * servidor (protege também arquivos gravados antes dessa regra, ex.:
+ * "ata.html" com conteúdo de texto é baixado como "ata.txt").
+ */
+export function downloadName(file: Pick<FileRef, "name" | "mimeType">) {
+  const name = (file.name ?? "").trim().replace(/[. ]+$/, "");
+  const ext = EXT_BY_MIME[file.mimeType];
+  if (!ext) return name || "arquivo";
+  // Extensão: até 8 letras/números com pelo menos uma letra ("Ata 15.10" não tem extensão).
+  const found = name.match(/\.([A-Za-z0-9]{1,8})$/)?.[1];
+  const current = found && /[A-Za-z]/.test(found) ? found.toLowerCase() : undefined;
+  if (current === ext || (ext === "jpg" && current === "jpeg")) return name;
+  const base = current ? name.slice(0, -(current.length + 1)).replace(/[. ]+$/, "") : name;
+  return `${base || "arquivo"}.${ext}`;
+}
+
+/** Tipo usado na URL local: só tipos aceitos pelo servidor; qualquer outro é tratado como binário (nunca exibido como página). */
+function blobType(file: FileRef, fallback: string) {
+  const type = file.mimeType || fallback;
+  return EXT_BY_MIME[type] ? type : "application/octet-stream";
+}
+
 export function contentTypeOf(file: File | Blob, name?: string) {
   if (file.type) return file.type;
   const ext = (name ?? (file instanceof File ? file.name : "")).split(".").pop()?.toLowerCase() ?? "";
@@ -99,7 +141,7 @@ export const firebaseFiles: FileService = {
     if (!file.path) throw new ServiceError("unavailable", "Este registro não tem arquivo anexado.");
     try {
       const blob = await getBlob(ref(firebase().storage, file.path));
-      return URL.createObjectURL(new Blob([blob], { type: file.mimeType || blob.type }));
+      return URL.createObjectURL(new Blob([blob], { type: blobType(file, blob.type) }));
     } catch (error) {
       const code = (error as { code?: string })?.code;
       if (code === "storage/unauthorized") throw new ServiceError("forbidden", "Seu perfil não tem acesso a este arquivo.");
@@ -113,13 +155,13 @@ export const firebaseFiles: FileService = {
     const win = !options?.download && typeof window !== "undefined" ? window.open("", "_blank") : null;
     try {
       const blob = await getBlob(ref(firebase().storage, file.path));
-      const url = URL.createObjectURL(new Blob([blob], { type: file.mimeType || blob.type }));
+      const url = URL.createObjectURL(new Blob([blob], { type: blobType(file, blob.type) }));
       if (win) {
         win.location.href = url;
       } else {
         const a = document.createElement("a");
         a.href = url;
-        a.download = file.name;
+        a.download = downloadName(file);
         a.rel = "noopener";
         a.click();
       }

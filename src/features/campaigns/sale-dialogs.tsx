@@ -3,12 +3,13 @@
 import { useMemo, useState } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertTriangle, BadgeCheck, Clock3, Hourglass, Plus, X } from "lucide-react";
+import { BadgeCheck, Clock3, Hourglass, Plus, X } from "lucide-react";
 import type { Campaign, NumberSlot, PaymentMethod, Sale } from "@/types";
 import { services, ServiceError } from "@/services";
 import { useAccess } from "@/hooks/use-access";
 import { useAction } from "@/hooks/use-action";
-import { canSeeBuyer } from "@/lib/policies";
+import { useDirectory } from "@/hooks/use-data";
+import { canChangePaymentMethod, canChangeSeller, canSeeBuyer, canSellIn } from "@/lib/policies";
 import { PAYMENT_METHOD_LABELS } from "@/lib/labels";
 import { formatMoney } from "@/lib/format";
 import { formatNumberRanges, padNumber, parseNumberList } from "@/lib/raffle";
@@ -18,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ChoiceCards, Field, Input, Select, Textarea } from "@/components/ui/form";
 import { MemberSelect, FilePicker } from "@/components/shared/pickers";
+import { FormAlert } from "@/components/shared/form-alert";
 import { editSaleSchema, saleSchema, type EditSaleFormValues, type SaleFormValues } from "./schemas";
 import { CampaignNotice } from "./notice";
 
@@ -269,12 +271,7 @@ function RegisterSaleBody({ onOpenChange, campaign, slots, initialNumbers, onReg
             <Textarea rows={2} {...register("notes")} />
           </Field>
 
-          {serverError && (
-            <div role="alert" className="flex items-start gap-2 rounded-lg border border-danger/35 bg-danger/10 px-3.5 py-3 text-[13px] text-danger">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-              {serverError}
-            </div>
-          )}
+          <FormAlert message={serverError} icon className="py-3" />
           <CampaignNotice
             demo="A demonstração impede vender o mesmo número duas vezes neste navegador. O bloqueio entre pessoas e celulares diferentes será feito pelo backend."
             live={`Os números são conferidos no servidor no momento do registro: se alguém ocupar um deles antes, a venda inteira é recusada (nada é registrado pela metade) e a grade é atualizada. Até ${MAX_NUMBERS_PER_SALE} números por venda.`}
@@ -303,9 +300,20 @@ export function EditSaleDialog(props: SaleDialogProps) {
 
 function EditSaleBody({ onOpenChange, campaign, sale }: SaleDialogProps) {
   const access = useAccess();
+  const dir = useDirectory();
   const buyerVisible = !!access.ctx && canSeeBuyer(access.ctx, campaign, sale) && !!sale.buyer;
   // Firebase: observações ficam junto dos dados pessoais; sem acesso a eles, o campo não aparece nem é enviado.
   const notesEditable = isDemoMode || buyerVisible;
+  // Trocar o responsável dá a ele acesso aos dados do comprador: só quem já os vê pode transferir a venda.
+  const sellerEditable = !!access.ctx && canChangeSeller(access.ctx, campaign, sale);
+  const methodEditable = !!access.ctx && canChangePaymentMethod(access.ctx, sale);
+  /** Mesma regra do servidor: novo responsável precisa poder registrar vendas nesta campanha. */
+  const canBeSeller = (memberId: string) => {
+    if (memberId === sale.sellerId) return true;
+    const user = dir.member(memberId);
+    const role = dir.roleOf(memberId);
+    return !!user && !!role && canSellIn({ user, role, department: dir.department(role.departmentId) }, campaign);
+  };
   const form = useForm<EditSaleFormValues>({
     resolver: zodResolver(editSaleSchema),
     defaultValues: {
@@ -323,8 +331,8 @@ function EditSaleBody({ onOpenChange, campaign, sale }: SaleDialogProps) {
       services.campaigns.updateSale(sale.id, {
         buyerName: buyerVisible ? v.buyerName : undefined,
         buyerContact: buyerVisible ? v.buyerContact : undefined,
-        sellerId: v.sellerId,
-        paymentMethod: v.paymentMethod ? (v.paymentMethod as PaymentMethod) : undefined,
+        sellerId: sellerEditable ? v.sellerId : undefined,
+        paymentMethod: methodEditable && v.paymentMethod ? (v.paymentMethod as PaymentMethod) : undefined,
         notes: notesEditable ? v.notes : undefined,
       }),
     { success: "Dados da venda atualizados" },
@@ -369,12 +377,26 @@ function EditSaleBody({ onOpenChange, campaign, sale }: SaleDialogProps) {
               live="Os dados pessoais e as observações deste comprador são restritos para o seu perfil e não podem ser editados."
             />
           )}
-          <Field label="Responsável pela venda" required className="sm:col-span-2" error={formState.errors.sellerId?.message}>
-            <Controller control={control} name="sellerId" render={({ field }) => <MemberSelect value={field.value} onChange={field.onChange} />} />
-          </Field>
+          {sellerEditable ? (
+            <Field label="Responsável pela venda" required className="sm:col-span-2" error={formState.errors.sellerId?.message}>
+              <Controller control={control} name="sellerId" render={({ field }) => <MemberSelect value={field.value} onChange={field.onChange} filter={canBeSeller} />} />
+            </Field>
+          ) : (
+            <Field
+              label="Responsável pela venda"
+              className="sm:col-span-2"
+              hint="Só quem consulta os dados deste comprador pode transferir a venda para outro responsável."
+            >
+              <Input value={dir.memberName(sale.sellerId)} readOnly disabled />
+            </Field>
+          )}
           {sale.status !== "reserved" && (
-            <Field label="Forma de pagamento" className="sm:col-span-2">
-              <PaymentMethodSelect allowEmpty {...register("paymentMethod")} />
+            <Field
+              label="Forma de pagamento"
+              className="sm:col-span-2"
+              hint={methodEditable ? undefined : "Pagamento já confirmado: somente quem confirma recebimentos altera a forma de pagamento."}
+            >
+              <PaymentMethodSelect allowEmpty disabled={!methodEditable} {...register("paymentMethod")} />
             </Field>
           )}
           {notesEditable && (

@@ -27,7 +27,7 @@ import { FilterChips, SearchInput, Toolbar } from "@/components/shared/filters";
 import { EmptyState, ErrorState } from "@/components/shared/states";
 import { confirmAction } from "@/components/shared/confirm";
 import { DepartmentChecklist, ErrorLine, Notice, RoleOptions } from "./org-dialogs";
-import { assignableRoles, INVITATION_STATUS, renewLock, revokeLock } from "./org-rules";
+import { assignableRoles, invitationStatusMeta, renewLock, revokeLock } from "./org-rules";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -38,7 +38,7 @@ export function useInvitations(enabled: boolean) {
 }
 
 export function InvitationStatusBadge({ status }: { status: InvitationStatus }) {
-  const meta = INVITATION_STATUS[status];
+  const meta = invitationStatusMeta(status);
   return (
     <Badge tone={meta.tone} dot>
       {meta.label}
@@ -290,10 +290,16 @@ export function InvitationsTab({ onInvite }: { onInvite?: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
 
   const all = data ?? [];
+  /**
+   * Linha de contato do convite. Convites aceitos não guardam mais o e-mail
+   * (ele fica só no cadastro do integrante, visível a quem edita integrantes):
+   * mostra o integrante criado pelo aceite.
+   */
+  const contact = (i: Invitation) => i.email || (i.acceptedUserId ? `Integrante: ${dir.memberName(i.acceptedUserId)}` : "");
   const count = (s: InvitationStatus) => all.filter((i) => i.status === s).length;
   const rows = all
     .filter((i) => status === "all" || i.status === status)
-    .filter((i) => matchesQuery(query, i.name, i.email, dir.role(i.roleId)?.name))
+    .filter((i) => matchesQuery(query, i.name, contact(i), dir.role(i.roleId)?.name))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   const onRenew = async (inv: Invitation) => {
@@ -330,7 +336,7 @@ export function InvitationsTab({ onInvite }: { onInvite?: () => void }) {
 
   const actions = (i: Invitation) => {
     if (!canCreate) return null;
-    const rl = renewLock(access.ctx, i, dir.roles);
+    const rl = renewLock(access.ctx, i, dir.roles, all);
     const vl = revokeLock(access.ctx, i);
     if (rl && vl) return null;
     return (
@@ -356,7 +362,7 @@ export function InvitationsTab({ onInvite }: { onInvite?: () => void }) {
       cell: (i) => (
         <div className="min-w-0">
           <p className="truncate font-semibold">{i.name}</p>
-          <p className="truncate text-[12px] text-fg-subtle">{i.email}</p>
+          <p className="truncate text-[12px] text-fg-subtle">{contact(i)}</p>
         </div>
       ),
     },
@@ -414,7 +420,7 @@ export function InvitationsTab({ onInvite }: { onInvite?: () => void }) {
                 <div className="min-w-0">
                   <p className="truncate font-semibold">{i.name}</p>
                   <p className="truncate text-[12px] text-fg-subtle">
-                    {i.email} · {dir.role(i.roleId)?.name ?? "Cargo removido"}
+                    {[contact(i), dir.role(i.roleId)?.name ?? "Cargo removido"].filter(Boolean).join(" · ")}
                   </p>
                   <p className="text-[12px] text-fg-muted">{validity(i)}</p>
                 </div>

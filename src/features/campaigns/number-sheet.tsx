@@ -240,6 +240,8 @@ export function NumberSheet({ campaign, slot, onOpenChange, onSell }: NumberShee
                         { label: "Forma de pagamento", value: sale.paymentMethod ? PAYMENT_METHOD_LABELS[sale.paymentMethod] : "Não informada" },
                         { label: "Confirmado em", value: sale.paidAt ? formatDateTime(sale.paidAt) : "Aguardando confirmação" },
                         { label: "Confirmado por", value: sale.confirmedById ? dir.memberName(sale.confirmedById) : "—", hidden: !sale.confirmedById },
+                        // Motivo em texto livre: só chega para quem vê os dados do comprador.
+                        { label: "Motivo da última confirmação desfeita", value: sale.revertReason, hidden: !sale.revertReason },
                       ]}
                     />
                     <div className="mt-2 border-t border-line pt-1">
@@ -253,7 +255,8 @@ export function NumberSheet({ campaign, slot, onOpenChange, onSell }: NumberShee
                     <SectionTitle>Cancelamento</SectionTitle>
                     <DetailList
                       items={[
-                        { label: "Motivo", value: sale.cancelReason ?? "—" },
+                        // Motivo em texto livre (pode citar o comprador): restrito a quem vê os dados do comprador.
+                        { label: "Motivo", value: sale.cancelReason ?? (buyerAllowed ? "—" : <Restricted />) },
                         { label: "Cancelada por", value: dir.memberName(sale.cancelledById) },
                         { label: "Em", value: formatDateTime(sale.cancelledAt) },
                       ]}

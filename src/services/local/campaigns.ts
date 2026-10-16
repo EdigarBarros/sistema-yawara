@@ -23,13 +23,15 @@ import {
   ServiceError,
   validateAudience,
 } from "./context";
-import { canEditSale, canManageCampaign, canSeeBuyer, canSeeCampaign, canSellIn } from "@/lib/policies";
+import { canChangePaymentMethod, canChangeSeller, canEditSale, canManageCampaign, canSeeBuyer, canSeeCampaign, canSellIn } from "@/lib/policies";
 
 /* ------------------------- regras de permissão ------------------------- */
 
 /* ------------------------------- helpers ------------------------------- */
 
+/** Como no servidor: com o módulo desativado, nenhuma consulta ou operação de campanha é atendida. */
 function visibleCampaign(db: DemoDB, ctx: AccessContext, id: string) {
+  requireModuleEnabled(db, "campaigns");
   const campaign = findOrThrow(db.campaigns, id, "Campanha");
   if (!canSeeCampaign(ctx, campaign)) {
     throw new ServiceError("forbidden", "Esta campanha não está disponível para o seu perfil.");
@@ -37,13 +39,28 @@ function visibleCampaign(db: DemoDB, ctx: AccessContext, id: string) {
   return campaign;
 }
 
+/** Como no servidor: comprador e motivos em texto livre (podem citá-lo) só para quem vê os dados do comprador. */
 function redact(ctx: AccessContext, campaign: Campaign, sale: Sale): Sale {
   const copy = clone(sale);
-  if (!canSeeBuyer(ctx, campaign, sale)) copy.buyer = null;
+  if (!canSeeBuyer(ctx, campaign, sale)) {
+    copy.buyer = null;
+    copy.cancelReason = undefined;
+    copy.revertReason = undefined;
+  }
   return copy;
 }
 
+/** Novo responsável pela venda: ativo e autorizado a vender nesta campanha (mesma regra do servidor). */
+function requireEligibleSeller(db: DemoDB, campaign: Campaign, sellerId: string) {
+  const user = db.members.find((m) => m.id === sellerId);
+  if (!user || user.status !== "active") throw new ServiceError("invalid", "Escolha um responsável pela venda que esteja ativo.");
+  const role = db.roles.find((r) => r.id === user.roleId);
+  const ctx: AccessContext | null = role ? { user, role, department: db.departments.find((d) => d.id === role.departmentId) } : null;
+  if (!ctx || !canSellIn(ctx, campaign)) throw new ServiceError("invalid", "Escolha um responsável que possa registrar vendas nesta campanha.");
+}
+
 function saleWithCampaign(db: DemoDB, ctx: AccessContext, saleId: string) {
+  requireModuleEnabled(db, "campaigns");
   const sale = findOrThrow(db.sales, saleId, "Venda");
   const campaign = visibleCampaign(db, ctx, sale.campaignId);
   return { sale, campaign };
@@ -123,7 +140,6 @@ export const localCampaigns: CampaignService = {
   async get(id) {
     await latency(120, 260);
     const db = getDB();
-    requireModuleEnabled(db, "campaigns");
     const ctx = accessContext(db);
     return clone(visibleCampaign(db, ctx, id));
   },
@@ -139,6 +155,7 @@ export const localCampaigns: CampaignService = {
   async listAllSales() {
     await latency(120, 260);
     const db = getDB();
+    requireModuleEnabled(db, "campaigns");
     const ctx = accessContext(db);
     const visible = new Map(db.campaigns.filter((c) => canSeeCampaign(ctx, c)).map((c) => [c.id, c]));
     return db.sales.filter((s) => visible.has(s.campaignId)).map((s) => redact(ctx, visible.get(s.campaignId)!, s));
@@ -320,12 +337,18 @@ export const localCampaigns: CampaignService = {
         sale.buyer = { name: sale.buyer?.name ?? "", contact: input.buyerContact.trim() };
         changes.push("contato");
       }
+      const methodChanged = !!input.paymentMethod && input.paymentMethod !== sale.paymentMethod;
+      if (methodChanged && !canChangePaymentMethod(ctx, sale)) {
+        throw new ServiceError("forbidden", "Somente quem confirma recebimentos pode alterar a forma de pagamento de uma venda já paga.");
+      }
       if (input.sellerId && input.sellerId !== sale.sellerId) {
-        findOrThrow(db.members, input.sellerId, "Responsável");
+        // O novo responsável passa a ver os dados do comprador: só quem já os vê transfere a venda.
+        if (!canChangeSeller(ctx, campaign, sale)) throw new ServiceError("forbidden", "Seu perfil não pode transferir esta venda para outro responsável.");
+        requireEligibleSeller(db, campaign, input.sellerId);
         sale.sellerId = input.sellerId;
         changes.push("responsável pela venda");
       }
-      if (input.paymentMethod && input.paymentMethod !== sale.paymentMethod) {
+      if (methodChanged) {
         sale.paymentMethod = input.paymentMethod;
         changes.push("forma de pagamento");
       }
@@ -396,8 +419,10 @@ export const localCampaigns: CampaignService = {
       sale.status = "pending";
       sale.paidAt = undefined;
       sale.confirmedById = undefined;
+      // Texto livre (pode citar o comprador): só aparece para quem vê os dados do comprador.
+      sale.revertReason = reason.trim();
       sale.updatedAt = now();
-      sale.history.push(historyEntry(ctx.user.id, "payment", `Confirmação de pagamento desfeita: ${reason.trim()}`));
+      sale.history.push(historyEntry(ctx.user.id, "payment", "Confirmação de pagamento desfeita (motivo nos dados restritos)"));
       return redact(ctx, campaign, sale);
     });
   },
@@ -421,9 +446,7 @@ export const localCampaigns: CampaignService = {
       sale.cancelledById = ctx.user.id;
       sale.cancelReason = reason.trim();
       sale.updatedAt = at;
-      sale.history.push(
-        historyEntry(ctx.user.id, "cancelled", `Venda cancelada${wasPaid ? " (estava paga — verificar devolução)" : ""}: ${reason.trim()}`),
-      );
+      sale.history.push(historyEntry(ctx.user.id, "cancelled", `Venda cancelada${wasPaid ? " (estava paga — verificar devolução)" : ""} (motivo nos dados restritos)`));
       return redact(ctx, campaign, sale);
     });
   },

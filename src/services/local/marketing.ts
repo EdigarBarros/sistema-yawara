@@ -21,12 +21,23 @@ import {
   ServiceError,
   validateAudience,
 } from "./context";
-import { allowedContentStatuses, canEditContent, canSeeContent } from "@/lib/policies";
+import { allowedContentStatuses, canChangeContent, canEditContent, canSeeContent } from "@/lib/policies";
 
 function visible(db: DemoDB, ctx: AccessContext, id: string) {
   const item = findOrThrow(db.contents, id, "Conteúdo");
   if (!canSeeContent(ctx, item)) throw new ServiceError("forbidden", "Este conteúdo não está disponível para o seu perfil.");
   return item;
+}
+
+/** Material já aprovado (ou publicado): só quem aprova altera dados e arquivos (como no servidor). */
+function requireChangeable(ctx: AccessContext, item: ContentItem) {
+  if (canChangeContent(ctx, item)) return;
+  throw new ServiceError(
+    "conflict",
+    item.status === "published"
+      ? "Este material já foi publicado. Volte-o para a etapa “Em revisão” antes de alterar; depois ele precisa ser aprovado de novo."
+      : "Este material já foi aprovado. Peça a quem aprova para devolvê-lo à revisão antes de alterar.",
+  );
 }
 
 function validate(input: Partial<ContentInput>, creating: boolean) {
@@ -107,6 +118,7 @@ export const localMarketing: MarketingService = {
       const ctx = accessContext(db);
       const item = visible(db, ctx, id);
       if (!canEditContent(ctx, item)) throw new ServiceError("forbidden", "Seu perfil não pode editar este conteúdo.");
+      requireChangeable(ctx, item);
       validate(input, false);
       const accessChanged = !!input.access && !sameAudience(input.access, item.access);
       Object.assign(item, input, input.access ? { access: sanitizeAudience(input.access) } : {}, { updatedAt: now() });
@@ -147,6 +159,7 @@ export const localMarketing: MarketingService = {
       const ctx = accessContext(db);
       const item = visible(db, ctx, id);
       if (!canEditContent(ctx, item)) throw new ServiceError("forbidden", "Seu perfil não pode anexar arquivos a este conteúdo.");
+      requireChangeable(ctx, item);
       if (files.some((f) => f.size > 50 * 1024 * 1024)) throw new ServiceError("invalid", "Cada arquivo deve ter no máximo 50 MB.");
       item.files.push(...files.map((f) => storeFile(f)));
       item.updatedAt = now();

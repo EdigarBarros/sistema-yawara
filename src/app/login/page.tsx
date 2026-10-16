@@ -20,6 +20,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DemoNotice } from "@/components/shared/states";
 import { BrandEmblem } from "@/components/layout/brand";
 import { Checkbox } from "@/components/ui/form";
+import { FormAlert } from "@/components/shared/form-alert";
 import { isDemoMode, isFirebaseMode } from "@/lib/mode";
 import { useFirebaseSession, type SessionEndReason } from "@/services/firebase/session";
 
@@ -175,11 +176,7 @@ function LoginForm({ onSuccess }: { onSuccess: (userId: string, label: string) =
           Esqueci minha senha
         </button>
       </div>
-      {serverError && (
-        <div role="alert" className="rounded-lg border border-danger/35 bg-danger/10 px-3.5 py-3 text-[13px] text-danger">
-          {serverError}
-        </div>
-      )}
+      <FormAlert message={serverError} className="py-3" />
       <Button type="submit" variant="primary" size="lg" className="w-full" loading={isSubmitting}>
         {isSubmitting ? "Verificando…" : "Entrar"} {!isSubmitting && <ArrowRight />}
       </Button>

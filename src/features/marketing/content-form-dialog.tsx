@@ -21,6 +21,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/form";
 import { MemberSelect } from "@/components/shared/pickers";
 import { AudiencePicker, AudienceSummary } from "@/components/shared/audience";
+import { FormAlert } from "@/components/shared/form-alert";
 
 /** Quem pode ver um conteúdo — ex.: compartilhar uma arte aprovada com o departamento de Eventos. */
 export const CONTENT_SCOPES: AudienceScope[] = ["all", "department", "board", "roles", "people"];
@@ -297,11 +298,7 @@ function ContentFormBody({ onOpenChange, item, onSaved }: Props) {
             <p className="mt-2 text-[12px] text-fg-subtle">Quem criou e o responsável sempre têm acesso.</p>
           </div>
         </div>
-        {serverError && (
-          <p role="alert" className="rounded-lg border border-danger/35 bg-danger/10 px-3.5 py-2.5 text-[13px] text-danger">
-            {serverError}
-          </p>
-        )}
+        <FormAlert message={serverError} />
       </form>
     </DialogContent>
   );

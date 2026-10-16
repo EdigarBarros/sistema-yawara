@@ -13,6 +13,7 @@
 import type { AtleticaEvent, Campaign, ContentItem, ExtensionProject, ID, InstitutionalDocument, Meeting, Sale } from "@/types";
 import { readersFor, TOKEN } from "./access-tokens";
 
+/** Também copiado em `buyers/{saleId}.viewReaders` (as regras do Storage exigem ver a campanha para abrir o comprovante). */
 export function campaignReaders(c: Pick<Campaign, "access" | "departmentId" | "createdBy">) {
   return readersFor([{ audience: c.access.view, fallbackDepartmentId: c.departmentId }], [c.createdBy]);
 }

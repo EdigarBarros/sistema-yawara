@@ -57,14 +57,34 @@ export function campaignStats(campaign: Pick<Campaign, "quantity" | "unitPrice">
   return { reserved: s.reserved, pending: s.pending, paid: s.paid, cancelled: s.cancelled };
 }
 
-export type CampaignDoc = WithoutId<Campaign> & { readers: string[]; stats: CampaignStats };
-
-export function campaignDoc(c: Campaign, stats: CampaignStats): CampaignDoc {
-  return { ...withoutId(c), readers: campaignReaders(c), stats };
+/**
+ * Atualização pendente do público dos compradores (`buyers/{saleId}`): em
+ * campanhas com muitas vendas, parte dos compradores é atualizada depois da
+ * transação principal. A marca fica gravada na campanha até a sincronização
+ * terminar (ver functions/src/modules/campaigns.ts); `token` identifica a
+ * alteração de público mais recente.
+ */
+export interface BuyersSyncState {
+  pending: boolean;
+  token?: string;
 }
 
-/** Parte pública da venda (sem nome, contato, observações ou comprovante). */
-export type SalePublicDoc = Omit<Sale, "id" | "buyer" | "notes" | "receipt">;
+export type CampaignDoc = WithoutId<Campaign> & { readers: string[]; stats: CampaignStats; buyersSyncPending?: boolean; buyersSyncToken?: string };
+
+export function campaignDoc(c: Campaign, stats: CampaignStats, sync?: BuyersSyncState): CampaignDoc {
+  const doc: CampaignDoc = { ...withoutId(c), readers: campaignReaders(c), stats };
+  if (sync?.pending) {
+    doc.buyersSyncPending = true;
+    doc.buyersSyncToken = sync.token;
+  }
+  return doc;
+}
+
+/**
+ * Parte pública da venda (sem nome, contato, observações, comprovante ou
+ * motivos em texto livre — que podem citar o comprador).
+ */
+export type SalePublicDoc = Omit<Sale, "id" | "buyer" | "notes" | "receipt" | "cancelReason" | "revertReason">;
 
 /** Dados pessoais e internos da venda, com público próprio (`readers`). */
 export interface SaleBuyerDoc {
@@ -72,17 +92,30 @@ export interface SaleBuyerDoc {
   contact: string;
   notes?: string;
   receipt?: FileRef;
+  /** Motivo do cancelamento (texto livre). */
+  cancelReason?: string;
+  /** Último motivo para desfazer a confirmação de pagamento (texto livre). */
+  revertReason?: string;
   sellerId: string;
   registeredById: string;
+  /** Público "dados dos compradores" + criador + quem vendeu/registrou. */
   readers: string[];
+  /**
+   * Cópia do público que vê a CAMPANHA (`campaignReaders`). As regras do
+   * Storage não conseguem ler a campanha (limite de consultas), então o
+   * comprovante exige os dois marcadores deste mesmo documento.
+   */
+  viewReaders: string[];
 }
 
 export function salePublicDoc(sale: Sale): SalePublicDoc {
-  const { id: _id, buyer: _b, notes: _n, receipt: _r, ...rest } = sale;
+  const { id: _id, buyer: _b, notes: _n, receipt: _r, cancelReason: _c, revertReason: _v, ...rest } = sale;
   void _id;
   void _b;
   void _n;
   void _r;
+  void _c;
+  void _v;
   return rest;
 }
 
@@ -92,13 +125,16 @@ export function saleBuyerDoc(campaign: Campaign, sale: Sale): SaleBuyerDoc {
     contact: sale.buyer?.contact ?? "",
     notes: sale.notes,
     receipt: sale.receipt,
+    cancelReason: sale.cancelReason,
+    revertReason: sale.revertReason,
     sellerId: sale.sellerId,
     registeredById: sale.registeredById,
     readers: buyerReaders(campaign, sale),
+    viewReaders: campaignReaders(campaign),
   };
 }
 
-/** Junta as duas partes. `buyer` = null quando o perfil não pode ver os dados pessoais. */
+/** Junta as duas partes. `buyer` = null (e sem observações, comprovante ou motivos) quando o perfil não pode ver os dados pessoais. */
 export function saleFromDocs(id: string, pub: SalePublicDoc, buyer: SaleBuyerDoc | null): Sale {
   return {
     ...pub,
@@ -106,6 +142,8 @@ export function saleFromDocs(id: string, pub: SalePublicDoc, buyer: SaleBuyerDoc
     buyer: buyer ? { name: buyer.name, contact: buyer.contact } : null,
     notes: buyer?.notes,
     receipt: buyer?.receipt,
+    cancelReason: buyer?.cancelReason,
+    revertReason: buyer?.revertReason,
   };
 }
 

@@ -12,7 +12,11 @@
  *  - Ver: `canSeeContent` (público, criador, responsável ou marketing.admin).
  *  - Criar: marketing.create.
  *  - Editar e anexar arquivos: `canEditContent` (marketing.edit, criador ou
- *    responsável — mesmo sem marketing.edit).
+ *    responsável — mesmo sem marketing.edit). Depois de "Aprovado" (e em
+ *    "Publicado"), só quem tem marketing.approve altera (`canChangeContent`):
+ *    o que chega a "Publicado" é o que foi aprovado. Quem não aprova devolve o
+ *    conteúdo publicado para revisão (ou pede a devolução de um aprovado) e ele
+ *    precisa ser aprovado de novo.
  *  - Etapas: `allowedContentStatuses` — "Aprovado" exige marketing.approve;
  *    "Cancelado" (arquivar) exige marketing.archive; um conteúdo aprovado só
  *    pode ir para "Publicado" por quem não aprova.
@@ -33,7 +37,7 @@ import { z } from "zod";
 import { TOKEN } from "@/lib/access-tokens";
 import { contentDoc } from "@/lib/firestore-model";
 import { CONTENT_STATUS } from "@/lib/labels";
-import { allowedContentStatuses, canEditContent, canSeeCampaign, canSeeContent, canSeeEvent } from "@/lib/policies";
+import { allowedContentStatuses, canChangeContent, canEditContent, canSeeCampaign, canSeeContent, canSeeEvent } from "@/lib/policies";
 import { contentReaders } from "@/lib/record-readers";
 import type { AtleticaEvent, Audience, AudienceScope, Campaign, Channel, ContentItem, ContentLink, ContentStatus, ContentType, FileRef, HistoryAction, HistoryEntry } from "@/types";
 import { db } from "../core/admin";
@@ -212,6 +216,17 @@ async function loadContent(tx: Transaction, contentId: string): Promise<{ ref: D
 
 function requireVisible(actor: Actor, item: ContentItem) {
   if (!canSeeContent(actor.ctx, item)) fail("forbidden", "Este conteúdo não está disponível para o seu perfil.");
+}
+
+/** Material já aprovado (ou publicado): só quem aprova altera dados e arquivos. Use depois de conferir `canEditContent`. */
+function requireChangeable(actor: Actor, item: ContentItem) {
+  if (canChangeContent(actor.ctx, item)) return;
+  fail(
+    "conflict",
+    item.status === "published"
+      ? "Este material já foi publicado. Volte-o para a etapa “Em revisão” antes de alterar; depois ele precisa ser aprovado de novo."
+      : "Este material já foi aprovado. Peça a quem aprova para devolvê-lo à revisão antes de alterar.",
+  );
 }
 
 /** Leituras dos dados relacionados que mudaram (todas na fase de leitura da transação). */
@@ -393,6 +408,7 @@ export const marketingActions = {
       const { ref, item: current } = await loadContent(tx, contentId);
       requireVisible(actor, current);
       if (!canEditContent(actor.ctx, current)) fail("forbidden", "Seu perfil não pode editar este conteúdo.");
+      requireChangeable(actor, current);
 
       const next: ContentItem = { ...current };
       if (input.title !== undefined) next.title = input.title;
@@ -503,6 +519,7 @@ export const marketingActions = {
       const item = normalizeContent(toDTO<ContentItem>(snap));
       requireVisible(actor, item);
       if (!canEditContent(actor.ctx, item)) fail("forbidden", "Seu perfil não pode anexar arquivos a este conteúdo.");
+      requireChangeable(actor, item);
       const results = await Promise.allSettled(uploadIds.map((uploadId) => finalizeUpload(actor, uploadId, "marketingFile", `marketing/${contentId}`, ctx)));
       const failed = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
       if (failed) throw failed.reason;
@@ -514,6 +531,7 @@ export const marketingActions = {
       const { ref, item: current } = await loadContent(tx, contentId);
       requireVisible(actor, current);
       if (!canEditContent(actor.ctx, current)) fail("forbidden", "Seu perfil não pode anexar arquivos a este conteúdo.");
+      requireChangeable(actor, current);
 
       // O mesmo arquivo nunca é anexado duas vezes (ex.: requisição repetida com outro identificador).
       const known = new Set(current.files.map((f) => f.path).filter(Boolean));

@@ -18,6 +18,7 @@ import { Field, Input } from "@/components/ui/form";
 import { Skeleton } from "@/components/ui/misc";
 import { DemoNotice, FullPageLoader } from "@/components/shared/states";
 import { BrandEmblem } from "@/components/layout/brand";
+import { FormAlert } from "@/components/shared/form-alert";
 
 const PASSWORD_RULE = "Use de 8 a 128 caracteres, com pelo menos uma letra e um número.";
 const schema = z
@@ -112,11 +113,7 @@ function InvitationForm({ token }: { token: string }) {
       <Field label="Repita a senha" error={errors.confirm?.message}>
         <Input type={show ? "text" : "password"} autoComplete="new-password" className="h-11" icon={<Lock />} {...register("confirm")} />
       </Field>
-      {serverError && (
-        <div role="alert" className="rounded-lg border border-danger/35 bg-danger/10 px-3.5 py-3 text-[13px] text-danger">
-          {serverError}
-        </div>
-      )}
+      <FormAlert message={serverError} className="py-3" />
       <Button type="submit" variant="primary" size="lg" className="w-full" loading={isSubmitting}>
         {isSubmitting ? "Criando acesso…" : "Criar acesso e entrar"} {!isSubmitting && <ArrowRight />}
       </Button>

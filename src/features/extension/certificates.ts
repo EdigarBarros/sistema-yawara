@@ -16,8 +16,12 @@ export function presentAttendees(project: ExtensionProject) {
  * Certificados em PDF, gerados no navegador a partir dos dados registrados,
  * somente para quem teve presença marcada. Cada participante recebe uma
  * página em A4 paisagem. No modo demonstração levam a marca "sem validade".
+ *
+ * `onBeforeSave` roda depois de montar o PDF e antes de entregá-lo (ex.:
+ * registrar a exportação na auditoria — fechar a aba logo após o download não
+ * pode perder o registro).
  */
-export async function exportCertificatesPdf(project: ExtensionProject, signerName: string) {
+export async function exportCertificatesPdf(project: ExtensionProject, signerName: string, { onBeforeSave }: { onBeforeSave?: (count: number) => Promise<void> } = {}) {
   const present = presentAttendees(project);
   if (present.length === 0) throw new ServiceError("invalid", "Nenhum participante com presença marcada. Marque a presença antes de gerar os certificados.");
   const doc = await createPdf("landscape");
@@ -76,6 +80,7 @@ export async function exportCertificatesPdf(project: ExtensionProject, signerNam
     }
   });
 
+  await onBeforeSave?.(present.length);
   doc.save(`certificados-${slugify(project.name)}.pdf`);
   return present.length;
 }

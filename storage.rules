@@ -15,7 +15,9 @@ rules_version = '2';
  *
  * As consultas ao Firestore feitas aqui (firestore.get) são limitadas a duas
  * por requisição: o retrato de acesso do usuário e o registro que controla o
- * arquivo.
+ * arquivo. Por isso, módulos desativados em `settings/system` NÃO são
+ * conferidos aqui (seria uma terceira consulta): o bloqueio vale para o
+ * Firestore e para o servidor (ver docs/backend/seguranca.md).
  */
 service firebase.storage {
   match /b/{bucket}/o {
@@ -34,6 +36,13 @@ service firebase.storage {
 
     function readersOf(path) {
       return firestore.get(path).data.readers;
+    }
+
+    /** Comprador visível (público próprio) dentro de uma campanha visível (cópia `viewReaders`). */
+    function buyerAndCampaignVisible(campaignId, saleId) {
+      let buyer = firestore.get(/databases/(default)/documents/campaigns/$(campaignId)/buyers/$(saleId)).data;
+      return buyer.readers.hasAny(accessData().tokens)
+        && buyer.get('viewReaders', []).hasAny(accessData().tokens);
     }
 
     /* ----------------------- envio (área temporária) ----------------------- */
@@ -68,11 +77,13 @@ service firebase.storage {
       allow write: if false;
     }
 
-    // Comprovantes de pagamento de vendas: mesmo público dos dados do comprador.
+    // Comprovantes de pagamento de vendas: mesmo público dos dados do comprador
+    // E de quem vê a campanha. O documento do comprador guarda as duas listas
+    // (`readers` e a cópia `viewReaders` do público da campanha, regravada pelo
+    // servidor sempre que esse público muda), então basta uma consulta.
     match /campaigns/{campaignId}/receipts/{saleId}/{allPaths=**} {
       allow read: if can('campaigns.view')
-        && (can('campaigns.admin')
-            || readersOf(/databases/(default)/documents/campaigns/$(campaignId)/buyers/$(saleId)).hasAny(accessData().tokens));
+        && (can('campaigns.admin') || buyerAndCampaignVisible(campaignId, saleId));
       allow write: if false;
     }
 

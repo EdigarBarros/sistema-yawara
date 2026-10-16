@@ -98,7 +98,7 @@ export const MODULES: ModuleDefinition[] = [
       view: "Ver projetos",
       create: "Criar projetos",
       edit: "Editar projetos, presença e programação",
-      approve: "Emitir certificados (demonstração)",
+      approve: "Emitir certificados",
       archive: "Concluir ou cancelar projetos",
       export: "Exportar listas e certificados",
     },

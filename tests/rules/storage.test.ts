@@ -5,7 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 import { assertFails, assertSucceeds, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import { doc, setDoc, Timestamp } from "firebase/firestore";
 import { getBytes, ref, uploadBytes } from "firebase/storage";
-import { buyerReaders, documentReaders } from "@/lib/record-readers";
+import { buyerReaders, campaignReaders, documentReaders } from "@/lib/record-readers";
 import { createEnv, seedAccess } from "./setup";
 
 let env: RulesTestEnvironment;
@@ -32,11 +32,22 @@ beforeEach(async () => {
     const board = { access: { scope: "board" as const, roleIds: [], userIds: [] }, departmentId: "secretaria", createdBy: "sec" };
     await setDoc(doc(db, "documents/d-board"), { ...board, readers: documentReaders(board) });
     const camp = { access: { view: { scope: "all" as const, roleIds: [], userIds: [] }, sell: { scope: "all" as const, roleIds: [], userIds: [] }, buyerData: { scope: "people" as const, roleIds: [], userIds: ["fin"] } }, departmentId: "financeiro", createdBy: "fin" };
-    await setDoc(doc(db, "campaigns/c1/buyers/s1"), { readers: buyerReaders(camp, { sellerId: "ass", registeredById: "ass" }) });
+    await setDoc(doc(db, "campaigns/c1/buyers/s1"), { readers: buyerReaders(camp, { sellerId: "ass", registeredById: "ass" }), viewReaders: campaignReaders(camp) });
+    // Campanha só do Financeiro com dados dos compradores liberados para a diretoria (público dos compradores mais amplo).
+    const restrita = { access: { view: { scope: "roles" as const, roleIds: ["diretor-financeiro"], userIds: [] }, sell: { scope: "roles" as const, roleIds: ["diretor-financeiro"], userIds: [] }, buyerData: { scope: "board" as const, roleIds: [], userIds: [] } }, departmentId: "financeiro", createdBy: "fin" };
+    await setDoc(doc(db, "campaigns/c2/buyers/s2"), { readers: buyerReaders(restrita, { sellerId: "fin", registeredById: "fin" }), viewReaders: campaignReaders(restrita) });
+    // Vendedor (ass) que saiu do público da campanha (agora só evt).
+    const estreita = { access: { view: { scope: "people" as const, roleIds: [], userIds: ["evt"] }, sell: { scope: "people" as const, roleIds: [], userIds: ["evt"] }, buyerData: { scope: "people" as const, roleIds: [], userIds: ["evt"] } }, departmentId: "eventos", createdBy: "evt" };
+    await setDoc(doc(db, "campaigns/c3/buyers/s3"), { readers: buyerReaders(estreita, { sellerId: "ass", registeredById: "ass" }), viewReaders: campaignReaders(estreita) });
+    // Documento antigo, sem a cópia do público da campanha: fechado por padrão.
+    await setDoc(doc(db, "campaigns/c1/buyers/s4"), { readers: buyerReaders(camp, { sellerId: "ass", registeredById: "ass" }) });
     await setDoc(doc(db, "contents/k1"), { readers: ["d:marketing", "u:mkt"] });
     const storage = ctx.storage();
     await uploadBytes(ref(storage, "documents/d-board/v1/ata.pdf"), bytes(10), { contentType: "application/pdf" });
     await uploadBytes(ref(storage, "campaigns/c1/receipts/s1/comprovante.pdf"), bytes(10), { contentType: "application/pdf" });
+    await uploadBytes(ref(storage, "campaigns/c2/receipts/s2/comprovante.pdf"), bytes(10), { contentType: "application/pdf" });
+    await uploadBytes(ref(storage, "campaigns/c3/receipts/s3/comprovante.pdf"), bytes(10), { contentType: "application/pdf" });
+    await uploadBytes(ref(storage, "campaigns/c1/receipts/s4/comprovante.pdf"), bytes(10), { contentType: "application/pdf" });
     await uploadBytes(ref(storage, "finance/f1/nota.pdf"), bytes(10), { contentType: "application/pdf" });
     await uploadBytes(ref(storage, "marketing/k1/arte.png"), bytes(10), { contentType: "image/png" });
   });
@@ -71,6 +82,18 @@ describe("leitura de arquivos definitivos", () => {
     await assertSucceeds(getBytes(ref(st("fin"), "campaigns/c1/receipts/s1/comprovante.pdf")));
     await assertSucceeds(getBytes(ref(st("ass"), "campaigns/c1/receipts/s1/comprovante.pdf")));
     await assertFails(getBytes(ref(st("mkt"), "campaigns/c1/receipts/s1/comprovante.pdf")));
+  });
+  it("comprovante de venda: também exige ver a campanha", async () => {
+    // mkt é da diretoria (público dos compradores), mas a campanha é só do Financeiro.
+    await assertFails(getBytes(ref(st("mkt"), "campaigns/c2/receipts/s2/comprovante.pdf")));
+    await assertSucceeds(getBytes(ref(st("fin"), "campaigns/c2/receipts/s2/comprovante.pdf")));
+    await assertSucceeds(getBytes(ref(st("pres"), "campaigns/c2/receipts/s2/comprovante.pdf")));
+    // Vendedor fora do público da campanha perde o acesso ao comprovante da própria venda.
+    await assertFails(getBytes(ref(st("ass"), "campaigns/c3/receipts/s3/comprovante.pdf")));
+    await assertSucceeds(getBytes(ref(st("evt"), "campaigns/c3/receipts/s3/comprovante.pdf")));
+    // Sem a cópia do público da campanha, só quem administra campanhas lê.
+    await assertFails(getBytes(ref(st("ass"), "campaigns/c1/receipts/s4/comprovante.pdf")));
+    await assertSucceeds(getBytes(ref(st("pres"), "campaigns/c1/receipts/s4/comprovante.pdf")));
   });
   it("comprovante financeiro: só com acesso ao Financeiro", async () => {
     await assertSucceeds(getBytes(ref(st("fin"), "finance/f1/nota.pdf")));

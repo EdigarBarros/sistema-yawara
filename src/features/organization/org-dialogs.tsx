@@ -488,8 +488,10 @@ const sameIds = (a: ID[], b: ID[]) => a.length === b.length && [...a].sort().joi
  * Edição de integrante com o Firebase. Espelha as regras do servidor
  * (functions/src/modules/organization.ts → updateMember): ninguém altera o
  * próprio cargo, a própria situação ou os próprios departamentos; o cargo de
- * destino precisa estar contido nas permissões de quem altera; departamentos
- * adicionais exigem organization.admin; o e-mail de acesso não muda por aqui.
+ * destino precisa estar contido nas permissões de quem altera, e cargos de
+ * alcance maior (diretoria, nível, outro departamento) exigem
+ * organization.admin; departamentos adicionais exigem organization.admin; o
+ * e-mail de acesso não muda por aqui.
  * Só os campos alterados são enviados.
  */
 function MemberEditBody({ onOpenChange, member }: { onOpenChange: (o: boolean) => void; member: Member }) {
@@ -519,8 +521,9 @@ function MemberEditBody({ onOpenChange, member }: { onOpenChange: (o: boolean) =
       input.roleId = form.roleId;
     }
     if (rules.canChangeStatus && form.status !== member.status) {
-      if (form.status === "active" && nextRole && !canAssignRole(access.ctx, nextRole)) {
-        return setError("Você não pode reativar uma conta com um cargo que tem permissões que o seu não tem.");
+      // Reativar devolve também os departamentos adicionais (quem pode mudá-los administra permissões).
+      if (form.status === "active" && nextRole && !canAssignRole(access.ctx, nextRole, member.departmentIds ?? [])) {
+        return setError("Você não pode reativar esta conta: o cargo ou os departamentos dela dão permissões ou acesso que o seu cargo não tem.");
       }
       input.status = form.status;
     }

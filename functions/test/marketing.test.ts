@@ -332,6 +332,79 @@ describe("etapas", () => {
   });
 });
 
+describe("material aprovado", () => {
+  it("quem não aprova não altera nem anexa a um conteúdo aprovado ou publicado; o publicado é o que foi aprovado", async () => {
+    // Assessora de Marketing: marketing.view/create/edit, sem marketing.approve.
+    const c = await createContent("assmkt");
+    await marketing("setStatus", "assmkt", { id: c.id, status: "review" });
+    const approved = await marketing<ContentItem>("setStatus", "mkt", { id: c.id, status: "approved" });
+    expect(approved.status).toBe("approved");
+
+    // Editar dados aprovados: recusado, nada gravado.
+    const edit = await expectCode(
+      marketing("update", "assmkt", { id: c.id, input: { briefing: "Texto totalmente diferente, nunca aprovado.", links: [{ label: "Outra", url: "https://example.org/outra" }] } }),
+      "conflict",
+    );
+    expect(edit.message).toBe("Este material já foi aprovado. Peça a quem aprova para devolvê-lo à revisão antes de alterar.");
+    // Anexar outro arquivo: recusado antes de mover o arquivo (o envio continua pendente).
+    const ticket = await stage("assmkt", JPEG, "arte-nao-aprovada.jpg", "image/jpeg", c.id);
+    await expectCode(marketing("addFiles", "assmkt", { id: c.id, uploadIds: [ticket.uploadId] }), "conflict");
+    expect(await exists(ticket.path)).toBe(true);
+    expect((await db.doc(`uploads/${ticket.uploadId}`).get()).data()!.status).toBe("pending");
+    const [moved] = await bucket().getFiles({ prefix: `marketing/${c.id}/` });
+    expect(moved).toHaveLength(0);
+
+    let data = await stored(c.id);
+    expect(data.status).toBe("approved");
+    expect(data.briefing).toBe(approved.briefing);
+    expect(data.links).toEqual(approved.links);
+    expect(data.files).toEqual([]);
+    expect(data.history).toHaveLength(approved.history.length);
+
+    // Marcar como publicado continua possível — e o publicado é exatamente o aprovado.
+    const published = await marketing<ContentItem>("setStatus", "assmkt", { id: c.id, status: "published" });
+    expect(published.status).toBe("published");
+    expect(published.briefing).toBe(approved.briefing);
+
+    // Publicado: também não altera; a mensagem indica como voltar para revisão.
+    const editPublished = await expectCode(marketing("update", "assmkt", { id: c.id, input: { title: "Arte trocada depois de publicada" } }), "conflict");
+    expect(editPublished.message).toMatch(/já foi publicado.*Em revisão/);
+    await expectCode(marketing("addFiles", "assmkt", { id: c.id, uploadIds: [ticket.uploadId] }), "conflict");
+    // O responsável sem marketing.edit (também sem marketing.approve) segue a mesma regra.
+    const own = await createContent("mkt", { responsibleId: "evt" });
+    await marketing("setStatus", "mkt", { id: own.id, status: "approved" });
+    await expectCode(marketing("update", "evt", { id: own.id, input: { title: "Arte trocada pelo responsável" } }), "conflict");
+
+    // Quem não aprova devolve o publicado para revisão, altera, e precisa de nova aprovação.
+    await marketing("setStatus", "assmkt", { id: c.id, status: "review" });
+    const changed = await marketing<ContentItem>("update", "assmkt", { id: c.id, input: { briefing: "Briefing revisado depois da publicação." } });
+    expect(changed.status).toBe("review");
+    const withFile = await marketing<ContentItem>("addFiles", "assmkt", { id: c.id, uploadIds: [ticket.uploadId] });
+    expect(withFile.files).toHaveLength(1);
+    await expectCode(marketing("setStatus", "assmkt", { id: c.id, status: "published" }), "forbidden");
+    await marketing("setStatus", "mkt", { id: c.id, status: "approved" });
+    const republished = await marketing<ContentItem>("setStatus", "assmkt", { id: c.id, status: "published" });
+    expect(republished).toMatchObject({ status: "published", briefing: "Briefing revisado depois da publicação." });
+    data = await stored(c.id);
+    expect(data.files).toHaveLength(1);
+  });
+
+  it("quem aprova altera e anexa arquivos a um conteúdo aprovado ou publicado (continua aprovado)", async () => {
+    const c = await createContent("assmkt");
+    await marketing("setStatus", "mkt", { id: c.id, status: "approved" });
+    const edited = await marketing<ContentItem>("update", "mkt", { id: c.id, input: { title: "Arte final aprovada (ajuste da diretoria)" } });
+    expect(edited).toMatchObject({ status: "approved", title: "Arte final aprovada (ajuste da diretoria)" });
+    const ticket = await stage("mkt", JPEG, "arte-final.jpg", "image/jpeg", c.id);
+    const withFile = await marketing<ContentItem>("addFiles", "mkt", { id: c.id, uploadIds: [ticket.uploadId] });
+    expect(withFile).toMatchObject({ status: "approved" });
+    expect(withFile.files).toHaveLength(1);
+
+    await marketing("setStatus", "mkt", { id: c.id, status: "published" });
+    const afterPublish = await marketing<ContentItem>("update", "mkt", { id: c.id, input: { notes: "Publicado no feed" } });
+    expect(afterPublish).toMatchObject({ status: "published", notes: "Publicado no feed" });
+  });
+});
+
 describe("arquivos", () => {
   it("JPEG real: conferido, copiado para marketing/{id}/ sem token público, com SHA-256, histórico e auditoria", async () => {
     const c = await createContent("mkt");

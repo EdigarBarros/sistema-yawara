@@ -101,9 +101,12 @@ export default function FinanceReportsPage() {
     .join(" · ");
   const ctx = { title: "Relatório financeiro", filtersLabel, entries, categories: categories ?? [], memberName: dir.memberName, generatedBy: access.user?.name ?? "—" };
   const canExport = access.can("finance.export");
-  /** Registra a exportação na auditoria (melhor esforço; sem dados pessoais). */
-  const recordExport = (format: "CSV" | "PDF") => {
-    void services.audit
+  /**
+   * Registra a exportação na auditoria (melhor esforço; sem dados pessoais). É aguardado ANTES de
+   * entregar o arquivo: fechar a aba logo após o download não perde o registro.
+   */
+  const recordExport = (format: "CSV" | "PDF") =>
+    services.audit
       .recordExport({
         module: "finance",
         resourceType: "financeReport",
@@ -112,7 +115,6 @@ export default function FinanceReportsPage() {
         personalData: false,
       })
       .catch(() => undefined);
-  };
 
   const catColumns: Column<CategoryRow>[] = [
     { key: "name", header: "Categoria", cell: (r) => <span className="font-medium">{r.name}</span> },
@@ -134,12 +136,14 @@ export default function FinanceReportsPage() {
               <Button
                 loading={busy === "csv"}
                 disabled={entries.length === 0}
-                onClick={() => {
+                onClick={async () => {
                   setBusy("csv");
                   try {
+                    await recordExport("CSV");
                     exportFinanceCsv(ctx, `relatorio-financeiro-${toDateOnly(new Date())}.csv`);
-                    recordExport("CSV");
                     notifySuccess("CSV gerado", `${entries.length} lançamento(s).`);
+                  } catch (e) {
+                    notifyError(e);
                   } finally {
                     setBusy(null);
                   }
@@ -153,8 +157,9 @@ export default function FinanceReportsPage() {
                 onClick={async () => {
                   setBusy("pdf");
                   try {
-                    downloadBlob(await buildFinancePdf(ctx), `relatorio-financeiro-${toDateOnly(new Date())}.pdf`);
-                    recordExport("PDF");
+                    const pdf = await buildFinancePdf(ctx);
+                    await recordExport("PDF");
+                    downloadBlob(pdf, `relatorio-financeiro-${toDateOnly(new Date())}.pdf`);
                     notifySuccess("PDF gerado", isDemoMode ? "Relatório gerado neste navegador." : "PDF gerado no navegador a partir dos dados registrados.");
                   } catch (e) {
                     notifyError(e);

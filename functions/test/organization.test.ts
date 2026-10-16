@@ -44,8 +44,9 @@ describe("convites e criação de contas", () => {
     expect(access.tokens).toContain(`u:${user.uid}`);
     expect((await db.doc(`invitations/${res.invitation.id}`).get()).data()!.status).toBe("accepted");
 
-    // Convite de uso único.
-    await expectCode(auth("acceptInvitation", undefined, { token, password: "SenhaForte123" }), "not_found");
+    // Convite de uso único: o link usado recebe a mensagem específica.
+    const reused = await expectCode(auth("acceptInvitation", undefined, { token, password: "SenhaForte123" }), "conflict");
+    expect(reused.message).toBe("Este convite já foi usado. Entre com o seu e-mail e senha.");
     expect((await auditFor(user.uid)).some((a) => a.action === "auth.acceptInvitation")).toBe(true);
   });
 
@@ -67,7 +68,9 @@ describe("convites e criação de contas", () => {
   it("convite revogado não pode ser usado", async () => {
     const res = await org<InviteResult>("inviteMember", "pres", { name: "Pessoa", email: "p2@example.org", roleId: "assessor-eventos" });
     await org("revokeInvitation", "pres", { id: res.invitation.id });
-    await expectCode(auth("acceptInvitation", undefined, { token: tokenOf(res.link!), password: "SenhaForte123" }), "not_found");
+    const error = await expectCode(auth("acceptInvitation", undefined, { token: tokenOf(res.link!), password: "SenhaForte123" }), "conflict");
+    expect(error.message).toBe("Este convite foi cancelado. Peça um novo link.");
+    await expect(adminAuth.getUserByEmail("p2@example.org")).rejects.toMatchObject({ code: "auth/user-not-found" });
   });
 });
 

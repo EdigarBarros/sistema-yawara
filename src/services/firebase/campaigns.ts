@@ -47,9 +47,14 @@ function safeId(id: ID, label: string) {
   return id;
 }
 
-function withoutStats(c: Campaign & { stats?: unknown }): Campaign {
-  const { stats: _stats, ...rest } = c;
+/** Campos internos do documento da campanha (totais e marca de sincronização do servidor) não fazem parte do registro. */
+type StoredCampaign = Campaign & { stats?: unknown; buyersSyncPending?: unknown; buyersSyncToken?: unknown };
+
+function withoutStats(c: StoredCampaign): Campaign {
+  const { stats: _stats, buyersSyncPending: _pending, buyersSyncToken: _token, ...rest } = c;
   void _stats;
+  void _pending;
+  void _token;
   return rest;
 }
 
@@ -98,13 +103,13 @@ function updatePayload(input: CampaignUpdateInput) {
 
 export const firebaseCampaigns: CampaignService = {
   async list() {
-    const campaigns = await listVisible<Campaign & { stats?: unknown }>("campaigns", "campaigns");
+    const campaigns = await listVisible<StoredCampaign>("campaigns", "campaigns");
     return campaigns.map(withoutStats);
   },
 
   async get(id) {
     safeId(id, "Campanha");
-    return withoutStats(await getVisible<Campaign & { stats?: unknown }>(`campaigns/${id}`, "Campanha"));
+    return withoutStats(await getVisible<StoredCampaign>(`campaigns/${id}`, "Campanha"));
   },
 
   listSales: listSalesOf,

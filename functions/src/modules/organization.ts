@@ -7,6 +7,9 @@
  *  - Permissões administrativas (PRIVILEGED_PERMISSIONS) e campos que mudam o
  *    alcance de acesso de um cargo (nível, diretoria, departamento, situação)
  *    exigem `organization.admin`.
+ *  - Atribuir um cargo (convite, renovação, troca de cargo, reativação) cujo
+ *    alcance (diretoria, nível, departamentos) quem atribui não tem também
+ *    exige `organization.admin`.
  *  - Ninguém altera o próprio cargo, os próprios departamentos ou a própria
  *    situação; ninguém altera integrantes cujo cargo tem permissões que a
  *    pessoa não possui (ex.: vice alterando a presidência).
@@ -15,10 +18,11 @@
  *    mesma transação; contas desativadas são bloqueadas no Auth e têm as
  *    sessões revogadas.
  */
-import { createHash, randomBytes } from "node:crypto";
-import type { Transaction } from "firebase-admin/firestore";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import type { DocumentReference, Transaction } from "firebase-admin/firestore";
+import { logger } from "firebase-functions";
 import { z } from "zod";
-import { computeAccess, MAX_EXTRA_DEPARTMENTS } from "@/lib/access-tokens";
+import { computeAccess, MAX_EXTRA_DEPARTMENTS, TOKEN, userTokens } from "@/lib/access-tokens";
 import { allPermissions } from "@/lib/modules";
 import { isPrivileged } from "@/lib/permissions";
 import type { Department, Invitation, Member, Permission, Role } from "@/types";
@@ -33,18 +37,19 @@ import { requireDoc, toDTO } from "../core/records";
 /* ------------------------------- esquemas ------------------------------- */
 
 const ALL_PERMISSIONS = allPermissions() as [Permission, ...Permission[]];
-const id = z.string().trim().min(1).max(128);
+const id = z.string().trim().min(1, "Identificador inválido.").max(128, "Identificador inválido.");
+const description = z.string().trim().max(400, "A descrição pode ter no máximo 400 caracteres.").default("");
 const name = (label: string) => z.string().trim().min(2, `${label} precisa ter pelo menos 2 caracteres.`).max(100, `${label} pode ter no máximo 100 caracteres.`);
 
 const roleInput = z.object({
   name: name("O nome do cargo"),
-  description: z.string().trim().max(400).default(""),
+  description,
   departmentId: id,
   level: z.enum(["presidency", "director", "advisor", "member"]),
   isBoard: z.boolean(),
   active: z.boolean(),
   homePreset: z.enum(["presidency", "secretary", "finance", "marketing", "events", "extension", "advisor"]),
-  permissions: z.array(z.enum(ALL_PERMISSIONS)).max(200),
+  permissions: z.array(z.enum(ALL_PERMISSIONS)).max(200, "Permissões demais para um cargo."),
 }).strict();
 
 const departmentInput = z.object({
@@ -55,7 +60,7 @@ const departmentInput = z.object({
     .min(2, "A sigla precisa ter de 2 a 6 letras.")
     .max(6, "A sigla precisa ter de 2 a 6 letras.")
     .transform((s) => s.toUpperCase()),
-  description: z.string().trim().max(400).default(""),
+  description,
   active: z.boolean(),
 }).strict();
 
@@ -63,7 +68,7 @@ const email = z
   .string()
   .trim()
   .toLowerCase()
-  .max(200)
+  .max(200, "O e-mail pode ter no máximo 200 caracteres.")
   .refine((v) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v), "Informe um e-mail válido.");
 
 const inviteInput = z.object({
@@ -127,11 +132,59 @@ function assertWithinOwn(actor: Actor, permissions: Iterable<Permission>, messag
   if (missing.length > 0) fail("forbidden", message, { missing });
 }
 
-/** O cargo de destino não pode ter permissões que quem atribui não possui. */
-function assertCanAssignRole(actor: Actor, role: Role) {
+/**
+ * Alcance que um cargo dá (mais os departamentos adicionais): os marcadores de
+ * público (diretoria, nível, departamentos), sem os da conta e do cargo. O
+ * cargo é avaliado como ativo: o alcance vale assim que ele for reativado.
+ */
+function reachTokens(role: Role, departmentIds: string[] = []) {
+  const own = new Set([TOKEN.user("_"), TOKEN.role(role.id)]);
+  return userTokens({ id: "_", status: "active", departmentIds }, { ...role, active: true }).filter((t) => !own.has(t));
+}
+
+/** Ordem dos níveis: um cargo não dá a quem o recebe um nível acima do de quem o atribui. */
+const LEVEL_RANK: Record<Role["level"], number> = { member: 0, advisor: 1, director: 2, presidency: 3 };
+
+/**
+ * O nível do cargo dá algo que o nível `own` não dá. Além dos marcadores
+ * (reachTokens), as políticas usam o nível: a presidência vê o financeiro de
+ * todos os eventos (canSeeEventFinance) e a assessoria é o único nível em que
+ * `events.edit` não edita os dados do evento (canEditEvent).
+ * Espelhado em src/features/organization/org-rules.ts (levelBeyond).
+ */
+function levelBeyond(role: Role, own: Role) {
+  if (LEVEL_RANK[role.level] > LEVEL_RANK[own.level]) return true;
+  return own.level === "advisor" && role.level !== "advisor" && role.permissions.includes("events.edit");
+}
+
+/**
+ * O cargo (com os departamentos adicionais) dá alcance que o de quem atribui
+ * não tem: marcadores de público, nível ou departamento principal (as
+ * políticas usam o departamento do cargo — ex.: editar documentos e ver o
+ * financeiro dos eventos —, não os departamentos adicionais).
+ */
+function beyondOwnReach(actor: Actor, role: Role, departmentIds: string[]) {
+  if (role.departmentId !== actor.role.departmentId || levelBeyond(role, actor.role)) return true;
+  return reachTokens(role, departmentIds).some((t) => !actor.tokens.includes(t));
+}
+
+/**
+ * O cargo de destino não pode ter permissões que quem atribui não possui, e
+ * só quem administra permissões atribui cargos com permissões administrativas
+ * ou com alcance (diretoria, nível, departamentos) que o próprio cargo não tem.
+ * `departmentIds`: departamentos adicionais concedidos junto com o cargo.
+ */
+function assertCanAssignRole(actor: Actor, role: Role, departmentIds: string[] = []) {
   assertWithinOwn(actor, role.permissions, "Você não pode atribuir um cargo com permissões que o seu próprio cargo não tem.");
   if (role.permissions.some(isPrivileged)) {
     requirePermission(actor, "organization.admin", "Somente quem administra permissões pode atribuir cargos com permissões administrativas.");
+  }
+  if (beyondOwnReach(actor, role, departmentIds)) {
+    requirePermission(
+      actor,
+      "organization.admin",
+      "Somente quem administra permissões pode atribuir um cargo de diretoria, de nível com mais acesso que o seu ou de outro departamento.",
+    );
   }
 }
 
@@ -163,15 +216,56 @@ function inviteLink(token: string) {
   return `${base}/convite?token=${encodeURIComponent(token)}`;
 }
 
+/**
+ * Reserva de aceite: enquanto a conta é criada, o convite fica "accepting"
+ * (estado interno). Uma reserva abandonada (processo interrompido) perde a
+ * validade depois deste prazo e o convite volta a valer como pendente.
+ */
+const CLAIM_TTL_MS = 10 * 60 * 1000;
+
+/** Máximo de convites antigos do mesmo e-mail limpos no aceite (uma pessoa raramente tem mais de um ou dois). */
+const SUPERSEDE_LIMIT = 200;
+
+function hasActiveClaim(data: FirebaseFirestore.DocumentData) {
+  return data.status === "accepting" && Date.now() - Date.parse(data.claimedAt ?? "") < CLAIM_TTL_MS;
+}
+
+/** Situação para as regras e para a tela: a reserva de aceite é transitória e aparece como "pendente". */
+function openStatus(data: FirebaseFirestore.DocumentData): string {
+  return data.status === "accepting" ? "pending" : data.status;
+}
+
+const CLEAR_CLAIM = { claimId: FieldValue.delete(), claimedAt: FieldValue.delete() };
+
+const OPEN_STATUSES = ["pending", "accepting"] as const;
+
+/**
+ * Convites ainda abertos (pendentes, inclusive expirados, ou em aceite) para o
+ * e-mail, lidos na transação. Ler todos eles faz com que duas transações que
+ * mexem em convites diferentes do mesmo e-mail entrem em conflito (uma é
+ * repetida e vê o que a outra gravou).
+ */
+async function openInvitationsFor(tx: Transaction, email: string) {
+  const snaps = await Promise.all(OPEN_STATUSES.map((status) => tx.get(db.collection("invitations").where("email", "==", email).where("status", "==", status))));
+  return snaps.flatMap((s) => s.docs);
+}
+
+/** Convite que ainda pode ser aceito (ou está sendo): pendente e válido, ou com reserva de aceite ativa. */
+function blocksNewInvitation(data: FirebaseFirestore.DocumentData) {
+  return hasActiveClaim(data) || (data.expiresAt as Timestamp).toMillis() > Date.now();
+}
+
 function invitationDTO(id: string, data: FirebaseFirestore.DocumentData): Invitation {
-  const expired = data.status === "pending" && (data.expiresAt as Timestamp).toMillis() < Date.now();
+  const status = openStatus(data);
+  const expired = status === "pending" && (data.expiresAt as Timestamp).toMillis() < Date.now();
   return {
     id,
     name: data.name,
-    email: data.email,
+    // Convites aceitos não guardam o e-mail (a fonte é memberPrivate).
+    email: data.email ?? "",
     roleId: data.roleId,
     departmentIds: data.departmentIds ?? [],
-    status: expired ? "expired" : data.status,
+    status: (expired ? "expired" : status) as Invitation["status"],
     expiresAt: (data.expiresAt as Timestamp).toDate().toISOString(),
     createdBy: data.createdBy,
     createdAt: data.createdAt,
@@ -184,6 +278,18 @@ function invitationDTO(id: string, data: FirebaseFirestore.DocumentData): Invita
 
 /** Repassa dados que só existem nesta chamada (ex.: link do convite) — nunca são guardados. */
 const ephemeral = new Map<string, Record<string, unknown>>();
+
+/**
+ * Resposta das ações de convite. Também é montada no reenvio da mesma
+ * requisição: confere de novo se quem chama ainda pode ver convites.
+ */
+async function presentInvitation(result: { id: string; requestId?: string }, actor: Actor | null) {
+  const extra = result.requestId ? ephemeral.get(result.requestId) : undefined;
+  if (result.requestId) ephemeral.delete(result.requestId);
+  if (!actor || (!actor.can("organization.create") && !actor.can("organization.edit"))) fail("forbidden", "Seu perfil não pode ver convites.");
+  const snap = await db.doc(`invitations/${result.id}`).get();
+  return { invitation: invitationDTO(snap.id, snap.data()!), link: (extra?.link as string | undefined) ?? null };
+}
 
 function audit(tx: Transaction, actor: Actor, ctx: RunContext, action: string, resourceType: string, resourceId: string, summary: string, details?: Record<string, string | number | boolean | null>) {
   auditInTx(tx, { uid: actor.uid, name: actor.name }, { action: `organization.${action}`, module: "organization", resourceType, resourceId, summary, details }, ctx.requestId, ctx.now);
@@ -331,19 +437,18 @@ export const organizationActions = {
       const state = await loadOrg(tx);
       const role = state.roles.get(input.roleId);
       ensure(role && role.active, "invalid", "Escolha um cargo ativo.");
-      assertCanAssignRole(actor, role);
+      assertCanAssignRole(actor, role, input.departmentIds);
       if (input.departmentIds.length > 0) {
         // Departamentos adicionais ampliam o acesso: mesma exigência de updateMember.
         requirePermission(actor, "organization.admin", "Somente quem administra permissões pode definir departamentos adicionais.");
       }
       validateDepartments(input.departmentIds, state);
-      const [existing, pending] = await Promise.all([
+      const [existing, open] = await Promise.all([
         tx.get(db.collection("memberPrivate").where("email", "==", input.email).limit(1)),
-        tx.get(db.collection("invitations").where("email", "==", input.email).where("status", "==", "pending").limit(5)),
+        openInvitationsFor(tx, input.email),
       ]);
       if (!existing.empty) fail("conflict", "Já existe um integrante com esse e-mail.");
-      const now = Date.now();
-      if (pending.docs.some((d) => (d.data().expiresAt as Timestamp).toMillis() > now)) {
+      if (open.some((d) => blocksNewInvitation(d.data()))) {
         fail("conflict", "Já existe um convite pendente para esse e-mail. Renove ou revogue o convite existente.");
       }
       const token = randomBytes(32).toString("base64url");
@@ -363,11 +468,8 @@ export const organizationActions = {
       ephemeral.set(ctx.requestId, { link: inviteLink(token) });
       return { id: ref.id, requestId: ctx.requestId };
     },
-    async present(result) {
-      const snap = await db.doc(`invitations/${result.id}`).get();
-      const extra = ephemeral.get(result.requestId);
-      ephemeral.delete(result.requestId);
-      return { invitation: invitationDTO(snap.id, snap.data()!), link: (extra?.link as string | undefined) ?? null };
+    async present(result, actor) {
+      return presentInvitation(result, actor);
     },
   }),
 
@@ -379,22 +481,37 @@ export const organizationActions = {
       requirePermission(actor, "organization.create", "Seu perfil não pode renovar convites.");
       const snap = requireDoc(await tx.get(db.doc(`invitations/${input.id}`)), "Convite");
       const data = snap.data()!;
-      if (data.status !== "pending") fail("conflict", "Somente convites pendentes podem ser renovados.");
-      const state = await loadOrg(tx);
+      if (hasActiveClaim(data)) fail("conflict", "Este convite está sendo aceito neste momento. Aguarde alguns instantes e atualize a lista.");
+      if (openStatus(data) !== "pending") fail("conflict", "Somente convites pendentes podem ser renovados.");
+      const [state, existing, open] = await Promise.all([
+        loadOrg(tx),
+        tx.get(db.collection("memberPrivate").where("email", "==", data.email).limit(1)),
+        openInvitationsFor(tx, data.email),
+      ]);
       const role = state.roles.get(data.roleId);
       ensure(role && role.active, "conflict", "O cargo deste convite está desativado. Revogue e crie um novo convite.");
-      assertCanAssignRole(actor, role);
+      assertCanAssignRole(actor, role, data.departmentIds ?? []);
+      // Nunca há dois convites aceitáveis para o mesmo e-mail (mesma regra da criação).
+      if (!existing.empty) fail("conflict", "Já existe um integrante com esse e-mail. Revogue este convite.");
+      if (open.some((d) => d.id !== snap.id && blocksNewInvitation(d.data()))) {
+        fail("conflict", "Já existe outro convite pendente para esse e-mail. Use aquele convite ou revogue-o antes.");
+      }
       const token = randomBytes(32).toString("base64url");
-      tx.update(snap.ref, { tokenHash: hashToken(token), expiresAt: timestampInDays(intParam(INVITE_TTL_DAYS, 7)), renewedAt: ctx.now, renewedBy: actor.uid });
+      // Uma reserva de aceite abandonada é descartada junto com o link anterior.
+      tx.update(snap.ref, {
+        tokenHash: hashToken(token),
+        status: "pending",
+        ...CLEAR_CLAIM,
+        expiresAt: timestampInDays(intParam(INVITE_TTL_DAYS, 7)),
+        renewedAt: ctx.now,
+        renewedBy: actor.uid,
+      });
       audit(tx, actor, ctx, "renewInvitation", "invitation", snap.id, "Convite renovado (link anterior invalidado)");
       ephemeral.set(ctx.requestId, { link: inviteLink(token) });
       return { id: snap.id, requestId: ctx.requestId };
     },
-    async present(result) {
-      const snap = await db.doc(`invitations/${result.id}`).get();
-      const extra = ephemeral.get(result.requestId);
-      ephemeral.delete(result.requestId);
-      return { invitation: invitationDTO(snap.id, snap.data()!), link: (extra?.link as string | undefined) ?? null };
+    async present(result, actor) {
+      return presentInvitation(result, actor);
     },
   }),
 
@@ -405,14 +522,15 @@ export const organizationActions = {
       actor = actor!;
       requirePermission(actor, "organization.create", "Seu perfil não pode revogar convites.");
       const snap = requireDoc(await tx.get(db.doc(`invitations/${input.id}`)), "Convite");
-      if (snap.data()!.status !== "pending") fail("conflict", "Este convite não está mais pendente.");
-      tx.update(snap.ref, { status: "revoked", revokedAt: ctx.now, revokedBy: actor.uid, tokenHash: null });
+      // Também revoga durante uma reserva de aceite: o aceite em andamento é recusado e desfeito.
+      if (openStatus(snap.data()!) !== "pending") fail("conflict", "Este convite não está mais pendente.");
+      // O hash continua gravado: o link antigo passa a mostrar "convite cancelado" (a situação impede o uso).
+      tx.update(snap.ref, { status: "revoked", revokedAt: ctx.now, revokedBy: actor.uid, ...CLEAR_CLAIM });
       audit(tx, actor, ctx, "revokeInvitation", "invitation", snap.id, "Convite revogado");
       return { id: snap.id };
     },
-    async present(result) {
-      const snap = await db.doc(`invitations/${result.id}`).get();
-      return invitationDTO(snap.id, snap.data()!);
+    async present(result, actor) {
+      return (await presentInvitation(result, actor)).invitation;
     },
   }),
 
@@ -450,8 +568,8 @@ export const organizationActions = {
       }
       const statusChanged = input.status !== undefined && input.status !== current.status;
       if (statusChanged && input.status === "active") {
-        // Reativar devolve o acesso do cargo: exige poder atribuí-lo.
-        assertCanAssignRole(actor, role);
+        // Reativar devolve o acesso do cargo e dos departamentos adicionais: exige poder atribuí-los.
+        assertCanAssignRole(actor, role, next.departmentIds ?? []);
       }
 
       const members = state.members.map((m) => (m.id === memberId ? next : m));
@@ -531,17 +649,113 @@ const password = z
   .min(8, PASSWORD_RULE)
   .max(128, PASSWORD_RULE)
   .refine((v) => /[A-Za-zÀ-ÿ]/.test(v) && /\d/.test(v), PASSWORD_RULE);
-const tokenSchema = z.string().trim().min(20).max(200);
+const INVALID_INVITE = "Convite inválido. Peça um novo link a quem convidou você.";
+const tokenSchema = z.string({ error: INVALID_INVITE }).trim().min(20, INVALID_INVITE).max(200, INVALID_INVITE);
 
-async function findInvitation(token: string) {
-  const snap = await db.collection("invitations").where("tokenHash", "==", hashToken(token)).limit(1).get();
-  const doc = snap.docs[0];
-  if (!doc) fail("not_found", "Convite inválido. Peça um novo link a quem convidou você.");
+/**
+ * Confere se o convite pode ser usado. Nos estados finais (usado, cancelado,
+ * expirado) só a mensagem é devolvida — nunca nome, e-mail ou cargo. O hash
+ * continua gravado nos convites usados/revogados justamente para que o link
+ * antigo receba a mensagem certa; a renovação troca o hash (link anterior =
+ * "convite inválido").
+ */
+function assertUsable(doc: FirebaseFirestore.QueryDocumentSnapshot | undefined): FirebaseFirestore.DocumentData {
+  if (!doc) fail("not_found", INVALID_INVITE);
   const data = doc.data();
   if (data.status === "accepted") fail("conflict", "Este convite já foi usado. Entre com o seu e-mail e senha.");
-  if (data.status !== "pending") fail("conflict", "Este convite foi cancelado. Peça um novo link.");
+  if (openStatus(data) !== "pending") fail("conflict", "Este convite foi cancelado. Peça um novo link.");
   if ((data.expiresAt as Timestamp).toMillis() < Date.now()) fail("conflict", "Este convite expirou. Peça um novo link a quem convidou você.");
-  return doc;
+  return data;
+}
+
+function invitationsByToken(token: string) {
+  return db.collection("invitations").where("tokenHash", "==", hashToken(token)).limit(1);
+}
+
+interface InvitationClaim {
+  ref: DocumentReference;
+  claimId: string;
+  email: string;
+  name: string;
+}
+
+const CLAIM_BUSY = "Este convite está sendo usado neste momento. Aguarde alguns instantes e tente novamente.";
+
+/**
+ * Reserva o convite (pendente → "accepting") ANTES de qualquer efeito no
+ * Auth: um segundo aceite simultâneo, ou um que falhe, não cria nem altera
+ * nenhuma conta. Uma reserva abandonada há mais de CLAIM_TTL_MS pode ser
+ * assumida. Os aceites também são um por vez POR E-MAIL: com outro convite do
+ * mesmo e-mail em aceite, a reserva é recusada (a conta que o outro aceite
+ * acabou de criar nunca é confundida com uma conta criada por fora).
+ */
+async function claimInvitation(token: string): Promise<InvitationClaim> {
+  const claimId = randomUUID();
+  return db.runTransaction(async (tx) => {
+    const doc = (await tx.get(invitationsByToken(token))).docs[0];
+    const data = assertUsable(doc);
+    const open = await openInvitationsFor(tx, data.email as string);
+    if (hasActiveClaim(data) || open.some((d) => d.id !== doc!.id && hasActiveClaim(d.data()))) fail("conflict", CLAIM_BUSY);
+    tx.update(doc!.ref, { status: "accepting", claimId, claimedAt: nowISO() });
+    return { ref: doc!.ref, claimId, email: data.email as string, name: data.name as string };
+  });
+}
+
+/** Outro convite do mesmo e-mail com reserva de aceite ativa (fora de transação). */
+async function otherActiveClaim(claim: InvitationClaim) {
+  const snap = await db.collection("invitations").where("email", "==", claim.email).where("status", "==", "accepting").get();
+  return snap.docs.some((d) => d.id !== claim.ref.id && hasActiveClaim(d.data()));
+}
+
+/** Desfaz a reserva (o convite volta a pendente), se ela ainda for desta tentativa. */
+async function releaseClaim(claim: InvitationClaim) {
+  await db.runTransaction(async (tx) => {
+    const data = (await tx.get(claim.ref)).data();
+    if (data?.status === "accepting" && data.claimId === claim.claimId) tx.update(claim.ref, { status: "pending", ...CLEAR_CLAIM });
+  });
+}
+
+/**
+ * Cria a conta do convite no Auth. Uma conta que já existe com o e-mail NUNCA
+ * é reaproveitada: quem a criou por fora (antes do convite) ainda teria o uid
+ * e sessões válidas. Se ela pertence a um integrante, o aceite é recusado; se
+ * não, é apagada (com registro na auditoria) e a conta nasce de novo com
+ * outro uid — tokens emitidos antes do aceite não correspondem a nenhum
+ * integrante.
+ */
+async function createInvitedAccount(claim: InvitationClaim, pass: string): Promise<string> {
+  const { email } = claim;
+  const existing = await adminAuth.getUserByEmail(email).catch((error: { code?: string }) => {
+    if (error?.code === "auth/user-not-found") return null;
+    throw error;
+  });
+  if (existing) {
+    // Nesta ordem: um aceite do mesmo e-mail ou ainda tem a reserva ativa ou já gravou o integrante.
+    if (await otherActiveClaim(claim)) fail("conflict", CLAIM_BUSY);
+    const member = await db.doc(`members/${existing.uid}`).get();
+    if (member.exists) fail("conflict", "Já existe uma conta com este e-mail. Entre com o seu e-mail e senha.");
+    await adminAuth.deleteUser(existing.uid);
+    // Uma conta criada por fora com o e-mail de um convite é sinal de tentativa de antecipação.
+    logger.warn("Conta sem cadastro na Central removida no aceite de convite", { invitationId: claim.ref.id, removedUid: existing.uid });
+    await auditDirect(
+      { uid: null, name: "" },
+      {
+        action: "auth.removeUnlinkedAccount",
+        module: "auth",
+        resourceType: "invitation",
+        resourceId: claim.ref.id,
+        summary: "Conta de acesso criada fora do convite, com o mesmo e-mail, foi removida antes do aceite",
+        details: { removedUid: existing.uid, accountCreatedAt: existing.metadata.creationTime ?? null },
+      },
+    );
+  }
+  try {
+    const user = await adminAuth.createUser({ email, password: pass, displayName: claim.name, emailVerified: false, disabled: false });
+    return user.uid;
+  } catch (error) {
+    if ((error as { code?: string }).code === "auth/email-already-exists") fail("conflict", "Não foi possível criar a conta agora. Tente novamente em instantes.");
+    throw error;
+  }
 }
 
 export const authActions = {
@@ -551,8 +765,7 @@ export const authActions = {
     public: true,
     schema: z.object({ token: tokenSchema }),
     async run(_actor, { token }) {
-      const doc = await findInvitation(token);
-      const data = doc.data();
+      const data = assertUsable((await invitationsByToken(token).get()).docs[0]);
       const role = await db.doc(`roles/${data.roleId}`).get();
       return {
         name: data.name as string,
@@ -564,45 +777,40 @@ export const authActions = {
   }),
 
   /**
-   * Aceita o convite: cria a conta no Firebase Authentication com a senha
-   * escolhida (a senha não é gravada nem registrada em log) e habilita o
-   * integrante na Central. O convite só pode ser usado uma vez.
+   * Aceita o convite: reserva o convite, cria uma conta NOVA no Firebase
+   * Authentication com a senha escolhida (a senha não é gravada nem
+   * registrada em log) e habilita o integrante na Central. O convite só pode
+   * ser usado uma vez; se algo falhar depois da reserva, a conta criada é
+   * apagada e o convite volta a pendente.
    */
   acceptInvitation: query({
     module: "auth",
     public: true,
     schema: z.object({ token: tokenSchema, password }),
     async run(_actor, { token, password: pass }) {
-      const invitation = await findInvitation(token);
-      const data = invitation.data();
-
-      let uid: string;
-      let created = false;
+      const claim = await claimInvitation(token);
+      let uid: string | undefined;
       try {
-        const existing = await adminAuth.getUserByEmail(data.email);
-        const member = await db.doc(`members/${existing.uid}`).get();
-        if (member.exists) fail("conflict", "Já existe uma conta com este e-mail. Entre com o seu e-mail e senha.");
-        await adminAuth.updateUser(existing.uid, { password: pass, disabled: false, displayName: data.name });
-        uid = existing.uid;
-      } catch (error) {
-        if (error instanceof AppError) throw error;
-        if ((error as { code?: string }).code !== "auth/user-not-found") throw error;
-        const user = await adminAuth.createUser({ email: data.email, password: pass, displayName: data.name, emailVerified: false, disabled: false });
-        uid = user.uid;
-        created = true;
-      }
-
-      try {
+        uid = await createInvitedAccount(claim, pass);
+        const accountId = uid;
         await db.runTransaction(async (tx) => {
-          const fresh = await tx.get(invitation.ref);
-          const inv = fresh.data()!;
-          if (inv.status !== "pending" || inv.tokenHash !== hashToken(token)) fail("conflict", "Este convite já foi usado ou cancelado.");
+          const fresh = await tx.get(claim.ref);
+          const inv = fresh.data();
+          // A reserva precisa continuar sendo desta tentativa (revogado, renovado ou assumido por outro aceite = recusa).
+          if (!inv || inv.status !== "accepting" || inv.claimId !== claim.claimId || inv.tokenHash !== hashToken(token)) {
+            fail("conflict", "Este convite já foi usado ou cancelado.");
+          }
           const roleSnap = await tx.get(db.doc(`roles/${inv.roleId}`));
           ensure(roleSnap.exists, "conflict", "O cargo deste convite não existe mais. Peça um novo convite.");
+          const [sameEmail, others] = await Promise.all([
+            tx.get(db.collection("memberPrivate").where("email", "==", claim.email).limit(1)),
+            tx.get(db.collection("invitations").where("email", "==", claim.email).limit(SUPERSEDE_LIMIT)),
+          ]);
+          if (!sameEmail.empty) fail("conflict", "Já existe uma conta com este e-mail. Entre com o seu e-mail e senha.");
           const role = roleFromDoc(roleSnap.id, roleSnap.data()!);
           const now = nowISO();
-          const member: Member = { id: uid, name: inv.name, email: "", roleId: inv.roleId, departmentIds: inv.departmentIds ?? [], status: "active", joinedAt: now };
-          tx.create(db.doc(`members/${uid}`), {
+          const member: Member = { id: accountId, name: inv.name, email: "", roleId: inv.roleId, departmentIds: inv.departmentIds ?? [], status: "active", joinedAt: now };
+          tx.create(db.doc(`members/${accountId}`), {
             name: member.name,
             roleId: member.roleId,
             departmentIds: member.departmentIds,
@@ -611,22 +819,38 @@ export const authActions = {
             createdBy: inv.createdBy,
             updatedAt: now,
           });
-          tx.set(db.doc(`memberPrivate/${uid}`), { email: inv.email, invitationId: invitation.id, createdBy: inv.createdBy, createdAt: now });
+          tx.set(db.doc(`memberPrivate/${accountId}`), { email: claim.email, invitationId: claim.ref.id, createdBy: inv.createdBy, createdAt: now });
           writeAccess(tx, member, role, now);
-          tx.update(invitation.ref, { status: "accepted", acceptedAt: now, acceptedUserId: uid, tokenHash: null });
+          // O e-mail sai do convite (a fonte é memberPrivate); o hash fica para o link usado mostrar a mensagem certa.
+          tx.update(claim.ref, { status: "accepted", acceptedAt: now, acceptedUserId: accountId, email: FieldValue.delete(), ...CLEAR_CLAIM });
+          // Os outros convites deste e-mail (revogados ou expirados) também deixam de guardá-lo; os ainda abertos são revogados.
+          const superseded = others.docs.filter((d) => d.id !== claim.ref.id);
+          for (const d of superseded) {
+            const open = (OPEN_STATUSES as readonly string[]).includes(d.data().status);
+            tx.update(d.ref, open ? { status: "revoked", revokedAt: now, email: FieldValue.delete(), ...CLEAR_CLAIM } : { email: FieldValue.delete() });
+          }
           auditInTx(
             tx,
-            { uid, name: inv.name },
-            { action: "auth.acceptInvitation", module: "auth", resourceType: "member", resourceId: uid, summary: `Convite aceito; conta criada com o cargo ${role.name}` },
+            { uid: accountId, name: inv.name },
+            {
+              action: "auth.acceptInvitation",
+              module: "auth",
+              resourceType: "member",
+              resourceId: accountId,
+              summary: `Convite aceito; conta criada com o cargo ${role.name}`,
+              details: { invitationId: claim.ref.id, otherInvitationsCleared: superseded.length },
+            },
             undefined,
             now,
           );
         });
       } catch (error) {
-        if (created) await adminAuth.deleteUser(uid).catch(() => undefined);
+        // A conta criada nesta tentativa é apagada antes de liberar o convite para outra tentativa.
+        if (uid) await adminAuth.deleteUser(uid).catch(() => undefined);
+        await releaseClaim(claim).catch(() => undefined);
         throw error;
       }
-      return { email: data.email as string };
+      return { email: claim.email };
     },
   }),
 

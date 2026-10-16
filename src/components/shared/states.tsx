@@ -1,10 +1,15 @@
-import { isDemoMode } from "@/lib/mode";
+"use client";
+
 import type { ReactNode } from "react";
-import { AlertTriangle, FlaskConical, Inbox, Loader2, Lock, RotateCcw, SearchX } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { AlertTriangle, FlaskConical, Inbox, Loader2, Lock, PowerOff, RotateCcw, SearchX } from "lucide-react";
+import type { ModuleKey } from "@/types";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { ServiceError } from "@/services/errors";
 import { Skeleton } from "@/components/ui/misc";
+import { useAccess } from "@/hooks/use-access";
 import { cn } from "@/lib/utils";
+import { moduleForPath, restrictedNotice } from "./module-route";
 
 export function EmptyState({
   icon,
@@ -93,20 +98,16 @@ export function RecordErrorState({
   return <ErrorState message={message} onRetry={onRetry} />;
 }
 
-/** Exibido quando o perfil demonstrativo não tem acesso à área. */
-export function RestrictedState({ title = "Área não disponível para este perfil", description }: { title?: string; description?: ReactNode }) {
-  return (
-    <EmptyState
-      icon={<Lock />}
-      title={title}
-      description={
-        description ??
-        (isDemoMode
-          ? "O perfil de demonstração em uso não tem permissão para esta área. Troque de perfil no topo da tela para experimentar outras visões."
-          : "Seu cargo não tem permissão para esta área. Se precisar de acesso, fale com a presidência.")
-      }
-    />
-  );
+/**
+ * Exibido quando o perfil não tem acesso à área. Se o módulo da área (deduzido
+ * da rota, ou informado em `module`) estiver desativado nas Configurações, o
+ * aviso diz isso em vez de falar em permissão do cargo.
+ */
+export function RestrictedState({ title, description, module }: { title?: string; description?: ReactNode; module?: ModuleKey }) {
+  const pathname = usePathname();
+  const access = useAccess();
+  const notice = restrictedNotice({ module: module ?? moduleForPath(pathname), moduleEnabled: access.moduleEnabled, title, description });
+  return <EmptyState icon={notice.disabled ? <PowerOff /> : <Lock />} title={notice.title} description={notice.description} />;
 }
 
 export function FullPageLoader({ label = "Carregando a Central…" }: { label?: string }) {

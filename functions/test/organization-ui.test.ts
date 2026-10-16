@@ -8,8 +8,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { allPermissions } from "@/lib/modules";
 import { hasPermission, type AccessContext } from "@/lib/permissions";
-import type { Member, Permission, Role } from "@/types";
-import { assignableRoles, memberEditRules, permissionLock, renewLock } from "@/features/organization/org-rules";
+import type { Invitation, Member, Permission, Role } from "@/types";
+import { assignableRoles, canAssignRole, memberEditRules, permissionLock, renewLock } from "@/features/organization/org-rules";
+import { Timestamp } from "../src/core/admin";
 import { authActions, organizationActions } from "../src/modules/organization";
 import { caller, createMember, db, expectCode, resetEmulators, seedPeople, seedStructure } from "./helpers";
 
@@ -81,12 +82,41 @@ beforeEach(async () => {
     createdAt: "2026-10-14T12:00:00.000Z",
     updatedAt: "2026-10-14T12:00:00.000Z",
   });
+  // Cargos de teste com alcances diferentes (diretoria, nível, departamento) e um gestor de diretoria sem organization.admin.
+  const reachRoles: [string, string, Role["level"], boolean, Permission[]][] = [
+    ["conselho-eventos", "eventos", "director", true, ["events.view"]],
+    ["apoio-fin", "financeiro", "member", false, ["documents.view"]],
+    ["apoio-eventos", "eventos", "member", false, ["events.view"]],
+    // Mesmos marcadores que o gestor, mas events.edit fora da assessoria edita os dados do evento.
+    ["apoio-editor-eventos", "eventos", "member", false, ["events.view", "events.edit"]],
+    // Mesmos marcadores que o gestor de diretoria, mas nível de presidência.
+    ["conselho-pres", "eventos", "presidency", true, ["events.view"]],
+    // Departamento principal que o gestor de diretoria só tem como adicional.
+    ["conselho-fin-docs", "financeiro", "director", true, ["documents.view", "documents.edit"]],
+    // Cargo de diretoria (sem organization.admin) que convida e edita integrantes.
+    ["gestor-diretoria", "eventos", "director", true, ["organization.view", "organization.create", "organization.edit", "events.view", "documents.view", "documents.edit"]],
+  ];
+  for (const [id, departmentId, level, isBoard, permissions] of reachRoles) {
+    await db.doc(`roles/${id}`).set({
+      name: `Cargo ${id}`,
+      description: "Cargo de teste (alcance).",
+      departmentId,
+      level,
+      isBoard,
+      active: true,
+      homePreset: "advisor",
+      permissions,
+      createdAt: "2026-10-14T12:00:00.000Z",
+      updatedAt: "2026-10-14T12:00:00.000Z",
+    });
+  }
   await seedPeople();
   await createMember("gestor", "Gestor Teste", "gestor");
+  await createMember("gestordir", "Gestora de Diretoria Teste", "gestor-diretoria", { departmentIds: ["financeiro"] });
 });
 
 describe("convite: cargos oferecidos ≡ cargos aceitos pelo servidor", () => {
-  it.each(["pres", "vice", "gestor", "sec"])("perfil %s", async (uid) => {
+  it.each(["pres", "vice", "gestor", "gestordir", "sec"])("perfil %s", async (uid) => {
     const ctx = await ctxOf(uid);
     const roles = await rolesNow();
     const offered = new Set(hasPermission(ctx, "organization.create") ? assignableRoles(ctx, roles).map((r) => r.id) : []);
@@ -98,6 +128,49 @@ describe("convite: cargos oferecidos ≡ cargos aceitos pelo servidor", () => {
     expect(mismatches).toEqual([]);
     if (uid === "pres") expect(offered.size).toBe(roles.length);
     if (uid === "sec") expect(offered.size).toBe(0);
+    if (uid === "gestor") {
+      // Sem organization.admin: só cargos com alcance contido no do gestor (Eventos, assessoria, fora da diretoria).
+      expect(offered.has("apoio-eventos")).toBe(true);
+      expect(offered.has("conselho-eventos")).toBe(false);
+      expect(offered.has("apoio-fin")).toBe(false);
+      expect(offered.has("apoio-editor-eventos")).toBe(false);
+    }
+    if (uid === "gestordir") {
+      // Diretoria sem organization.admin: nem presidência (mesmos marcadores), nem o departamento que só tem como adicional.
+      expect(offered.has("conselho-eventos")).toBe(true);
+      expect(offered.has("apoio-eventos")).toBe(true);
+      expect(offered.has("conselho-pres")).toBe(false);
+      expect(offered.has("conselho-fin-docs")).toBe(false);
+    }
+  });
+});
+
+describe("alcance: renovação, troca de cargo e reativação ≡ servidor", () => {
+  it("o gestor (sem organization.admin) só atribui o alcance que tem", async () => {
+    const roles = await rolesNow();
+    const gestor = await ctxOf("gestor");
+    const res = await org<InviteResult>("inviteMember", "pres", { name: "Conselheira", email: "conselheira@example.org", roleId: "conselho-eventos", departmentIds: [] });
+    const inv = { ...res.invitation, name: "Conselheira", email: "conselheira@example.org", roleId: "conselho-eventos", departmentIds: [], createdBy: "pres", createdAt: "" };
+    expect(renewLock(gestor, inv as never, roles)).toBeDefined();
+    expect(await accepted(org("renewInvitation", "gestor", { id: res.invitation.id }))).toBe(false);
+
+    // Troca de cargo do assessor: o que a tela oferece ≡ o que o servidor aceita.
+    const offered = new Set(assignableRoles(gestor, roles).map((r) => r.id));
+    for (const roleId of ["conselho-eventos", "apoio-fin", "apoio-eventos"]) {
+      const ok = await accepted(org("updateMember", "gestor", { id: "ass", input: { roleId } }));
+      expect({ roleId, ok }).toEqual({ roleId, ok: offered.has(roleId) });
+      if (ok) await org("updateMember", "pres", { id: "ass", input: { roleId: "assessor-eventos" } });
+    }
+
+    // Reativação de quem tem um departamento adicional que o gestor não alcança.
+    await org("updateMember", "pres", { id: "ass", input: { departmentIds: ["financeiro"] } });
+    await org("updateMember", "gestor", { id: "ass", input: { status: "inactive" } });
+    const ass = await memberOf("ass");
+    const assRole = roles.find((r) => r.id === ass.roleId)!;
+    expect(canAssignRole(gestor, assRole, ass.departmentIds ?? [])).toBe(false);
+    expect(await accepted(org("updateMember", "gestor", { id: "ass", input: { status: "active" } }))).toBe(false);
+    expect(canAssignRole(await ctxOf("pres"), assRole, ass.departmentIds ?? [])).toBe(true);
+    expect(await accepted(org("updateMember", "pres", { id: "ass", input: { status: "active" } }))).toBe(true);
   });
 });
 
@@ -156,6 +229,13 @@ describe("edição de integrante: o que a tela oferece ≡ o que o servidor acei
     expect(onAss).toMatchObject({ canEdit: true, canChangeStatus: true });
     expect(await accepted(org("updateMember", "gestor", { id: "ass", input: { status: "inactive" } }))).toBe(true);
     expect((await db.doc("userAccess/ass").get()).data()!.status).toBe("inactive");
+    // Reativar devolve também os departamentos adicionais: com Marketing (fora do alcance do gestor), só quem administra permissões.
+    const assRole = roles.find((r) => r.id === "assessor-eventos")!;
+    expect((await memberOf("ass")).departmentIds).toEqual(["marketing"]);
+    expect(canAssignRole(gestor, assRole, ["marketing"])).toBe(false);
+    expect(await accepted(org("updateMember", "gestor", { id: "ass", input: { status: "active" } }))).toBe(false);
+    await org("updateMember", "vice", { id: "ass", input: { departmentIds: [] } });
+    expect(canAssignRole(gestor, assRole, [])).toBe(true);
     expect(await accepted(org("updateMember", "gestor", { id: "ass", input: { status: "active" } }))).toBe(true);
 
     // O gestor não edita quem tem um cargo com permissões que ele não tem.
@@ -195,6 +275,23 @@ describe("convites: link exibido uma única vez", () => {
     expect(tokenOf(renewed.link!)).not.toBe(tokenOf(first.link!));
     await expectCode(auth("previewInvitation", undefined, { token: tokenOf(first.link!) }), "not_found");
     expect((await auth<{ name: string }>("previewInvitation", undefined, { token: tokenOf(renewed.link!) })).name).toBe("Pessoa Nova");
+  });
+
+  it("renovação com outro convite pendente para o mesmo e-mail: bloqueada na tela e recusada pelo servidor", async () => {
+    const payload = { name: "Pessoa Repetida", email: "repetida@example.org", roleId: "assessor-eventos", departmentIds: [] };
+    const first = await org<InviteResult>("inviteMember", "pres", payload);
+    await db.doc(`invitations/${first.invitation.id}`).update({ expiresAt: Timestamp.fromMillis(Date.now() - 1000) });
+    const second = await org<InviteResult>("inviteMember", "pres", payload);
+    // A lista como a tela recebe (o primeiro aparece expirado).
+    const list = [
+      { ...payload, ...first.invitation, status: "expired", createdBy: "pres", createdAt: "" },
+      { ...payload, ...second.invitation, createdBy: "pres", createdAt: "" },
+    ] as Invitation[];
+    const roles = await rolesNow();
+    expect(renewLock(await ctxOf("pres"), list[0], roles, list)).toMatch(/outro convite pendente/);
+    await expectCode(org("renewInvitation", "pres", { id: first.invitation.id }), "conflict");
+    expect(renewLock(await ctxOf("pres"), list[1], roles, list)).toBeUndefined();
+    expect(await accepted(org("renewInvitation", "pres", { id: second.invitation.id }))).toBe(true);
   });
 
   it("renovação bloqueada na tela é recusada pelo servidor", async () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Award, CalendarDays, CheckCircle2, Clock, FilePlus2, FileSpreadsheet, FileText, Lock, MapPin, MoreHorizontal, Pencil, Plus, Trash2, UserPlus, XCircle } from "lucide-react";
@@ -29,6 +29,7 @@ import { ListRow } from "@/components/shared/list-row";
 import { confirmAction } from "@/components/shared/confirm";
 import { AddDocumentDialog } from "@/features/documents/document-form-dialog";
 import { ProjectFormDialog } from "@/features/extension/project-form-dialog";
+import { markAttendance as markOptimistic, settleAttendance, shownAttendance, type AttendanceMarks } from "@/features/extension/attendance";
 import { attendanceRows, exportCertificatesPdf } from "@/features/extension/certificates";
 import { attendeeTotal, certificateStatusMeta, RESTRICTED_ATTENDEES_TEXT } from "@/features/extension/labels";
 
@@ -47,8 +48,10 @@ export default function ProjectDetailPage() {
   const [attendee, setAttendee] = useState("");
   const [report, setReport] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
-  // Marcação otimista: a caixa muda na hora; se a gravação falhar, volta ao valor salvo.
-  const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
+  const [exportingCsv, setExportingCsv] = useState(false);
+  // Marcação otimista: a caixa muda na hora; quando a gravação termina, vale de novo o dado do servidor.
+  const [optimistic, setOptimistic] = useState<AttendanceMarks>({});
+  const clickSeq = useRef(0);
 
   const setStatus = useAction((s: ProjectStatus) => services.extension.setStatus(id, s), { success: (r) => `Situação: ${PROJECT_STATUS[r.status].label}` });
   const addSpeaker = useAction(() => services.extension.addSpeaker(id, speaker), { success: "Palestrante adicionado" });
@@ -58,14 +61,11 @@ export default function ProjectDetailPage() {
   const addAttendee = useAction(() => services.extension.addAttendee(id, attendee), { success: "Participante adicionado" });
   const toggle = useAction((aid: string, present: boolean) => services.extension.setAttendance(id, aid, present));
   const markAttendance = async (aid: string, present: boolean) => {
-    setOptimistic((o) => ({ ...o, [aid]: present }));
-    const saved = await toggle.runSafe(aid, present);
-    if (!saved)
-      setOptimistic((o) => {
-        const next = { ...o };
-        delete next[aid];
-        return next;
-      });
+    const token = ++clickSeq.current;
+    setOptimistic((o) => markOptimistic(o, aid, present, token));
+    // Com sucesso o projeto já foi relido (ver QueryProvider); com falha, volta o valor salvo.
+    await toggle.runSafe(aid, present);
+    setOptimistic((o) => settleAttendance(o, aid, token));
   };
   const setCert = useAction((s: CertificateStatus) => services.extension.setCertificateStatus(id, s), { success: (r) => `Certificados: ${certificateStatusMeta(r.certificateStatus).label}` });
   const saveReport = useAction(() => services.extension.update(id, { report: report ?? "" }), { success: "Relatório salvo" });
@@ -78,16 +78,18 @@ export default function ProjectDetailPage() {
   const editable = !!ctx && canEditProject(ctx, p);
   const closable = !!ctx && canCloseProject(ctx, p);
   const event = events?.find((e) => e.id === p.eventId);
-  const isPresent = (a: { id: string; present: boolean }) => optimistic[a.id] ?? a.present;
+  const isPresent = (a: { id: string; present: boolean }) => shownAttendance(optimistic, a);
   const present = p.attendees.filter(isPresent).length;
   // Lista de presença (dados pessoais): só vem preenchida para quem organiza o projeto.
   const restricted = !!p.attendeesRestricted;
   const total = attendeeTotal(p);
   const canApprove = access.can("extension.approve");
-  /** Registro da exportação na auditoria (melhor esforço; o resumo não traz nomes). */
-  const recordExport = (summary: string) => {
-    void services.audit.recordExport({ module: "extension", resourceType: "project", resourceId: p.id, summary, personalData: true }).catch(() => undefined);
-  };
+  /**
+   * Registro da exportação na auditoria (melhor esforço; o resumo não traz nomes).
+   * É aguardado ANTES de entregar o arquivo: fechar a aba logo após o download não perde o registro.
+   */
+  const recordExport = (summary: string) =>
+    services.audit.recordExport({ module: "extension", resourceType: "project", resourceId: p.id, summary, personalData: true }).catch(() => undefined);
   const linkedDocs = (documents ?? []).filter((d) => p.documentIds.includes(d.id) || d.links.projectId === p.id);
   const reportValue = report ?? p.report ?? "";
 
@@ -324,14 +326,18 @@ export default function ProjectDetailPage() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => {
+                    loading={exportingCsv}
+                    onClick={async () => {
+                      setExportingCsv(true);
                       try {
                         const rows = attendanceRows(p);
+                        await recordExport(`Lista de presença em CSV (${rows.length - 1} participantes)`);
                         downloadCsv(rows, `presenca-${slugify(p.name)}.csv`);
-                        recordExport(`Lista de presença em CSV (${rows.length - 1} participantes)`);
                         notifySuccess("Lista de presença exportada (CSV)");
                       } catch (e) {
                         notifyError(e);
+                      } finally {
+                        setExportingCsv(false);
                       }
                     }}
                   >
@@ -402,8 +408,7 @@ export default function ProjectDetailPage() {
                     onClick={async () => {
                       setGenerating(true);
                       try {
-                        const n = await exportCertificatesPdf(p, dir.memberName(p.responsibleId));
-                        recordExport(`Certificados (${n} participantes)`);
+                        const n = await exportCertificatesPdf(p, dir.memberName(p.responsibleId), { onBeforeSave: (count) => recordExport(`Certificados (${count} participantes)`) });
                         notifySuccess(`${n} certificado(s) gerado(s) em PDF`, isDemoMode ? "Modelo demonstrativo, sem validade." : "PDF gerado no navegador a partir dos dados registrados.");
                       } catch (e) {
                         notifyError(e);

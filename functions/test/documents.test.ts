@@ -274,6 +274,47 @@ describe("versões", () => {
     expect(ok.versions).toHaveLength(2);
   });
 
+  it("documento vigente: nova versão de quem não valida volta para “Em elaboração”; quem valida (ou criou) mantém vigente", async () => {
+    // A Secretaria (documents.approve) cria um documento vigente do Financeiro.
+    const finance = { departmentId: "financeiro", categoryId: "relatorios-financeiros", access: { scope: "department", roleIds: [], userIds: [] } };
+    const d = await createDoc("sec", finance, (await stage("sec", PDF)).uploadId);
+    expect(d.status).toBe("current");
+
+    // Diretor Financeiro: documents.edit no departamento, sem documents.approve e não é o criador.
+    const v2 = Buffer.from("%PDF-1.7\n% conteúdo diferente, ainda não validado\n%%EOF\n");
+    const byEditor = await documents<InstitutionalDocument>("addVersion", "fin", { id: d.id, uploadId: (await stage("fin", v2, "relatorio-v2.pdf")).uploadId });
+    expect(byEditor.versions.map((v) => `${v.version}:${v.uploadedBy}`)).toEqual(["1:sec", "2:fin"]);
+    expect(byEditor.status).toBe("draft");
+    expect(byEditor.history.slice(-2)).toMatchObject([
+      { action: "version", actorId: "fin", summary: "Versão 2 enviada; versões anteriores mantidas" },
+      { action: "status", actorId: "fin", summary: "Nova versão aguardando validação: situação alterada para Em elaboração" },
+    ]);
+    expect((await stored(d.id)).status).toBe("draft");
+    const log = (await auditFor(d.id)).find((a) => a.action === "documents.addVersion")!;
+    expect(log.details).toMatchObject({ version: 2, status: "draft", awaitingValidation: true });
+    // Quem não valida também não marca de volta como vigente.
+    await expectCode(documents("update", "fin", { id: d.id, input: { status: "current" } }), "forbidden");
+
+    // Quem valida marca como vigente; versão enviada por quem valida mantém vigente.
+    const validated = await documents<InstitutionalDocument>("update", "sec", { id: d.id, input: { status: "current" } });
+    expect(validated.status).toBe("current");
+    const byApprover = await documents<InstitutionalDocument>("addVersion", "sec", { id: d.id, uploadId: (await stage("sec", PDF)).uploadId });
+    expect(byApprover.status).toBe("current");
+    expect(byApprover.history.at(-1)).toMatchObject({ action: "version", actorId: "sec" });
+
+    // Quem criou (mesmo sem documents.approve) também mantém o próprio documento vigente.
+    const own = await createDoc("fin", finance);
+    expect(own.status).toBe("current");
+    const ownVersion = await documents<InstitutionalDocument>("addVersion", "fin", { id: own.id, uploadId: (await stage("fin", PDF)).uploadId });
+    expect(ownVersion.status).toBe("current");
+
+    // Documento em elaboração continua em elaboração (sem entrada extra no histórico).
+    const draft = await createDoc("sec", { ...finance, status: "draft" });
+    const draftVersion = await documents<InstitutionalDocument>("addVersion", "fin", { id: draft.id, uploadId: (await stage("fin", PDF)).uploadId });
+    expect(draftVersion.status).toBe("draft");
+    expect(draftVersion.history.map((h) => h.action)).toEqual(["created", "version"]);
+  });
+
   it("documento arquivado não recebe nova versão; depois de restaurado, recebe", async () => {
     const d = await createDoc("sec");
     await documents("archive", "sec", { id: d.id });

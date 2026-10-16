@@ -59,10 +59,15 @@ export const firebaseOrganization: OrganizationService = {
     try {
       const snap = await getDocs(query(collection(db, "invitations"), orderBy("createdAt", "desc"), limit(200)));
       return snap.docs.map((d) => {
-        const inv = fromSnap<Invitation & { tokenHash?: string }>(d);
+        const inv = fromSnap<Invitation & { tokenHash?: string; claimId?: string; claimedAt?: string }>(d);
         delete inv.tokenHash;
-        const expired = inv.status === "pending" && Date.parse(inv.expiresAt) < Date.now();
-        return { ...inv, status: expired ? "expired" : inv.status };
+        delete inv.claimId;
+        delete inv.claimedAt;
+        // "accepting" é a reserva transitória do aceite no servidor: aparece como pendente.
+        const status = (inv.status as string) === "accepting" ? "pending" : inv.status;
+        const expired = status === "pending" && Date.parse(inv.expiresAt) < Date.now();
+        // Convites aceitos não guardam o e-mail (a fonte é memberPrivate).
+        return { ...inv, email: inv.email ?? "", status: expired ? "expired" : status };
       });
     } catch (error) {
       throw mapFirestoreError(error);

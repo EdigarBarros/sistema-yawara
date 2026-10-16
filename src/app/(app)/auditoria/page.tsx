@@ -4,12 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { AlertTriangle, RotateCcw, ScrollText, X } from "lucide-react";
-import type { AuditLogEntry, AuditOutcome, AuditQuery, ModuleKey } from "@/types";
+import type { AuditLogEntry, AuditOutcome, AuditQuery } from "@/types";
 import { services } from "@/services";
 import { useAccess } from "@/hooks/use-access";
 import { useDirectory } from "@/hooks/use-data";
 import { useSession } from "@/stores/session";
-import { MODULE_MAP, MODULES } from "@/lib/modules";
+import { MODULES } from "@/lib/modules";
 import { formatDateTime } from "@/lib/format";
 import { errorMessage } from "@/lib/notify";
 import { isDemoMode } from "@/lib/mode";
@@ -20,6 +20,7 @@ import { PageHeader } from "@/components/shared/page";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { FilterSelect, Toolbar } from "@/components/shared/filters";
 import { DemoNotice, EmptyState, ErrorState, RestrictedState } from "@/components/shared/states";
+import { moduleLabel, resourceLabel } from "./audit-labels";
 
 /** Registros por página (cursor). */
 const PAGE_SIZE = 50;
@@ -32,11 +33,6 @@ const OUTCOMES: Record<AuditOutcome, { label: string; tone: Tone }> = {
   denied: { label: "Recusada", tone: "danger" },
   failed: { label: "Falhou", tone: "warn" },
 };
-
-function moduleLabel(module: AuditLogEntry["module"]) {
-  if (module === "auth") return "Acesso e contas";
-  return MODULE_MAP[module as ModuleKey]?.label ?? module;
-}
 
 /** Nomes legíveis das operações (a parte depois do ponto em "modulo.acao"). */
 const ACTION_LABELS: Record<string, string> = {
@@ -113,26 +109,6 @@ function actionLabel(action: string) {
   const verb = action.includes(".") ? action.slice(action.indexOf(".") + 1) : action;
   return ACTION_LABELS[verb] ?? action;
 }
-
-const RESOURCE_LABELS: Record<string, string> = {
-  campaign: "Campanha",
-  sale: "Venda",
-  event: "Evento",
-  document: "Documento",
-  meeting: "Reunião",
-  financeEntry: "Lançamento",
-  financeReport: "Relatório financeiro",
-  content: "Conteúdo",
-  project: "Projeto",
-  member: "Integrante",
-  role: "Cargo",
-  department: "Departamento",
-  invitation: "Convite",
-  settings: "Configurações",
-  documentCategory: "Categoria de documento",
-  financeCategory: "Categoria financeira",
-  session: "Sessão",
-};
 
 /** Link para o registro, quando ele tem página própria (o acesso é conferido na própria página). */
 function resourceHref(e: AuditLogEntry): string | null {
@@ -211,7 +187,7 @@ export default function AuditPage() {
   };
 
   const resourceCell = (e: AuditLogEntry) => {
-    const label = RESOURCE_LABELS[e.resourceType] ?? e.resourceType;
+    const label = resourceLabel(e);
     if (!e.resourceId) return <span className="text-fg-muted">{label}</span>;
     const href = resourceHref(e);
     return (

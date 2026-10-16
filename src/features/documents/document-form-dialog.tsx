@@ -22,6 +22,7 @@ import { FilePicker } from "@/components/shared/pickers";
 import { AudiencePicker, AudienceSummary } from "@/components/shared/audience";
 import { DemoNotice } from "@/components/shared/states";
 import { DetailList } from "@/components/shared/page";
+import { FormAlert } from "@/components/shared/form-alert";
 import { isDemoMode, isFirebaseMode } from "@/lib/mode";
 import { DOCUMENT_ACCEPT, DOCUMENT_FORMATS_LABEL, documentFileProblem } from "@/services/firebase/documents";
 
@@ -245,11 +246,7 @@ function AddDocumentBody({ onOpenChange, links, defaultCategoryId, stay, onCreat
         ) : (
           <p className="text-[12px] text-fg-subtle">O acesso vale também para o arquivo: só o público escolhido, quem enviou e quem administra Documentos conseguem abri-lo ou baixá-lo.</p>
         )}
-        {serverError && (
-          <p role="alert" className="rounded-lg border border-danger/35 bg-danger/10 px-3.5 py-2.5 text-[13px] text-danger">
-            {serverError}
-          </p>
-        )}
+        <FormAlert message={serverError} />
       </form>
     </DialogContent>
   );

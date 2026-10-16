@@ -2,13 +2,13 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ExternalLink, Paperclip, Pencil } from "lucide-react";
+import { ArrowRight, ExternalLink, Lock, Paperclip, Pencil } from "lucide-react";
 import type { ContentItem, ContentStatus } from "@/types";
 import { services } from "@/services";
 import { useAccess } from "@/hooks/use-access";
 import { useAction } from "@/hooks/use-action";
 import { useCampaigns, useDirectory, useEvents } from "@/hooks/use-data";
-import { allowedContentStatuses, canEditContent } from "@/lib/policies";
+import { allowedContentStatuses, canChangeContent, canEditContent } from "@/lib/policies";
 import { CHANNEL_LABELS, CONTENT_FLOW, CONTENT_STATUS, CONTENT_TYPE_LABELS } from "@/lib/labels";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { isDemoMode } from "@/lib/mode";
@@ -59,7 +59,9 @@ export function ContentSheet({ item, onOpenChange }: { item: ContentItem | null;
   if (!item) return <Sheet open={false} onOpenChange={onOpenChange} />;
   const ctx = access.ctx;
   const allowed = ctx ? allowedContentStatuses(ctx, item) : [];
-  const editable = !!ctx && canEditContent(ctx, item);
+  // Depois da aprovação, só quem aprova altera dados e arquivos (o servidor confere de novo).
+  const editable = !!ctx && canChangeContent(ctx, item);
+  const lockedByApproval = !!ctx && !editable && canEditContent(ctx, item);
   const nextInFlow = CONTENT_FLOW[CONTENT_FLOW.indexOf(item.status) + 1];
   const campaign = campaigns?.find((c) => c.id === item.campaignId);
   const event = events?.find((e) => e.id === item.eventId);
@@ -113,6 +115,14 @@ export function ContentSheet({ item, onOpenChange }: { item: ContentItem | null;
                   ))}
                 </select>
               </div>
+            )}
+            {lockedByApproval && (
+              <p className="flex items-start gap-2 rounded-lg border border-line bg-sunken px-3.5 py-3 text-[12.5px] leading-relaxed text-fg-muted">
+                <Lock className="mt-0.5 size-4 shrink-0 text-fg-subtle" aria-hidden />
+                {item.status === "published"
+                  ? "Material publicado: para alterar dados ou arquivos, volte-o para “Em revisão”. Depois ele precisa ser aprovado de novo."
+                  : "Material aprovado: só quem aprova pode alterar dados ou arquivos. Para mudar algo, peça a quem aprova para devolvê-lo à revisão."}
+              </p>
             )}
             <div>
               <SectionTitle>Briefing</SectionTitle>

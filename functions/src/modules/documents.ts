@@ -24,7 +24,10 @@
  *  - Criar: documents.create.
  *  - Editar, compartilhar e enviar versões: `canEditDocument` (criador,
  *    documents.admin ou documents.edit no mesmo departamento do documento).
- *  - Marcar como "Vigente": documents.approve ou criador.
+ *  - Marcar como "Vigente": `canMarkDocumentCurrent` (documents.approve ou
+ *    criador). Uma nova versão enviada por quem não pode marcar como vigente
+ *    faz um documento vigente voltar para "Em elaboração" (a versão nova ainda
+ *    não foi validada); quem valida mantém o documento vigente.
  *  - Arquivar/restaurar: `canArchiveDocument` (criador ou documents.archive).
  *    Arquivar não apaga nada (nem arquivos).
  *  - Categoria, departamento, público e vínculos (evento, reunião, projeto)
@@ -38,7 +41,7 @@ import type { DocumentReference, DocumentSnapshot, Transaction } from "firebase-
 import { z } from "zod";
 import { documentDoc } from "@/lib/firestore-model";
 import { AUDIENCE_SCOPE_LABELS, DOCUMENT_STATUS } from "@/lib/labels";
-import { canArchiveDocument, canEditDocument, canSeeDocument, canSeeEvent, canSeeMeeting, canSeeProject } from "@/lib/policies";
+import { canArchiveDocument, canEditDocument, canMarkDocumentCurrent, canSeeDocument, canSeeEvent, canSeeMeeting, canSeeProject } from "@/lib/policies";
 import { documentReaders } from "@/lib/record-readers";
 import type {
   AtleticaEvent,
@@ -180,9 +183,9 @@ function requireVisible(actor: Actor, doc: InstitutionalDocument) {
   if (!canSeeDocument(actor.ctx, doc)) fail("forbidden", "Este documento não está disponível para o seu perfil.");
 }
 
-/** "Vigente" exige documents.approve ou ser quem criou o documento. */
+/** "Vigente" exige documents.approve ou ser quem criou o documento (mesma regra da interface). */
 function canMarkCurrent(actor: Actor, doc: Pick<InstitutionalDocument, "createdBy">) {
-  return actor.can("documents.approve") || doc.createdBy === actor.uid;
+  return canMarkDocumentCurrent(actor.ctx, doc);
 }
 
 function nextVersionNumber(doc: InstitutionalDocument) {
@@ -587,19 +590,36 @@ export const documentsActions = {
         fail("conflict", "Outra versão deste documento foi enviada ao mesmo tempo. Atualize a página e envie o arquivo novamente.");
       }
 
+      // Documento vigente: a versão nova precisa ser validada. Quem não pode marcar
+      // como vigente deixa o documento "Em elaboração"; quem valida o mantém vigente.
+      const awaitingValidation = current.status === "current" && !canMarkCurrent(actor, current);
+      const status: DocumentStatus = awaitingValidation ? "draft" : current.status;
+
       const entry: DocumentVersion = { version, file: prepared.file, uploadedBy: actor.uid, uploadedAt: ctx.now, note: note || undefined };
       const next: InstitutionalDocument = {
         ...current,
+        status,
         // As versões anteriores são mantidas (nunca apagadas).
         versions: [...current.versions, entry],
         updatedAt: ctx.now,
-        history: addHistory(current, actor, ctx, ["version", `Versão ${version} enviada; versões anteriores mantidas`]),
+        history: addHistory(
+          current,
+          actor,
+          ctx,
+          ["version", `Versão ${version} enviada; versões anteriores mantidas`],
+          ...(awaitingValidation ? [["status", `Nova versão aguardando validação: situação alterada para ${DOCUMENT_STATUS.draft.label}`] as [HistoryAction, string]] : []),
+        ),
       };
 
       // Escritas
       writeDocument(tx, ref, next, categoryName(catSnap));
       markAttached(tx, uploadId, `documents/${id}`);
-      audit(tx, actor, ctx, "addVersion", id, `Versão ${version} enviada para o documento ${next.name}`, { version, ...fileDetails(prepared.file) });
+      audit(tx, actor, ctx, "addVersion", id, `Versão ${version} enviada para o documento ${next.name}${awaitingValidation ? " (aguardando validação)" : ""}`, {
+        version,
+        status,
+        awaitingValidation,
+        ...fileDetails(prepared.file),
+      });
       return { id, at: ctx.now };
     },
     async present(result, actor) {

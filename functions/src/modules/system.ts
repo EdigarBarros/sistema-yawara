@@ -3,7 +3,7 @@
  */
 import { z } from "zod";
 import { MODULE_MAP } from "@/lib/modules";
-import type { DocumentCategory, FinanceCategory, ModuleKey, SystemSettings } from "@/types";
+import type { DocumentCategory, FinanceCategory, InstitutionSettings, ModuleKey, SystemSettings } from "@/types";
 import { db } from "../core/admin";
 import { loadSettings, requirePermission } from "../core/actor";
 import { auditInTx } from "../core/audit";
@@ -13,26 +13,41 @@ import { createUploadTicket, UPLOAD_RULES, type UploadPurpose } from "../core/fi
 import { requireDoc, toDTO } from "../core/records";
 
 const MODULE_KEYS = Object.keys(MODULE_MAP) as [ModuleKey, ...ModuleKey[]];
-const categoryName = z.string().trim().min(2, "Informe um nome com pelo menos 2 caracteres.").max(80);
+const categoryName = z.string().trim().min(2, "Informe um nome com pelo menos 2 caracteres.").max(80, "O nome da categoria pode ter no máximo 80 caracteres.");
+
+/** Texto institucional com limites e mensagens em português (`field` com artigo: "A razão social"). */
+function institutionText(field: string, max: number, min = 0) {
+  const base = z.string().trim();
+  return (min > 0 ? base.min(min, `${field} precisa ter pelo menos ${min} caracteres.`) : base).max(max, `${field} pode ter no máximo ${max} caracteres.`);
+}
 
 const institution = z
   .object({
-    legalName: z.string().trim().min(3).max(200),
-    shortName: z.string().trim().min(2).max(80),
-    systemName: z.string().trim().min(3, "O nome do sistema precisa ter pelo menos 3 caracteres.").max(60),
-    course: z.string().trim().max(120),
-    institution: z.string().trim().max(160),
-    city: z.string().trim().max(120),
-    email: z
-      .string()
-      .trim()
-      .max(200)
-      .refine((v) => v === "" || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v), "Informe um e-mail válido."),
-    instagram: z.string().trim().max(60),
-    motto: z.string().trim().max(120),
+    legalName: institutionText("A razão social", 200, 3),
+    shortName: institutionText("O nome curto", 80, 2),
+    systemName: institutionText("O nome do sistema", 60, 3),
+    course: institutionText("O curso", 120),
+    institution: institutionText("A instituição de ensino", 160),
+    city: institutionText("A cidade", 120),
+    email: institutionText("O e-mail", 200).refine((v) => v === "" || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v), "Informe um e-mail válido."),
+    instagram: institutionText("O Instagram", 60),
+    motto: institutionText("O lema", 120),
   })
   .partial()
   .strict();
+
+/** Campos institucionais na ordem da tela, com o nome usado no resumo da auditoria. */
+const INSTITUTION_LABELS: Record<keyof InstitutionSettings, string> = {
+  legalName: "razão social",
+  shortName: "nome curto",
+  systemName: "nome do sistema",
+  course: "curso",
+  institution: "instituição de ensino",
+  city: "cidade",
+  email: "e-mail de contato",
+  instagram: "Instagram",
+  motto: "lema",
+};
 
 async function presentSettings(): Promise<SystemSettings> {
   return (await db.doc("settings/system").get()).data() as SystemSettings;
@@ -47,11 +62,21 @@ export const systemActions = {
       requirePermission(actor, "settings.edit", "Seu perfil não pode editar os dados institucionais.");
       const settings = await loadSettings(tx);
       if (!settings) fail("unavailable", "As configurações ainda não foram inicializadas. Rode o script de implantação inicial.");
-      tx.update(db.doc("settings/system"), Object.fromEntries(Object.entries(input).map(([k, v]) => [`institution.${k}`, v])));
+      // Só o que mudou de fato é gravado e auditado (o formulário pode reenviar campos iguais).
+      const current: Partial<InstitutionSettings> = settings.institution ?? {};
+      const changed = (Object.keys(INSTITUTION_LABELS) as (keyof InstitutionSettings)[]).filter((k) => input[k] !== undefined && input[k] !== current[k]);
+      if (changed.length === 0) return { ok: true };
+      tx.update(db.doc("settings/system"), Object.fromEntries(changed.map((k) => [`institution.${k}`, input[k]])));
       auditInTx(
         tx,
         { uid: actor.uid, name: actor.name },
-        { action: "settings.updateInstitution", module: "settings", resourceType: "settings", resourceId: "system", summary: `Dados institucionais alterados: ${Object.keys(input).join(", ")}` },
+        {
+          action: "settings.updateInstitution",
+          module: "settings",
+          resourceType: "settings",
+          resourceId: "system",
+          summary: `Dados institucionais alterados: ${changed.map((k) => INSTITUTION_LABELS[k]).join(", ")}`,
+        },
         ctx.requestId,
         ctx.now,
       );

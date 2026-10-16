@@ -100,6 +100,16 @@ tíquetes de envio, arquivos de cada módulo).
 Operações do Admin SDK **não** passam pelas regras — por isso cada função
 verifica identidade, permissões, validação e integridade por conta própria.
 
+Módulo desativado em Configurações (`settings/system.modules`): o servidor
+recusa as operações e as regras do **Firestore** deixam de servir os registros
+do módulo (inclusive para quem administra o módulo; documento ou chave ausente
+contam como módulo ativo). As regras do **Storage** não conferem essa chave —
+cada leitura de arquivo já usa as duas consultas permitidas ao Firestore
+(retrato de acesso e registro dono do arquivo). Na prática, os arquivos de um
+módulo desativado continuam acessíveis só a quem já pode ver o registro e
+conhece o caminho exato do arquivo; desativar um módulo não substitui revisar
+o público dos registros.
+
 ## Integridade
 
 - **Concorrência das rifas:** trava por número lida na transação; duas vendas

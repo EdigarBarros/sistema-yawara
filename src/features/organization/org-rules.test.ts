@@ -6,6 +6,9 @@ import {
   assignableRoles,
   canAssignRole,
   canChangeRoleAccess,
+  INVITATION_STATUS,
+  invitationStatusMeta,
+  levelBeyond,
   LOCK_MEMBER_ABOVE,
   LOCK_NO_ADMIN,
   LOCK_NOT_OWN,
@@ -15,6 +18,7 @@ import {
   permissionLock,
   renewLock,
   revokeLock,
+  roleReach,
 } from "./org-rules";
 
 const NOW = "2026-10-14T12:00:00.000Z";
@@ -58,6 +62,53 @@ describe("cargos que cada perfil pode atribuir", () => {
     expect(ids).not.toContain("gestor"); // tem organization.create/edit (administrativas)
     expect(ids).not.toContain("assessor-marketing"); // marketing.* que o gestor não tem
     expect(ids).not.toContain("presidente");
+  });
+
+  it("sem organization.admin, não atribui cargo de alcance maior (diretoria, nível, outro departamento)", () => {
+    // Mesmas permissões do assessor de eventos (contidas nas do gestor), alcances diferentes.
+    const base = role("assessor-eventos");
+    const board: Role = { ...base, id: "conselho-eventos", isBoard: true };
+    const director: Role = { ...base, id: "diretor-sem-diretoria", level: "director" };
+    const otherDep: Role = { ...base, id: "apoio-fin", departmentId: "financeiro", level: "member" };
+    const sameReach: Role = { ...base, id: "apoio-eventos", level: "member", permissions: ["events.view", "documents.view"] };
+    expect(canAssignRole(manager, base)).toBe(true);
+    expect(canAssignRole(manager, sameReach)).toBe(true);
+    expect(canAssignRole(manager, board)).toBe(false);
+    expect(canAssignRole(manager, director)).toBe(false);
+    expect(canAssignRole(manager, otherDep)).toBe(false);
+    // Departamentos adicionais concedidos junto com o cargo também contam.
+    expect(canAssignRole(manager, sameReach, ["financeiro"])).toBe(false);
+    expect(canAssignRole(manager, sameReach, ["eventos"])).toBe(true);
+    // Quem administra permissões atribui qualquer alcance.
+    expect(canAssignRole(pres, { ...board, permissions: ["events.view"] })).toBe(true);
+    expect(roleReach(board)).toEqual(expect.arrayContaining(["board", "d:eventos", "directors_advisors"]));
+    expect(roleReach(board).some((t) => t.startsWith("u:") || t.startsWith("r:"))).toBe(false);
+  });
+
+  it("sem organization.admin, não atribui nível com mais acesso nem cargo de outro departamento principal", () => {
+    // Diretor(a) sem organization.admin: mesmos marcadores de um cargo de presidência do mesmo departamento.
+    const directorRole: Role = { ...role("diretor-eventos"), id: "gestor-eventos", permissions: ["organization.view", "organization.create", "events.view", "documents.view", "documents.edit"] };
+    const director = ctxFor("gestor-eventos", "gestor-eventos", directorRole);
+    const presidencyRole: Role = { ...directorRole, id: "conselho-pres", level: "presidency", permissions: ["events.view"] };
+    expect(roleReach(presidencyRole)).toEqual(roleReach({ ...presidencyRole, level: "director" }));
+    expect(canAssignRole(director, presidencyRole)).toBe(false);
+    expect(canAssignRole(director, { ...presidencyRole, level: "director" })).toBe(true);
+    expect(canAssignRole(pres, presidencyRole)).toBe(true);
+
+    // Departamento adicional dá o marcador, mas não o departamento principal (editar documentos, financeiro dos eventos).
+    const withExtra: AccessContext = { ...director, user: { ...director.user, departmentIds: ["financeiro"] } };
+    const financeDocs: Role = { ...directorRole, id: "conselho-fin-docs", departmentId: "financeiro", permissions: ["documents.view", "documents.edit"] };
+    expect(roleReach(financeDocs).every((t) => ["all", "board", "directors", "directors_advisors", "d:financeiro"].includes(t))).toBe(true);
+    expect(canAssignRole(withExtra, financeDocs)).toBe(false);
+    expect(canAssignRole(pres, financeDocs)).toBe(true);
+
+    // Assessoria: events.edit só edita os dados do evento em outro nível — atribuir esse nível com events.edit exige organization.admin.
+    const memberEditor: Role = { ...role("assessor-eventos"), id: "apoio-editor", level: "member", permissions: ["events.view", "events.edit"] };
+    expect(canAssignRole(manager, memberEditor)).toBe(false);
+    expect(canAssignRole(manager, { ...memberEditor, permissions: ["events.view"] })).toBe(true);
+    expect(canAssignRole(manager, { ...memberEditor, level: "advisor" })).toBe(true);
+    expect(levelBeyond(memberEditor, managerRole)).toBe(true);
+    expect(levelBeyond(memberEditor, directorRole)).toBe(false);
   });
 
   it("cargos desativados não aparecem", () => {
@@ -124,5 +175,26 @@ describe("convites", () => {
   it("não renova convite para cargo que a pessoa não pode atribuir", () => {
     expect(renewLock(vice, inv("pending", "presidente"), roles)).toMatch(/não pode renovar/);
     expect(renewLock(sec, inv("pending"), roles)).toMatch(/não pode renovar/);
+  });
+
+  it("sem organization.admin, não renova convite com alcance maior (cargo de diretoria ou departamentos adicionais)", () => {
+    const board: Role = { ...role("assessor-eventos"), id: "conselho-eventos", isBoard: true };
+    expect(renewLock(manager, inv("pending"), [...roles, managerRole])).toBeUndefined();
+    expect(renewLock(manager, inv("pending", "conselho-eventos"), [...roles, board])).toMatch(/alcance/);
+    expect(renewLock(manager, { ...inv("pending"), departmentIds: ["financeiro"] }, roles)).toMatch(/alcance/);
+  });
+
+  it("não renova quando já existe outro convite pendente para o mesmo e-mail", () => {
+    const expired = inv("expired");
+    const other = { ...inv("pending"), id: "i2" };
+    expect(renewLock(pres, expired, roles, [expired, other])).toMatch(/outro convite pendente/);
+    expect(renewLock(pres, expired, roles, [expired, { ...other, status: "expired" }])).toBeUndefined();
+    expect(renewLock(pres, expired, roles, [expired, { ...other, email: "outra@example.org" }])).toBeUndefined();
+    expect(renewLock(pres, expired, roles, [expired, { ...other, status: "revoked" }])).toBeUndefined();
+  });
+
+  it("situação desconhecida não quebra a lista", () => {
+    expect(invitationStatusMeta("accepting" as Invitation["status"])).toBe(INVITATION_STATUS.pending);
+    expect(invitationStatusMeta("accepted")).toBe(INVITATION_STATUS.accepted);
   });
 });
