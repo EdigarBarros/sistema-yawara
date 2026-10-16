@@ -3,14 +3,15 @@
  *
  * Usa apenas a configuração pública do app web (NEXT_PUBLIC_*). Nenhuma
  * credencial administrativa é usada aqui: a segurança vem das regras do
- * Firestore/Storage, das Cloud Functions e do App Check.
+ * Firestore/Storage, do servidor (rota de API ou Cloud Functions) e do App Check.
  */
 import { getApps, initializeApp, type FirebaseApp } from "firebase/app";
-import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "firebase/app-check";
+import { initializeAppCheck, ReCaptchaEnterpriseProvider, type AppCheck } from "firebase/app-check";
 import { connectAuthEmulator, getAuth, type Auth } from "firebase/auth";
 import { connectFirestoreEmulator, initializeFirestore, memoryLocalCache, type Firestore } from "firebase/firestore";
 import { connectFunctionsEmulator, getFunctions, type Functions } from "firebase/functions";
 import { connectStorageEmulator, getStorage, type FirebaseStorage } from "firebase/storage";
+import { FILE_STORAGE } from "@/lib/mode";
 import { ServiceError } from "../errors";
 
 // Cada variável precisa ser referenciada de forma literal para o Next.js incorporá-la ao build.
@@ -33,12 +34,15 @@ export interface FirebaseClients {
   db: Firestore;
   storage: FirebaseStorage;
   functions: Functions;
+  /** Presente quando o App Check está configurado (chave do reCAPTCHA). */
+  appCheck: AppCheck | null;
 }
 
 let clients: FirebaseClients | null = null;
 
 export function isFirebaseConfigured() {
-  return !!(config.apiKey && config.projectId && config.appId && config.storageBucket);
+  // O bucket só é exigido quando os arquivos vão para o Cloud Storage (plano Blaze).
+  return !!(config.apiKey && config.projectId && config.appId && (FILE_STORAGE === "links" || config.storageBucket));
 }
 
 /** Clientes do Firebase (inicialização preguiçosa, apenas no navegador). */
@@ -49,9 +53,8 @@ export function firebase(): FirebaseClients {
     throw new ServiceError("unavailable", "O Firebase não está configurado neste ambiente. Preencha as variáveis NEXT_PUBLIC_FIREBASE_* (ver .env.example).");
   }
   const app = getApps()[0] ?? initializeApp(config);
-  if (RECAPTCHA_KEY && !USE_EMULATORS) {
-    initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(RECAPTCHA_KEY), isTokenAutoRefreshEnabled: true });
-  }
+  const appCheck =
+    RECAPTCHA_KEY && !USE_EMULATORS ? initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(RECAPTCHA_KEY), isTokenAutoRefreshEnabled: true }) : null;
   const auth = getAuth(app);
   auth.languageCode = "pt-BR";
   const db = initializeFirestore(app, { localCache: memoryLocalCache() });
@@ -63,6 +66,6 @@ export function firebase(): FirebaseClients {
     connectStorageEmulator(storage, EMULATOR_HOST, 9199);
     connectFunctionsEmulator(functions, EMULATOR_HOST, 5001);
   }
-  clients = { app, auth, db, storage, functions };
+  clients = { app, auth, db, storage, functions, appCheck };
   return clients;
 }

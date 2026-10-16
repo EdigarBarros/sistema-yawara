@@ -10,7 +10,9 @@
  * IMPORTANTE: nos serviços, chame `takeRequestId()` na PRIMEIRA linha do
  * método (antes de qualquer await).
  */
+import { getToken } from "firebase/app-check";
 import { httpsCallable } from "firebase/functions";
+import { API_TRANSPORT } from "@/lib/mode";
 import { ServiceError, type ServiceErrorCode } from "../errors";
 import { firebase } from "./app";
 
@@ -88,7 +90,50 @@ export function stripUndefined<T>(value: T): T {
   return value;
 }
 
+const SERVER_CODES: ServiceErrorCode[] = ["unauthenticated", "forbidden", "not_found", "conflict", "invalid", "unavailable", "internal"];
+
+/** Converte a resposta de erro da rota de API em ServiceError (mesmas regras de mapFunctionsError). */
+export function mapRouteError(status: number, body: unknown): ServiceError {
+  const err = (body as { error?: { code?: unknown; message?: unknown; details?: unknown } } | null)?.error;
+  const raw = typeof err?.code === "string" ? (err.code as ServiceErrorCode) : null;
+  const code: ServiceErrorCode = raw && SERVER_CODES.includes(raw) ? raw : status === 401 ? "unauthenticated" : status >= 500 ? "unavailable" : "internal";
+  if (code === "internal") return new ServiceError("internal", GENERIC);
+  const message = typeof err?.message === "string" && err.message.trim() ? err.message.trim() : GENERIC;
+  const details = err?.details && typeof err.details === "object" ? (err.details as Record<string, unknown>) : undefined;
+  return new ServiceError(code, message, details);
+}
+
+/** Chamada à rota de API do aplicativo (implantação gratuita): token de login no cabeçalho. */
+async function callRoute<T>(api: ApiName, body: { action: string; payload: unknown; requestId: string }): Promise<T> {
+  const { auth, appCheck } = firebase();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const user = auth.currentUser;
+  if (user) headers.Authorization = `Bearer ${await user.getIdToken()}`;
+  if (appCheck) {
+    try {
+      headers["X-Firebase-AppCheck"] = (await getToken(appCheck, false)).token;
+    } catch {
+      // Sem token do App Check: o servidor decide (recusa só quando o exige).
+    }
+  }
+  let res: Response;
+  try {
+    res = await fetch(`/api/${api}`, { method: "POST", headers, body: JSON.stringify(body), cache: "no-store" });
+  } catch {
+    throw new ServiceError("unavailable", "Sem conexão com o servidor. Verifique a internet e tente novamente.");
+  }
+  let json: unknown = null;
+  try {
+    json = await res.json();
+  } catch {
+    // Resposta sem JSON (ex.: falha da hospedagem): tratada abaixo.
+  }
+  if (res.ok && json && typeof json === "object" && "data" in json) return (json as { data: T }).data;
+  throw mapRouteError(res.status, json);
+}
+
 export async function callApi<T>(api: ApiName, action: string, payload: unknown = {}, requestId: string = newRequestId()): Promise<T> {
+  if (API_TRANSPORT === "route") return callRoute<T>(api, { action, payload: stripUndefined(payload), requestId });
   const { functions } = firebase();
   const fn = httpsCallable<{ action: string; payload: unknown; requestId: string }, T>(functions, `${api}Api`, { timeout: 120_000 });
   try {

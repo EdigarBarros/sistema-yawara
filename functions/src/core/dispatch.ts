@@ -290,13 +290,63 @@ export async function executeAction(def: AnyAction, uid: string | undefined, raw
   return runMutation(def as MutationAction<unknown, unknown, unknown>, uid, input, requestId);
 }
 
+/** Registra os nomes "<api>.<ação>" usados na auditoria e nos logs. */
+export function registerApi(name: string, actions: Record<string, AnyAction>) {
+  for (const [key, def] of Object.entries(actions)) ACTION_KEYS.set(def, `${name}.${key}`);
+  return actions;
+}
+
 /**
- * Cria a função chamável de um módulo.
+ * Trata uma chamada `{ action, payload, requestId }` de qualquer transporte
+ * (função chamável do Cloud Functions ou rota de API do aplicativo). `uid` vem
+ * SEMPRE do token já verificado pelo transporte, nunca do corpo da requisição.
+ * Devolve o resultado ou lança um AppError pronto para o usuário (com
+ * `details.committed` quando a operação foi confirmada e só a resposta foi negada).
+ */
+export async function handleApiCall(name: string, actions: Record<string, AnyAction>, data: unknown, uid: string | undefined): Promise<unknown> {
+  const envelope = envelopeSchema.safeParse(data);
+  if (!envelope.success) throw new AppError("invalid", "Requisição inválida.");
+  const { action, payload } = envelope.data;
+  const requestId = envelope.data.requestId ?? randomUUID();
+  const def = Object.prototype.hasOwnProperty.call(actions, action) ? actions[action] : undefined;
+  if (!def) throw new AppError("invalid", "Operação desconhecida.");
+
+  try {
+    return await executeAction(def, uid, payload, requestId);
+  } catch (raw) {
+    const committed = isCommittedError(raw);
+    const error = normalizeError(raw);
+    if (error.code === "internal") {
+      logger.error("Erro inesperado", { api: name, action, uid, requestId, error: (raw as Error)?.message, stack: (raw as Error)?.stack });
+    } else {
+      logger.info(committed ? "Operação concluída; resposta recusada" : "Operação recusada", { api: name, action, uid, requestId, code: error.code });
+    }
+    // Já confirmada (e auditada como sucesso): não é uma tentativa recusada.
+    if (error.code === "forbidden" && def.kind === "mutation" && uid && !committed) {
+      await auditDirect(
+        { uid, name: "" },
+        {
+          action: `${name}.${action}`,
+          module: def.module === "system" ? "settings" : def.module,
+          // Recurso genérico: a tentativa foi recusada antes de identificar o registro.
+          resourceType: "operation",
+          resourceId: null,
+          summary: `Operação recusada por falta de permissão: ${error.message}`,
+          outcome: "denied",
+        },
+        requestId,
+      );
+    }
+    throw committed ? new AppError(error.code, error.message, { ...(error.details ?? {}), committed: true }) : error;
+  }
+}
+
+/**
+ * Cria a função chamável de um módulo (implantação com Cloud Functions).
  * `name` identifica a API nos logs e na auditoria (ex.: "campaigns").
  */
 export function createApi(name: string, actions: Record<string, AnyAction>) {
-  for (const [key, def] of Object.entries(actions)) ACTION_KEYS.set(def, `${name}.${key}`);
-
+  registerApi(name, actions);
   return onCall(
     {
       region: REGION,
@@ -307,41 +357,10 @@ export function createApi(name: string, actions: Record<string, AnyAction>) {
       concurrency: 40,
     },
     async (request: CallableRequest<unknown>) => {
-      const envelope = envelopeSchema.safeParse(request.data);
-      if (!envelope.success) throw toHttpsError(new AppError("invalid", "Requisição inválida."));
-      const { action, payload } = envelope.data;
-      const requestId = envelope.data.requestId ?? randomUUID();
-      const def = Object.prototype.hasOwnProperty.call(actions, action) ? actions[action] : undefined;
-      if (!def) throw toHttpsError(new AppError("invalid", "Operação desconhecida."));
-      const uid = request.auth?.uid;
-
       try {
-        return await executeAction(def, uid, payload, requestId);
-      } catch (raw) {
-        const committed = isCommittedError(raw);
-        const error = normalizeError(raw);
-        if (error.code === "internal") {
-          logger.error("Erro inesperado", { api: name, action, uid, requestId, error: (raw as Error)?.message, stack: (raw as Error)?.stack });
-        } else {
-          logger.info(committed ? "Operação concluída; resposta recusada" : "Operação recusada", { api: name, action, uid, requestId, code: error.code });
-        }
-        // Já confirmada (e auditada como sucesso): não é uma tentativa recusada.
-        if (error.code === "forbidden" && def.kind === "mutation" && uid && !committed) {
-          await auditDirect(
-            { uid, name: "" },
-            {
-              action: `${name}.${action}`,
-              module: def.module === "system" ? "settings" : def.module,
-              // Recurso genérico: a tentativa foi recusada antes de identificar o registro.
-              resourceType: "operation",
-              resourceId: null,
-              summary: `Operação recusada por falta de permissão: ${error.message}`,
-              outcome: "denied",
-            },
-            requestId,
-          );
-        }
-        throw toHttpsError(committed ? new AppError(error.code, error.message, { ...(error.details ?? {}), committed: true }) : error);
+        return await handleApiCall(name, actions, request.data, request.auth?.uid);
+      } catch (error) {
+        throw toHttpsError(normalizeError(error));
       }
     },
   );
@@ -349,8 +368,7 @@ export function createApi(name: string, actions: Record<string, AnyAction>) {
 
 /** Para testes: registra os nomes das ações sem criar a função chamável. */
 export function registerActionsForTests(name: string, actions: Record<string, AnyAction>) {
-  for (const [key, def] of Object.entries(actions)) ACTION_KEYS.set(def, `${name}.${key}`);
-  return actions;
+  return registerApi(name, actions);
 }
 
 export { buildActor };

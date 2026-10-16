@@ -2,7 +2,7 @@ import { FirestoreError } from "firebase/firestore";
 import { FunctionsError } from "firebase/functions";
 import { describe, expect, it } from "vitest";
 import { ServiceError } from "../errors";
-import { mapFunctionsError, stripUndefined } from "./call";
+import { mapFunctionsError, mapRouteError, stripUndefined } from "./call";
 import { firebaseErrorCode, mapFirestoreError } from "./convert";
 
 describe("stripUndefined", () => {
@@ -59,5 +59,26 @@ describe("mapFirestoreError", () => {
     const own = new ServiceError("not_found", "Registro não encontrado.");
     expect(mapFirestoreError(own)).toBe(own);
     expect(mapFirestoreError(new Error("boom")).code).toBe("internal");
+  });
+});
+
+describe("mapRouteError (rota de API da implantação gratuita)", () => {
+  it("usa o código e a mensagem do servidor", () => {
+    const e = mapRouteError(403, { error: { code: "forbidden", message: "Seu perfil não pode fazer isso.", details: {} } });
+    expect(e).toBeInstanceOf(ServiceError);
+    expect(e.code).toBe("forbidden");
+    expect(e.message).toBe("Seu perfil não pode fazer isso.");
+  });
+
+  it("mantém os detalhes (ex.: números em conflito, operação já confirmada)", () => {
+    const e = mapRouteError(409, { error: { code: "conflict", message: "Números indisponíveis.", details: { numbers: [3], committed: true } } });
+    expect(e.details).toEqual({ numbers: [3], committed: true });
+  });
+
+  it("erro interno nunca expõe a mensagem; falha da hospedagem sem JSON vira 'sem conexão' (pode repetir)", () => {
+    expect(mapRouteError(500, { error: { code: "internal", message: "stack…" } }).message).not.toContain("stack");
+    expect(mapRouteError(504, null).code).toBe("unavailable");
+    expect(mapRouteError(401, null).code).toBe("unauthenticated");
+    expect(mapRouteError(400, { error: { code: "algo-estranho", message: "x" } }).code).toBe("internal");
   });
 });
