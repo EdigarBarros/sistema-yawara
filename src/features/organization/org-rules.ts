@@ -15,6 +15,7 @@ import type { ID, Invitation, InvitationStatus, Member, Permission, Role } from 
 import type { Tone } from "@/lib/labels";
 import { TOKEN, userTokens } from "@/lib/access-tokens";
 import { hasPermission, isPrivileged, type AccessContext } from "@/lib/permissions";
+import { isSupportRole, LOCK_SUPPORT } from "@/lib/support";
 
 type Ctx = AccessContext | null | undefined;
 
@@ -76,6 +77,7 @@ export function withinOwnReach(ctx: Ctx, role: Role, departmentIds: ID[] = []) {
  * `departmentIds`: departamentos adicionais concedidos junto com o cargo.
  */
 export function canAssignRole(ctx: Ctx, role: Role, departmentIds: ID[] = []) {
+  if (isSupportRole(role.id) && !isSupportRole(ctx?.role.id)) return false;
   if (!withinOwn(ctx, role.permissions)) return false;
   if (hasPermission(ctx, "organization.admin")) return true;
   if (role.permissions.some(isPrivileged)) return false;
@@ -91,6 +93,7 @@ export function assignableRoles(ctx: Ctx, roles: Role[]) {
 export function canManageMember(ctx: Ctx, member: Member, roles: Role[]) {
   if (!hasPermission(ctx, "organization.edit")) return false;
   const role = roles.find((r) => r.id === member.roleId);
+  if (role && isSupportRole(role.id) && !isSupportRole(ctx?.role.id)) return false;
   return !role || withinOwn(ctx, role.permissions);
 }
 
@@ -112,7 +115,8 @@ export function memberEditRules(ctx: Ctx, member: Member, roles: Role[]): Member
     return { canEdit: false, reason: "Seu perfil não pode editar integrantes.", self, canChangeRole: false, canChangeStatus: false, canChangeDepartments: false };
   }
   if (!canManageMember(ctx, member, roles)) {
-    return { canEdit: false, reason: LOCK_MEMBER_ABOVE, self, canChangeRole: false, canChangeStatus: false, canChangeDepartments: false };
+    const reason = isSupportRole(member.roleId) ? LOCK_SUPPORT : LOCK_MEMBER_ABOVE;
+    return { canEdit: false, reason, self, canChangeRole: false, canChangeStatus: false, canChangeDepartments: false };
   }
   return {
     canEdit: true,
@@ -129,12 +133,14 @@ export function memberEditRules(ctx: Ctx, member: Member, roles: Role[]): Member
  * (permissões, nível de diretoria/presidência e "faz parte da diretoria").
  */
 export function canChangeRoleAccess(ctx: Ctx, role?: Role) {
+  if (role && isSupportRole(role.id) && !isSupportRole(ctx?.role.id)) return false;
   if (!hasPermission(ctx, "organization.admin")) return false;
   return !role || withinOwn(ctx, role.permissions);
 }
 
 /** Motivo pelo qual o acesso do cargo inteiro não pode ser alterado (undefined = pode). */
 export function roleAccessLock(ctx: Ctx, role?: Role): string | undefined {
+  if (role && isSupportRole(role.id) && !isSupportRole(ctx?.role.id)) return LOCK_SUPPORT;
   if (!hasPermission(ctx, "organization.admin")) return LOCK_NO_ADMIN;
   if (role && !withinOwn(ctx, role.permissions)) return LOCK_ROLE_ABOVE;
   return undefined;

@@ -18,8 +18,10 @@ import {
   permissionLock,
   renewLock,
   revokeLock,
+  roleAccessLock,
   roleReach,
 } from "./org-rules";
+import { LOCK_SUPPORT, SUPPORT_ROLE_ID, supportRoleDefinition } from "@/lib/support";
 
 const NOW = "2026-10-14T12:00:00.000Z";
 const roles: Role[] = DEFAULT_ROLES.map((r) => ({ ...r, createdAt: NOW, updatedAt: NOW }));
@@ -196,5 +198,37 @@ describe("convites", () => {
   it("situação desconhecida não quebra a lista", () => {
     expect(invitationStatusMeta("accepting" as Invitation["status"])).toBe(INVITATION_STATUS.pending);
     expect(invitationStatusMeta("accepted")).toBe(INVITATION_STATUS.accepted);
+  });
+});
+
+describe("suporte do sistema (acima da presidência)", () => {
+  const supportRole: Role = { ...supportRoleDefinition(), id: SUPPORT_ROLE_ID, createdAt: NOW, updatedAt: NOW };
+  const all = [...roles, supportRole];
+  const support = ctxFor("sup", SUPPORT_ROLE_ID, supportRole);
+
+  it("presidência não atribui o cargo de suporte; o suporte atribui", () => {
+    expect(canAssignRole(pres, supportRole)).toBe(false);
+    expect(assignableRoles(pres, all).map((r) => r.id)).not.toContain(SUPPORT_ROLE_ID);
+    expect(canAssignRole(support, supportRole)).toBe(true);
+    expect(canAssignRole(support, role("presidente"))).toBe(true);
+  });
+
+  it("presidência não edita a conta do suporte; o suporte edita a presidência", () => {
+    const rules = memberEditRules(pres, member("sup", SUPPORT_ROLE_ID), all);
+    expect(rules.canEdit).toBe(false);
+    expect(rules.reason).toBe(LOCK_SUPPORT);
+    expect(memberEditRules(support, member("p2", "presidente"), all).canEdit).toBe(true);
+  });
+
+  it("presidência não altera o cargo de suporte", () => {
+    expect(canChangeRoleAccess(pres, supportRole)).toBe(false);
+    expect(roleAccessLock(pres, supportRole)).toBe(LOCK_SUPPORT);
+    expect(roleAccessLock(support, supportRole)).toBeUndefined();
+  });
+
+  it("o cargo de suporte tem todas as permissões e o alcance da presidência", () => {
+    expect(supportRole.permissions).toEqual([...role("presidente").permissions].sort());
+    expect(supportRole.level).toBe("presidency");
+    expect(supportRole.isBoard).toBe(true);
   });
 });

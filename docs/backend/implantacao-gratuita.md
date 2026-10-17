@@ -150,6 +150,19 @@ ativos, não mexe em coleções que não conhece e deixa um registro na auditori
 nova dizendo que o reset foi feito. Com `FILE_STORAGE=links`, os arquivos
 ficam nas pastas compartilhadas e não são afetados.
 
+## 4.2 Conta de suporte (acima da Presidência)
+
+O cargo **Suporte do sistema** tem todas as permissões e só pode ser alterado
+ou atribuído por quem já está nele: a Presidência não consegue desativar,
+trocar o cargo nem editar essa conta. Para criar o cargo, mover uma conta para
+ele e (opcionalmente) apagar outra conta:
+
+```bash
+export GOOGLE_CLOUD_QUOTA_PROJECT=<id-do-projeto>
+npm run suporte -- --project <id-do-projeto> --email <email-do-suporte> --remover <email-a-apagar>            # ensaio
+npm run suporte -- --project <id-do-projeto> --email <email-do-suporte> --remover <email-a-apagar> --aplicar  # de verdade
+```
+
 ## 5. Cotas gratuitas e cuidados
 
 - **Firestore (Spark):** 50 mil leituras, 20 mil gravações e 20 mil exclusões

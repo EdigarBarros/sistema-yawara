@@ -14,6 +14,9 @@
  *    situação; ninguém altera integrantes cujo cargo tem permissões que a
  *    pessoa não possui (ex.: vice alterando a presidência).
  *  - Sempre resta pelo menos um integrante ativo com `organization.admin`.
+ *  - O cargo "Suporte do sistema" (src/lib/support.ts) fica acima da
+ *    Presidência: só quem está nele altera esse cargo, os integrantes dele ou
+ *    o atribui a alguém.
  *  - Toda mudança recalcula o retrato de acesso (`userAccess`) dos afetados na
  *    mesma transação; contas desativadas são bloqueadas no Auth e têm as
  *    sessões revogadas.
@@ -25,6 +28,7 @@ import { z } from "zod";
 import { computeAccess, MAX_EXTRA_DEPARTMENTS, TOKEN, userTokens } from "@/lib/access-tokens";
 import { allPermissions } from "@/lib/modules";
 import { isPrivileged } from "@/lib/permissions";
+import { isSupportRole, LOCK_SUPPORT } from "@/lib/support";
 import type { Department, Invitation, Member, Permission, Role } from "@/types";
 import { adminAuth, db, FieldValue, nowISO, Timestamp, timestampInDays } from "../core/admin";
 import { memberFromDoc, requirePermission, roleFromDoc, type Actor } from "../core/actor";
@@ -175,6 +179,7 @@ function beyondOwnReach(actor: Actor, role: Role, departmentIds: string[]) {
  * `departmentIds`: departamentos adicionais concedidos junto com o cargo.
  */
 function assertCanAssignRole(actor: Actor, role: Role, departmentIds: string[] = []) {
+  if (isSupportRole(role.id) && !isSupportRole(actor.role.id)) fail("forbidden", LOCK_SUPPORT);
   assertWithinOwn(actor, role.permissions, "Você não pode atribuir um cargo com permissões que o seu próprio cargo não tem.");
   if (role.permissions.some(isPrivileged)) {
     requirePermission(actor, "organization.admin", "Somente quem administra permissões pode atribuir cargos com permissões administrativas.");
@@ -191,6 +196,7 @@ function assertCanAssignRole(actor: Actor, role: Role, departmentIds: string[] =
 /** Ninguém altera integrantes com mais poderes do que si (protege a presidência). */
 function assertCanManageMember(actor: Actor, target: Member, roles: Map<string, Role>) {
   const role = roles.get(target.roleId);
+  if (isSupportRole(target.roleId) && !isSupportRole(actor.role.id)) fail("forbidden", LOCK_SUPPORT);
   if (role) assertWithinOwn(actor, role.permissions, "Você não pode alterar um integrante cujo cargo tem permissões que o seu não tem.");
 }
 
@@ -379,6 +385,7 @@ export const organizationActions = {
       const state = await loadOrg(tx);
       const current = state.roles.get(roleId);
       ensure(current, "not_found", "Cargo não encontrado.");
+      if (isSupportRole(roleId) && !isSupportRole(actor.role.id)) fail("forbidden", LOCK_SUPPORT);
 
       const next: Role = { ...current, ...input, permissions: input.permissions ? ([...new Set(input.permissions)].sort() as Permission[]) : current.permissions };
       const added = next.permissions.filter((p) => !current.permissions.includes(p));
