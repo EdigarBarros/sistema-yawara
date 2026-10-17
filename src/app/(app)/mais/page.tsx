@@ -5,24 +5,12 @@ import { ChevronRight, Search } from "lucide-react";
 import { useAccess } from "@/hooks/use-access";
 import { useUI } from "@/stores/ui";
 import { MODULE_MAP } from "@/lib/modules";
-import { NAV } from "@/components/layout/nav";
+import { AREA_COLORS, NAV } from "@/components/layout/nav";
 import { BrandEmblem } from "@/components/layout/brand";
 import { DemoFootnote } from "@/components/layout/sidebar";
 import { HeroCards } from "@/features/home/hero-cards";
+import { MemberAvatar } from "@/components/shared/member-avatar";
 
-/** Cor de cada área (o ícone fica num "chip" colorido). */
-const AREA_COLORS: Record<string, string> = {
-  "/campanhas": "#e1af37",
-  "/eventos": "#f2a93b",
-  "/financeiro": "#5b86d9",
-  "/marketing": "#e88ab5",
-  "/documentos": "#3fcf8e",
-  "/secretaria": "#8fb0ec",
-  "/extensao": "#7fd9b0",
-  "/diretoria": "#b6a9ff",
-  "/configuracoes": "#c5cde6",
-  "/auditoria": "#e9b4cf",
-};
 
 /** Todas as áreas que o cargo pode acessar, em botões grandes para o celular. */
 export default function MaisPage() {
@@ -49,6 +37,17 @@ export default function MaisPage() {
         <Search className="size-[18px]" aria-hidden />
         Buscar pessoa, evento, documento…
       </button>
+
+      {access.user && (
+        <Link href="/perfil" className="press anim-rise flex items-center gap-3 rounded-3xl border border-line bg-surface p-3.5 hover:border-line-strong" style={{ animationDelay: "60ms" }}>
+          <MemberAvatar id={access.user.id} name={access.user.name} size={48} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[15px] font-semibold">{access.user.name}</span>
+            <span className="block truncate text-[12.5px] text-fg-muted">{access.role?.name} · Meu perfil e foto</span>
+          </span>
+          <ChevronRight className="size-[18px] shrink-0 text-fg-subtle" aria-hidden />
+        </Link>
+      )}
 
       <HeroCards />
 

@@ -57,9 +57,24 @@ export const NAV: NavGroup[] = [
   },
 ];
 
+/** Cor de cada área (o ícone fica num "chip" colorido). */
+export const AREA_COLORS: Record<string, string> = {
+  "/campanhas": "#e1af37",
+  "/eventos": "#f2a93b",
+  "/financeiro": "#5b86d9",
+  "/marketing": "#e88ab5",
+  "/documentos": "#3fcf8e",
+  "/secretaria": "#8fb0ec",
+  "/extensao": "#7fd9b0",
+  "/diretoria": "#b6a9ff",
+  "/configuracoes": "#c5cde6",
+  "/auditoria": "#e9b4cf",
+};
+
 /** Rótulos fixos usados nos breadcrumbs. */
 export const ROUTE_LABELS: Record<string, string> = {
   inicio: "Início",
+  perfil: "Meu perfil",
   agenda: "Agenda",
   avisos: "Avisos",
   mais: "Todas as áreas",

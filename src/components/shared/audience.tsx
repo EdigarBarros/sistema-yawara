@@ -1,5 +1,6 @@
 "use client";
 
+import { MemberAvatar } from "@/components/shared/member-avatar";
 import { useMemo, useState } from "react";
 import { Building2, Globe2, ShieldCheck, UserCheck, Users, UsersRound } from "lucide-react";
 import type { Audience, AudienceScope, ID, Member, ModuleKey, Permission } from "@/types";
@@ -7,7 +8,6 @@ import { useDirectory } from "@/hooks/use-data";
 import { AUDIENCE_SCOPE_HINTS, AUDIENCE_SCOPE_LABELS } from "@/lib/labels";
 import { hasPermission, matchesAudience } from "@/lib/permissions";
 import { ChoiceCards } from "@/components/ui/form";
-import { Avatar } from "@/components/ui/misc";
 import { MemberMultiPicker, RoleMultiPicker } from "./pickers";
 
 const ICONS: Record<AudienceScope, React.ReactNode> = {
@@ -154,7 +154,7 @@ export function AudienceSummary({
         <ul className="mt-2 flex flex-wrap gap-1.5">
           {members.map((m) => (
             <li key={m.id} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface-2 py-0.5 pr-2.5 pl-0.5 text-[12px]">
-              <Avatar name={m.name} id={m.id} size={18} />
+              <MemberAvatar name={m.name} id={m.id} size={18} />
               {m.name}
             </li>
           ))}

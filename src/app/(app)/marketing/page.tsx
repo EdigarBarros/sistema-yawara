@@ -1,5 +1,6 @@
 "use client";
 
+import { MemberAvatar } from "@/components/shared/member-avatar";
 import { useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CalendarDays, ChevronLeft, ChevronRight, Columns3, List, Megaphone, Plus } from "lucide-react";
@@ -12,7 +13,6 @@ import { cn, matchesQuery } from "@/lib/utils";
 import { errorMessage } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/form";
-import { Avatar } from "@/components/ui/misc";
 import { PageHeader } from "@/components/shared/page";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { FilterSelect, SearchInput, Toolbar } from "@/components/shared/filters";
@@ -48,7 +48,7 @@ function Board({ items, onOpen }: { items: ContentItem[]; onOpen: (id: string) =
                       {c.publishDate && ` · ${formatDate(c.publishDate)}`}
                     </p>
                     <div className="mt-2.5 flex items-center gap-2 text-[11.5px] text-fg-muted">
-                      <Avatar name={dir.memberName(c.responsibleId)} id={c.responsibleId} size={18} />
+                      <MemberAvatar name={dir.memberName(c.responsibleId)} id={c.responsibleId} size={18} />
                       <span className="truncate">{dir.memberName(c.responsibleId)}</span>
                     </div>
                   </button>

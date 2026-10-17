@@ -56,6 +56,13 @@ const roleInput = z.object({
   permissions: z.array(z.enum(ALL_PERMISSIONS)).max(200, "Permissões demais para um cargo."),
 }).strict();
 
+/** Foto de perfil: imagem pequena (o navegador reduz para 192 px) gravada como data URL. */
+export const MAX_PHOTO_CHARS = 120_000;
+const photoSchema = z
+  .string()
+  .max(MAX_PHOTO_CHARS, "A foto ficou grande demais. Tente outra imagem.")
+  .regex(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/, "Formato de foto inválido. Use JPG, PNG ou WebP.");
+
 const departmentInput = z.object({
   name: name("O nome do departamento"),
   shortName: z
@@ -625,6 +632,55 @@ export const organizationActions = {
     },
     async present(result, actor) {
       return presentMember(result.id, actor!);
+    },
+  }),
+
+  /** Foto de perfil da própria conta (qualquer integrante ativo). `null` remove a foto. */
+  updateMyPhoto: mutation({
+    module: "organization",
+    schema: z.object({ photo: photoSchema.nullable() }).strict(),
+    async run(tx, actor, { photo }, ctx) {
+      actor = actor!;
+      const ref = db.doc(`members/${actor.uid}`);
+      ensure((await tx.get(ref)).exists, "not_found", "Cadastro não encontrado.");
+      tx.update(ref, { photo: photo ?? FieldValue.delete(), updatedAt: ctx.now });
+      audit(tx, actor, ctx, "updateMyPhoto", "member", actor.uid, photo ? "Foto de perfil atualizada" : "Foto de perfil removida");
+      return { id: actor.uid };
+    },
+    async present(result, actor) {
+      return presentMember(result.id, actor!);
+    },
+  }),
+
+  /**
+   * Exclui o perfil de um integrante: conta de acesso (Auth) e cadastro
+   * (members, memberPrivate, userAccess). O que a pessoa registrou continua,
+   * com o autor exibido como "Integrante removido". Exige `organization.admin`
+   * (presidência e vice) e as mesmas proteções da edição de integrantes.
+   */
+  deleteMember: mutation({
+    module: "organization",
+    schema: z.object({ id }).strict(),
+    async run(tx, actor, { id: memberId }, ctx) {
+      actor = actor!;
+      requirePermission(actor, "organization.admin", "Somente a presidência pode excluir perfis.");
+      if (memberId === actor.uid) fail("invalid", "Você não pode excluir o seu próprio perfil.");
+      const state = await loadOrg(tx);
+      const current = state.members.find((m) => m.id === memberId);
+      ensure(current, "not_found", "Integrante não encontrado.");
+      assertCanManageMember(actor, current, state.roles);
+      assertAdminsRemain(
+        state.members.filter((m) => m.id !== memberId),
+        state.roles,
+      );
+      for (const col of ["members", "memberPrivate", "userAccess"]) tx.delete(db.doc(`${col}/${memberId}`));
+      audit(tx, actor, ctx, "deleteMember", "member", memberId, `Perfil excluído: ${current.name}`, { roleId: current.roleId });
+      ctx.after(async () => {
+        await adminAuth.deleteUser(memberId).catch((error: { code?: string }) => {
+          if (error?.code !== "auth/user-not-found") throw error;
+        });
+      });
+      return { id: memberId };
     },
   }),
 

@@ -52,6 +52,15 @@ export const firebaseOrganization: OrganizationService = {
     return callApi<Member>("organization", "updateMember", { id, input }, rid);
   },
 
+  async updateMyPhoto(photo) {
+    const rid = takeRequestId();
+    return callApi<Member>("organization", "updateMyPhoto", { photo }, rid);
+  },
+  async deleteMember(id) {
+    const rid = takeRequestId();
+    await callApi("organization", "deleteMember", { id }, rid);
+  },
+
   async listInvitations() {
     const access = await whenAccess();
     if (!hasPerm(access, "organization.create") && !hasPerm(access, "organization.edit")) return [];
