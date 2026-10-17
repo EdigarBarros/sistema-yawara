@@ -177,6 +177,26 @@
   60% { transform: scale(1.1); }
   100% { transform: scale(1); }
 }
+@keyframes drift-a {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(6%, 8%) scale(1.15); }
+}
+@keyframes drift-b {
+  0%, 100% { transform: translate(0, 0) scale(1.1); }
+  50% { transform: translate(-8%, -6%) scale(0.95); }
+}
+@keyframes float-soft {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+@keyframes breathe {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.08); }
+}
+@keyframes claw-in {
+  from { transform: rotate(-52deg) scaleX(0); }
+  to { transform: rotate(-52deg) scaleX(1); }
+}
 @keyframes draw-line {
   from { stroke-dashoffset: 60; }
   to { stroke-dashoffset: 0; }

@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Eye, EyeOff, Info, Lock, Mail, Moon, Sun, UserRoundCheck } from "lucide-react";
+import { ArrowRight, CalendarDays, ClipboardList, Eye, EyeOff, FolderOpen, Info, KeyRound, Lock, Mail, Moon, Sun, Ticket, UserRoundCheck, Wallet } from "lucide-react";
 import { services } from "@/services";
 import { useMounted } from "@/hooks/use-mounted";
 import { useSession, useSessionReady } from "@/stores/session";
@@ -14,7 +14,7 @@ import { resolveTheme, useUI } from "@/stores/ui";
 import { errorMessage, notifyInfo } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Segmented } from "@/components/ui/form";
+import { Field, Input } from "@/components/ui/form";
 import { Avatar, Skeleton } from "@/components/ui/misc";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DemoNotice } from "@/components/shared/states";
@@ -23,6 +23,17 @@ import { Checkbox } from "@/components/ui/form";
 import { FormAlert } from "@/components/shared/form-alert";
 import { isDemoMode, isFirebaseMode } from "@/lib/mode";
 import { useFirebaseSession, type SessionEndReason } from "@/services/firebase/session";
+
+/** Campo maior, com brilho dourado no foco. */
+const FIELD = "h-12 rounded-xl bg-sunken/70 text-[15px] transition-shadow focus:shadow-[0_0_0_4px_rgba(225,175,55,0.14)]";
+
+const FEATURES = [
+  { icon: <Ticket />, label: "Rifas" },
+  { icon: <CalendarDays />, label: "Agenda" },
+  { icon: <ClipboardList />, label: "Atas" },
+  { icon: <Wallet />, label: "Finanças" },
+  { icon: <FolderOpen />, label: "Documentos" },
+];
 
 const loginSchema = z.object({
   email: z.string().trim().min(1, "Informe seu e-mail.").email("Digite um e-mail válido, como nome@example.org."),
@@ -142,14 +153,14 @@ function LoginForm({ onSuccess }: { onSuccess: (userId: string, label: string) =
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
       <Field label="E-mail" error={errors.email?.message}>
-        <Input type="email" autoComplete="email" placeholder="nome@example.org" className="h-11" icon={<Mail />} {...register("email")} />
+        <Input type="email" autoComplete="email" placeholder="nome@example.org" className={FIELD} icon={<Mail />} {...register("email")} />
       </Field>
       <Field label="Senha" error={errors.password?.message}>
         <Input
           type={showPassword ? "text" : "password"}
           autoComplete="current-password"
           placeholder="••••••••"
-          className="h-11"
+          className={FIELD}
           icon={<Lock />}
           trailing={
             <button
@@ -177,7 +188,13 @@ function LoginForm({ onSuccess }: { onSuccess: (userId: string, label: string) =
         </button>
       </div>
       <FormAlert message={serverError} className="py-3" />
-      <Button type="submit" variant="primary" size="lg" className="w-full" loading={isSubmitting}>
+      <Button
+        type="submit"
+        variant="primary"
+        size="lg"
+        className="group h-12 w-full rounded-xl bg-gradient-to-r from-[#f0c75a] to-gold text-[15px] shadow-[0_12px_32px_-10px_rgba(225,175,55,0.6)] transition-[transform,box-shadow] hover:shadow-[0_16px_40px_-10px_rgba(225,175,55,0.75)] active:scale-[0.98] [&_svg]:transition-transform group-hover:[&_svg]:translate-x-1"
+        loading={isSubmitting}
+      >
         {isSubmitting ? "Verificando…" : "Entrar"} {!isSubmitting && <ArrowRight />}
       </Button>
       {isDemoMode ? (
@@ -214,12 +231,12 @@ function DemoProfiles({ onSelect }: { onSelect: (userId: string, label: string) 
         </Button>
       )}
       <ul className="max-h-[420px] space-y-1.5 overflow-y-auto pr-1">
-        {data?.map((p) => (
-          <li key={p.member.id}>
+        {data?.map((p, i) => (
+          <li key={p.member.id} className="anim-row" style={{ animationDelay: `${i * 50}ms` }}>
             <button
               type="button"
               onClick={() => onSelect(p.member.id, p.member.demoProfile?.label ?? p.role.name)}
-              className="group flex w-full items-center gap-3 rounded-lg border border-line bg-sunken/60 px-3 py-2.5 text-left transition-colors hover:border-gold/50 hover:bg-gold/[0.05]"
+              className="group flex w-full items-center gap-3 rounded-xl border border-line bg-sunken/60 px-3 py-2.5 text-left transition-[background-color,border-color,transform] hover:border-gold/50 hover:bg-gold/[0.05] active:scale-[0.98]"
             >
               <Avatar name={p.member.name} id={p.member.id} size={34} />
               <span className="min-w-0 flex-1">
@@ -267,37 +284,64 @@ export default function LoginPage() {
 
   return (
     <div className="atmos relative min-h-dvh overflow-hidden bg-[var(--bg)]">
+      {/* Fundo vivo: duas manchas de luz que se movem devagar */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+        <div className="absolute -top-[20%] -left-[10%] size-[70vmax] rounded-full bg-[radial-gradient(closest-side,rgba(19,76,182,0.35),transparent)] blur-2xl" style={{ animation: "drift-a 18s ease-in-out infinite" }} />
+        <div className="absolute -right-[15%] -bottom-[25%] size-[60vmax] rounded-full bg-[radial-gradient(closest-side,rgba(225,175,55,0.16),transparent)] blur-2xl" style={{ animation: "drift-b 22s ease-in-out infinite" }} />
+      </div>
       <div className="claws top-[-30px] left-[-20px] hidden sm:block" aria-hidden>
-        <i />
-        <i />
-        <i />
+        {[0, 1, 2].map((i) => (
+          <i key={i} style={{ animation: `claw-in .9s cubic-bezier(.2,1,.3,1) ${0.3 + i * 0.12}s both` }} />
+        ))}
       </div>
       <div className="claws right-[30px] bottom-[-20px] hidden rotate-180 sm:block" aria-hidden>
-        <i />
-        <i />
-        <i />
+        {[0, 1, 2].map((i) => (
+          <i key={i} style={{ animation: `claw-in .9s cubic-bezier(.2,1,.3,1) ${0.6 + i * 0.12}s both` }} />
+        ))}
       </div>
 
-      <div className="mx-auto grid min-h-dvh max-w-[1400px] lg:grid-cols-[1.1fr_1fr]">
+      <div className="mx-auto grid min-h-dvh max-w-[1400px] grid-cols-[minmax(0,1fr)] items-center lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
         {/* Marca */}
-        <section className="flex flex-col justify-between gap-10 px-6 pt-8 pb-6 sm:px-10 lg:px-16 lg:py-14">
-          <div className="flex items-center gap-2.5">
+        <section className="flex flex-col items-center gap-6 px-6 pt-10 pb-6 text-center sm:px-10 lg:min-h-dvh lg:items-start lg:justify-between lg:px-16 lg:py-14 lg:text-left">
+          <div className="anim-rise hidden items-center gap-2.5 lg:flex">
             <BrandEmblem size={28} priority />
             <span className="text-[11.5px] font-semibold tracking-[0.28em] text-fg-muted">CENTRAL YAWARA</span>
           </div>
-          <div className="max-w-[520px]">
-            <BrandEmblem size={124} className="mb-7 hidden shadow-[0_0_0_1px_rgba(225,175,55,0.25),0_0_80px_rgba(19,76,182,0.35)] sm:block" priority />
-            <p className="eyebrow !text-gold-fg">Sistema interno de gestão</p>
-            <h1 className="mt-3 font-display text-[44px] leading-[1.02] font-bold tracking-[-0.01em] sm:text-[56px]">
-              Central <span className="text-gold">Yawara</span>
+          <div className="flex max-w-[540px] flex-col items-center lg:items-start">
+            <div className="relative mb-6 lg:mb-8">
+              <span aria-hidden className="absolute inset-[-30%] rounded-full bg-[radial-gradient(closest-side,rgba(225,175,55,0.28),rgba(19,76,182,0.18),transparent)]" style={{ animation: "breathe 5s ease-in-out infinite" }} />
+              <div className="relative" style={{ animation: "pop .7s cubic-bezier(.2,1.3,.4,1) both, float-soft 6s ease-in-out .7s infinite" }}>
+                <BrandEmblem size={136} className="size-[104px] drop-shadow-[0_18px_40px_rgba(0,0,0,0.55)] lg:size-[136px]" priority />
+              </div>
+            </div>
+            <p className="eyebrow anim-rise !text-gold-fg" style={{ animationDelay: "120ms" }}>
+              Sistema interno de gestão
+            </p>
+            <h1 className="anim-rise mt-3 font-display text-[42px] leading-[1.02] font-bold tracking-[-0.01em] sm:text-[60px]" style={{ animationDelay: "200ms" }}>
+              Central{" "}
+              <span className="bg-gradient-to-r from-[#f6d77a] via-gold to-[#c9921f] bg-clip-text text-transparent">Yawara</span>
             </h1>
-            <p className="mt-2 font-display text-[18px] font-medium text-ice">Associação Atlética Acadêmica de Psicologia</p>
-            <p className="mt-5 max-w-[440px] text-[15px] leading-relaxed text-fg-muted">
+            <p className="anim-rise mt-2 font-display text-[17px] font-medium text-ice sm:text-[19px]" style={{ animationDelay: "280ms" }}>
+              Associação Atlética Acadêmica de Psicologia
+            </p>
+            <p className="anim-rise mt-4 hidden max-w-[440px] text-[15px] leading-relaxed text-fg-muted sm:block" style={{ animationDelay: "360ms" }}>
               Campanhas, eventos, documentos, reuniões e finanças da Atlética em um só lugar. Acesso restrito à diretoria e assessores.
             </p>
+            <ul className="mt-6 hidden flex-wrap gap-2 sm:flex lg:justify-start">
+              {FEATURES.map((f, i) => (
+                <li
+                  key={f.label}
+                  className="anim-pop flex h-9 items-center gap-2 rounded-full border border-line-strong bg-surface/60 px-3.5 text-[13px] font-medium text-fg-muted backdrop-blur-sm [&_svg]:size-4 [&_svg]:text-gold-fg"
+                  style={{ animationDelay: `${450 + i * 70}ms` }}
+                >
+                  {f.icon}
+                  {f.label}
+                </li>
+              ))}
+            </ul>
           </div>
-          <div className="hidden items-center gap-3.5 text-[12px] text-fg-subtle lg:flex">
-            <span className="h-px w-14 bg-gradient-to-r from-gold to-transparent" />
+          <div className="anim-rise hidden items-center gap-3.5 text-[12px] text-fg-subtle lg:flex" style={{ animationDelay: "800ms" }}>
+            <span className="anim-grow h-px w-14 bg-gradient-to-r from-gold to-transparent" />
             <span className="text-[11px] font-semibold tracking-[0.32em] text-fg-muted">
               #SOMOS<span className="text-gold">YAWARA</span>
             </span>
@@ -307,35 +351,73 @@ export default function LoginPage() {
         </section>
 
         {/* Formulário */}
-        <section className="flex items-center justify-center border-line px-5 pb-10 sm:px-10 lg:border-l lg:bg-gradient-to-b lg:from-surface/50 lg:to-sunken/30 lg:py-12">
-          <div className="w-full max-w-[420px]">
-            <h2 className="font-display text-[30px] font-bold tracking-[-0.005em]">Acessar a Central</h2>
-            <p className="mt-1.5 mb-6 text-[14px] text-fg-muted">
-              {tab === "login" ? "Entre com seu e-mail e senha." : "Explore a interface com um perfil fictício."}
-            </p>
+        <section className="flex justify-center px-4 pb-10 sm:px-10 lg:py-12">
+          <div
+            className="anim-rise relative w-full max-w-[440px] rounded-[28px] border border-line-strong bg-surface/70 p-6 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.7)] backdrop-blur-xl sm:p-8"
+            style={{ animationDelay: "250ms" }}
+          >
+            <span aria-hidden className="absolute inset-x-10 -top-px h-px bg-gradient-to-r from-transparent via-gold/70 to-transparent" />
+            <div className="mb-6 flex items-center gap-3">
+              <span className="grid size-11 place-items-center rounded-2xl bg-gold/15 text-gold-fg">
+                <KeyRound className="size-5" aria-hidden />
+              </span>
+              <div>
+                <h2 className="font-display text-[28px] leading-none font-bold tracking-[-0.005em]">Acessar a Central</h2>
+                <p className="mt-1.5 text-[13.5px] text-fg-muted">{tab === "login" ? "Entre com seu e-mail e senha." : "Explore a interface com um perfil fictício."}</p>
+              </div>
+            </div>
             {isFirebaseMode && <SessionEndNotice />}
             {isDemoMode && (
-            <Segmented
-              ariaLabel="Forma de acesso"
-              value={tab}
-              onChange={setTab}
-              className="mb-6 grid w-full grid-cols-2 [&>button]:justify-center"
-              options={[
-                { value: "login", label: "Entrar" },
-                { value: "demo", label: "Modo demonstração", icon: <UserRoundCheck /> },
-              ]}
-            />
+              <div role="tablist" aria-label="Forma de acesso" className="relative mb-6 grid grid-cols-2 rounded-2xl border border-line bg-sunken/70 p-1">
+                <span
+                  aria-hidden
+                  className="absolute top-1 bottom-1 left-1 w-[calc(50%-4px)] rounded-xl bg-surface-3 shadow-[0_0_0_1px_var(--line-strong)] transition-transform duration-300 ease-[cubic-bezier(.2,1.2,.4,1)]"
+                  style={{ transform: tab === "demo" ? "translateX(100%)" : "none" }}
+                />
+                {(
+                  [
+                    { value: "login", label: "Entrar", icon: <Lock /> },
+                    { value: "demo", label: "Modo demonstração", icon: <UserRoundCheck /> },
+                  ] as const
+                ).map((o) => (
+                  <button
+                    key={o.value}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === o.value}
+                    onClick={() => setTab(o.value)}
+                    className={cn(
+                      "relative z-10 inline-flex h-10 items-center justify-center gap-1.5 rounded-xl text-[13.5px] font-medium transition-colors [&_svg]:size-4",
+                      tab === o.value ? "text-fg" : "text-fg-muted hover:text-fg",
+                    )}
+                  >
+                    {o.icon}
+                    {o.value === "demo" ? (
+                      <>
+                        <span className="sm:hidden">Demonstração</span>
+                        <span className="hidden sm:inline">{o.label}</span>
+                      </>
+                    ) : (
+                      o.label
+                    )}
+                  </button>
+                ))}
+              </div>
             )}
             <div className={cn(tab !== "login" && "hidden")}>
               <LoginForm onSuccess={enter("demo-email")} />
             </div>
-            {isDemoMode && tab === "demo" && <DemoProfiles onSelect={enter("demo-profile")} />}
-            <div className="mt-8 flex items-center justify-between border-t border-line pt-5 text-[12px] text-fg-subtle">
+            {isDemoMode && tab === "demo" && (
+              <div className="anim-rise">
+                <DemoProfiles onSelect={enter("demo-profile")} />
+              </div>
+            )}
+            <div className="mt-7 flex items-center justify-between border-t border-line pt-5 text-[12px] text-fg-subtle">
               <span>Atlética Yawara · Psicologia</span>
               <button
                 type="button"
                 onClick={() => setTheme(isDark ? "light" : "dark")}
-                className="inline-flex h-8 items-center gap-2 rounded-full border border-line-strong px-3 text-[12px] font-medium text-fg-muted hover:text-fg"
+                className="press inline-flex h-9 items-center gap-2 rounded-full border border-line-strong px-3.5 text-[12px] font-medium text-fg-muted hover:text-fg"
               >
                 {isDark ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
                 {isDark ? "Modo claro" : "Modo escuro"}
