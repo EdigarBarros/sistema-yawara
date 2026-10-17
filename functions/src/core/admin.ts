@@ -46,7 +46,11 @@ export const db = getFirestore();
 const SETTINGS_FLAG = Symbol.for("central-yawara.firestore-settings");
 const holder = globalThis as unknown as Record<symbol, boolean | undefined>;
 if (!holder[SETTINGS_FLAG]) {
-  db.settings({ ignoreUndefinedProperties: true });
+  try {
+    db.settings({ ignoreUndefinedProperties: true });
+  } catch {
+    // Já em uso com a mesma configuração (ex.: scripts/bootstrap.ts --senha reaproveita este módulo).
+  }
   holder[SETTINGS_FLAG] = true;
 }
 

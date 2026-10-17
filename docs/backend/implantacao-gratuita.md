@@ -121,6 +121,11 @@ fictícios e mostra **uma vez** o link do convite do primeiro administrador.
 Essa pessoa abre o link, cria a senha e, pela própria Central, convida os
 demais integrantes.
 
+**Mais simples, sem link:** acrescente `--senha` ao comando. O script pede a
+senha no próprio terminal (ela não aparece na tela), cria a conta na hora e
+basta entrar em `/login`. Se houver um convite pendente perdido para o mesmo
+e-mail, ele é cancelado automaticamente.
+
 ## 5. Cotas gratuitas e cuidados
 
 - **Firestore (Spark):** 50 mil leituras, 20 mil gravações e 20 mil exclusões
