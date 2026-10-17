@@ -18,6 +18,14 @@ function startsWith(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+const TAB_ORDER = ["/inicio", "/campanhas", "/agenda", "/avisos"];
+
+/** Posição da rota na barra de baixo (as áreas fora dela contam como "Mais"). */
+export function tabPosition(pathname: string) {
+  const i = TAB_ORDER.findIndex((href) => startsWith(pathname, href));
+  return i === -1 ? TAB_ORDER.length : i;
+}
+
 /** Barra de baixo do celular: o que mais se usa a um toque; o resto fica em "Mais". */
 export function TabBar() {
   const pathname = usePathname();

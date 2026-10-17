@@ -11,7 +11,8 @@ import { services } from "@/services";
 import { useMounted } from "@/hooks/use-mounted";
 import { useSession, useSessionReady } from "@/stores/session";
 import { resolveTheme, useUI } from "@/stores/ui";
-import { errorMessage, notifyInfo } from "@/lib/notify";
+import { useScene } from "@/stores/scene";
+import { errorMessage } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/form";
@@ -263,6 +264,7 @@ export default function LoginPage() {
   const { ready: hydrated, userId } = useSessionReady();
   const signIn = useSession((s) => s.signIn);
   const { theme, setTheme } = useUI();
+  const playScene = useScene((s) => s.play);
   const [tab, setTab] = useState<"login" | "demo">("login");
   const mounted = useMounted();
   const isDark = !mounted || resolveTheme(theme) === "dark";
@@ -272,13 +274,14 @@ export default function LoginPage() {
   }, [hydrated, userId, router]);
 
   const enter = (method: "demo-email" | "demo-profile") => (id: string, label: string) => {
+    // A cena de entrada substitui o aviso: cobre a troca de tela e diz quem está entrando.
     if (isFirebaseMode) {
+      playScene("login", `Bem-vindo(a), ${label}`, "Preparando a sua Central…");
       // A ponte de sessão (FirebaseSessionBridge) preenche a sessão e o redirecionamento acontece em seguida.
-      notifyInfo(`Bem-vindo(a), ${label}`);
       return;
     }
+    playScene("login", "Bem-vindo(a)!", `Entrando como ${label}`);
     signIn(id, method);
-    notifyInfo(`Entrou no modo demonstração como ${label}`, method === "demo-email" ? "A senha não é verificada nesta etapa." : "Perfil fictício.");
     router.replace("/inicio");
   };
 

@@ -4,6 +4,7 @@ import { MutationCache, QueryClient, QueryClientProvider } from "@tanstack/react
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Toaster } from "sonner";
 import { ConfirmHost } from "@/components/shared/confirm";
+import { SceneOverlay } from "@/components/layout/scene-overlay";
 import { FirebaseSessionBridge } from "@/components/auth/firebase-session";
 import { isFirebaseMode } from "@/lib/mode";
 import { useUI } from "@/stores/ui";
@@ -42,6 +43,7 @@ export function Providers({ children }: { children: ReactNode }) {
       {isFirebaseMode && <FirebaseSessionBridge />}
       {children}
       <ConfirmHost />
+      <SceneOverlay />
       <Toaster
         theme={resolved}
         position="top-center"

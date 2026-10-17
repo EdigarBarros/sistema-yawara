@@ -8,6 +8,8 @@ import { services } from "@/services";
 import { useAccess } from "@/hooks/use-access";
 import { useSession } from "@/stores/session";
 import { resolveTheme, useUI } from "@/stores/ui";
+import { LOGOUT_LEAD_MS, useScene } from "@/stores/scene";
+import { firstName } from "@/lib/format";
 import { useCrumbTitles } from "@/stores/breadcrumb";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { Avatar, Kbd } from "@/components/ui/misc";
@@ -58,6 +60,7 @@ function AccountMenu() {
   const access = useAccess();
   const signOut = useSession((s) => s.signOut);
   const { theme, setTheme } = useUI();
+  const playScene = useScene((s) => s.play);
   const isDark = resolveTheme(theme) === "dark";
   if (!access.user) return null;
 
@@ -123,6 +126,8 @@ function AccountMenu() {
         <DropdownMenuItem
           icon={<LogOut />}
           onSelect={async () => {
+            playScene("logout", `Até logo, ${firstName(access.user!.name)}`, "Encerrando a sessão com segurança…");
+            await new Promise((r) => setTimeout(r, LOGOUT_LEAD_MS));
             try {
               await services.auth.signOut();
             } finally {
