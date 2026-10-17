@@ -26,6 +26,7 @@ import { confirmAction } from "@/components/shared/confirm";
 import { DepartmentDialog, MemberDialog, Notice, RoleDialog } from "@/features/organization/org-dialogs";
 import { InvitationsTab, InviteDialog, useInvitations } from "@/features/organization/invitations";
 import { memberEditRules, missingPermissions, permissionLock, roleAccessLock } from "@/features/organization/org-rules";
+import { isSupportRole } from "@/lib/support";
 import { PermissionMatrix, PermissionSummary } from "@/features/organization/permission-matrix";
 
 const TABS = ["integrantes", "convites", "cargos", "departamentos", "permissoes"] as const;
@@ -89,6 +90,7 @@ function MembersTab({ onOpenMember }: { onOpenMember: (id: string) => void }) {
           <div className="min-w-0">
             <p className="flex items-center gap-2 truncate font-semibold">
               {m.name}
+              {isSupportRole(m.roleId) && <Badge tone="info">Suporte</Badge>}
               {m.id === access.user?.id && <Badge tone="gold">Você</Badge>}
             </p>
             {m.email && <p className="truncate text-[12px] text-fg-subtle">{m.email}</p>}
@@ -192,7 +194,10 @@ function RolesTab() {
       header: "Cargo",
       cell: (r) => (
         <div className="min-w-0">
-          <p className="truncate font-semibold">{r.name}</p>
+          <p className="flex items-center gap-2 truncate font-semibold">
+            {r.name}
+            {isSupportRole(r.id) && <Badge tone="info">Acima da Presidência</Badge>}
+          </p>
           <p className="line-clamp-1 text-[12px] text-fg-subtle">{r.description}</p>
         </div>
       ),
@@ -225,10 +230,11 @@ function RolesTab() {
       </div>
       <DataTable
         caption="Cargos"
-        rows={[...dir.roles].sort((a, b) => (dir.department(a.departmentId)?.name ?? "").localeCompare(dir.department(b.departmentId)?.name ?? "") || a.name.localeCompare(b.name))}
+        rows={[...dir.roles].sort((a, b) => Number(isSupportRole(b.id)) - Number(isSupportRole(a.id)) || (dir.department(a.departmentId)?.name ?? "").localeCompare(dir.department(b.departmentId)?.name ?? "") || a.name.localeCompare(b.name))}
         columns={columns}
         getRowId={(r) => r.id}
-        onRowClick={access.can("organization.edit") ? (r) => setDialog({ role: r }) : undefined}
+        // O cargo de suporte só abre para quem está nele (o servidor recusaria qualquer alteração).
+        onRowClick={access.can("organization.edit") ? (r) => (isSupportRole(r.id) && !isSupportRole(access.role?.id) ? undefined : setDialog({ role: r })) : undefined}
         mobileCard={(r) => (
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">

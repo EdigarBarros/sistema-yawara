@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { adminCount, assertAdminsRemain, authActions, organizationActions } from "../src/modules/organization";
-import { adminAuth, auditFor, caller, db, expectCode, resetEmulators, seedPeople, seedStructure } from "./helpers";
+import { SUPPORT_ROLE_ID, supportRoleDefinition } from "@/lib/support";
+import { adminAuth, auditFor, caller, createMember, db, expectCode, resetEmulators, seedPeople, seedStructure } from "./helpers";
 
 const org = caller("organization", organizationActions);
 const auth = caller("auth", authActions);
@@ -129,6 +130,36 @@ describe("proteção contra elevação de privilégios", () => {
     expect((await adminAuth.getUser("ass")).disabled).toBe(true);
     // A conta desativada não executa mais nenhuma operação.
     await expectCode(org("createDepartment", "ass", { name: "Qualquer", shortName: "QQ", description: "", active: true }), "forbidden");
+  });
+});
+
+describe("suporte do sistema (acima da presidência)", () => {
+  async function seedSupport() {
+    await db.doc(`roles/${SUPPORT_ROLE_ID}`).set({ ...supportRoleDefinition(), createdAt: "2026-10-14T12:00:00.000Z", updatedAt: "2026-10-14T12:00:00.000Z" });
+    await createMember("sup", "Suporte Teste", SUPPORT_ROLE_ID);
+  }
+
+  it("presidência não desativa, não troca o cargo nem edita a conta do suporte", async () => {
+    await seedSupport();
+    await expectCode(org("updateMember", "pres", { id: "sup", input: { status: "inactive" } }), "forbidden");
+    await expectCode(org("updateMember", "pres", { id: "sup", input: { roleId: "presidente" } }), "forbidden");
+    await expectCode(org("updateMember", "pres", { id: "sup", input: { name: "Outro" } }), "forbidden");
+    expect((await db.doc("members/sup").get()).data()!.status).toBe("active");
+  });
+
+  it("presidência não altera o cargo de suporte nem o atribui (convite ou troca)", async () => {
+    await seedSupport();
+    await expectCode(org("updateRole", "pres", { id: SUPPORT_ROLE_ID, input: { name: "Outro nome" } }), "forbidden");
+    await expectCode(org("updateRole", "pres", { id: SUPPORT_ROLE_ID, input: { active: false } }), "forbidden");
+    await expectCode(org("inviteMember", "pres", { name: "Alguém", email: "alguem@example.org", roleId: SUPPORT_ROLE_ID }), "forbidden");
+    await expectCode(org("updateMember", "pres", { id: "vice", input: { roleId: SUPPORT_ROLE_ID } }), "forbidden");
+  });
+
+  it("o suporte administra a presidência normalmente", async () => {
+    await seedSupport();
+    await org("updateMember", "sup", { id: "vice", input: { status: "inactive" } });
+    expect((await db.doc("members/vice").get()).data()!.status).toBe("inactive");
+    await org("updateRole", "sup", { id: SUPPORT_ROLE_ID, input: { description: "Manutenção" } });
   });
 });
 
