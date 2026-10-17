@@ -9,7 +9,7 @@ export function UploadTray() {
   const items = useUploads((s) => s.items);
   if (items.length === 0) return null;
   return (
-    <div className="fixed right-4 bottom-4 z-40 w-[min(92vw,340px)] space-y-2" role="status" aria-live="polite">
+    <div className="fixed right-4 bottom-24 z-40 lg:bottom-4 w-[min(92vw,340px)] space-y-2" role="status" aria-live="polite">
       {items.map((item) => (
         <div key={item.id} className="rounded-lg border border-line-strong bg-surface px-3.5 py-3 shadow-pop">
           <div className="flex items-center gap-2.5">

@@ -60,6 +60,9 @@ export const NAV: NavGroup[] = [
 /** Rótulos fixos usados nos breadcrumbs. */
 export const ROUTE_LABELS: Record<string, string> = {
   inicio: "Início",
+  agenda: "Agenda",
+  avisos: "Avisos",
+  mais: "Todas as áreas",
   campanhas: "Campanhas e vendas",
   nova: "Nova rifa",
   eventos: "Eventos e projetos",
