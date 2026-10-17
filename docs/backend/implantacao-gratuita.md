@@ -126,6 +126,30 @@ senha no próprio terminal (ela não aparece na tela), cria a conta na hora e
 basta entrar em `/login`. Se houver um convite pendente perdido para o mesmo
 e-mail, ele é cancelado automaticamente.
 
+## 4.1 Recomeçar do zero (reset)
+
+Apaga **tudo** o que foi registrado e mantém só a conta e o cadastro do
+administrador indicado, além da estrutura (configurações, departamentos, cargos
+e categorias). Some: as outras contas de acesso e cadastros, convites,
+auditoria, notificações, rifas (com vendas e compradores), eventos e tarefas
+(a agenda), documentos, reuniões e atas, financeiro, marketing e extensão. Não
+pode ser desfeito.
+
+No Cloud Shell, dentro da pasta do projeto (com o código atualizado):
+
+```bash
+export GOOGLE_CLOUD_QUOTA_PROJECT=<id-do-projeto>
+# 1) Ensaio: só mostra o que seria apagado
+npm run reset -- --project <id-do-projeto> --manter <email-do-admin>
+# 2) De verdade: pede para digitar "APAGAR <id-do-projeto>"
+npm run reset -- --project <id-do-projeto> --manter <email-do-admin> --apagar
+```
+
+O script recusa rodar se o e-mail de `--manter` não tiver conta e cadastro
+ativos, não mexe em coleções que não conhece e deixa um registro na auditoria
+nova dizendo que o reset foi feito. Com `FILE_STORAGE=links`, os arquivos
+ficam nas pastas compartilhadas e não são afetados.
+
 ## 5. Cotas gratuitas e cuidados
 
 - **Firestore (Spark):** 50 mil leituras, 20 mil gravações e 20 mil exclusões

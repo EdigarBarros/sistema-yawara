@@ -26,7 +26,8 @@
     "test:all": "npm test && npm run test:rules && npm run test:functions",
     "functions:build": "npm --prefix functions run build",
     "functions:typecheck": "npm --prefix functions run typecheck",
-    "bootstrap": "tsx scripts/bootstrap.ts"
+    "bootstrap": "tsx scripts/bootstrap.ts",
+    "reset": "tsx scripts/reset.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
