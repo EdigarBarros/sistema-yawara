@@ -86,6 +86,8 @@ export interface Member {
   /** Situação da conta: "inactive" = desativada (perde o acesso efetivo). */
   status: "active" | "inactive";
   joinedAt: ISODateTime;
+  /** Foto de perfil (data URL pequena, até ~90 KB), escolhida pela própria pessoa. */
+  photo?: string;
   /** Presente nos integrantes que podem ser usados como perfil de demonstração. */
   demoProfile?: DemoProfileInfo;
 }

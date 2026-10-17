@@ -1,5 +1,6 @@
 "use client";
 
+import { MemberAvatar } from "@/components/shared/member-avatar";
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { AlertTriangle, CalendarClock, FilePlus2, FileText, Megaphone, Plus, Trash2, Wallet } from "lucide-react";
@@ -37,7 +38,7 @@ import { cn } from "@/lib/utils";
 import { errorMessage } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/form";
-import { Avatar, Progress } from "@/components/ui/misc";
+import { Progress } from "@/components/ui/misc";
 import { DetailList, Panel, Stat } from "@/components/shared/page";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { FilterChips, FilterSelect } from "@/components/shared/filters";
@@ -88,7 +89,7 @@ export function OverviewTab({ event }: { event: AtleticaEvent }) {
           <ul className="divide-y divide-line">
             {event.responsibleIds.map((id) => (
               <li key={id} className="flex items-center gap-3 px-5 py-2.5">
-                <Avatar name={dir.memberName(id)} id={id} size={30} />
+                <MemberAvatar name={dir.memberName(id)} id={id} size={30} />
                 <div className="min-w-0">
                   <p className="truncate text-[13.5px] font-medium">{dir.memberName(id)}</p>
                   <p className="truncate text-[12px] text-fg-subtle">{dir.roleOf(id)?.name}</p>

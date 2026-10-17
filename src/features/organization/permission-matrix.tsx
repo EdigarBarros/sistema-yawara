@@ -168,24 +168,3 @@ export function PermissionMatrix({ value, onChange, readOnly, lockReason }: Prop
     </>
   );
 }
-
-/** Resumo legível das permissões (para perfis e cartões). */
-export function PermissionSummary({ value }: { value: Permission[] }) {
-  const set = new Set(value);
-  return (
-    <ul className="space-y-2">
-      {MODULES.filter((m) => set.has(`${m.key}.view` as Permission)).map((m) => (
-        <li key={m.key} className="text-[13px]">
-          <span className="font-medium">{m.label}:</span>{" "}
-          <span className="text-fg-muted">
-            {(Object.keys(m.actions) as PermissionAction[])
-              .filter((a) => set.has(`${m.key}.${a}` as Permission))
-              .map((a) => ACTION_LABELS[a].toLowerCase())
-              .join(", ")}
-          </span>
-        </li>
-      ))}
-      {!MODULES.some((m) => set.has(`${m.key}.view` as Permission)) && <li className="text-[13px] text-fg-subtle">Nenhum módulo liberado.</li>}
-    </ul>
-  );
-}

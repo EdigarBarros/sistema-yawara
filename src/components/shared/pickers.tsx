@@ -1,10 +1,10 @@
 "use client";
 
+import { MemberAvatar } from "@/components/shared/member-avatar";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, FileUp, Link2, Paperclip, Search, X } from "lucide-react";
 import type { ID } from "@/types";
 import { useDirectory } from "@/hooks/use-data";
-import { Avatar } from "@/components/ui/misc";
 import { Select } from "@/components/ui/form";
 import { cn, matchesQuery } from "@/lib/utils";
 import { fileExtension, formatBytes } from "@/lib/format";
@@ -41,7 +41,7 @@ export function MemberMultiPicker({ value, onChange, includeInactive, placeholde
         <div className="flex flex-wrap gap-1.5 border-b border-line p-2">
           {value.map((vid) => (
             <span key={vid} className="inline-flex items-center gap-1.5 rounded-full border border-line-strong bg-surface-2 py-0.5 pr-1 pl-1 text-[12.5px]">
-              <Avatar name={dir.memberName(vid)} id={vid} size={18} />
+              <MemberAvatar name={dir.memberName(vid)} id={vid} size={18} />
               {dir.memberName(vid)}
               <button type="button" onClick={() => toggle(vid)} className="grid size-5 place-items-center rounded-full text-fg-subtle hover:bg-surface-3 hover:text-fg" aria-label={`Remover ${dir.memberName(vid)}`}>
                 <X className="size-3" />
@@ -72,7 +72,7 @@ export function MemberMultiPicker({ value, onChange, includeInactive, placeholde
                 onClick={() => toggle(m.id)}
                 className={cn("flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-surface-2", selected && "bg-gold/[0.07]")}
               >
-                <Avatar name={m.name} id={m.id} size={24} />
+                <MemberAvatar name={m.name} id={m.id} size={24} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{m.name}</span>
                   <span className="block truncate text-[11.5px] text-fg-subtle">{dir.role(m.roleId)?.name}</span>

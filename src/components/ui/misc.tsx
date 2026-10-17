@@ -58,8 +58,14 @@ const AVATAR_COLORS = [
   "from-[#1f5f73] to-[#0d2b36]",
 ];
 
-export function Avatar({ name, id, size = 32, className }: { name: string; id?: string; size?: number; className?: string }) {
+export function Avatar({ name, id, size = 32, className, src }: { name: string; id?: string; size?: number; className?: string; src?: string }) {
   const key = (id ?? name).split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- data URL pequena, sem otimização do Next
+      <img src={src} alt="" aria-hidden width={size} height={size} style={{ width: size, height: size }} className={cn("shrink-0 rounded-full object-cover ring-1 ring-gold/30", className)} />
+    );
+  }
   return (
     <span
       aria-hidden
