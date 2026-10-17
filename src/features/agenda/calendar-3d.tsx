@@ -80,12 +80,19 @@ export function Calendar3D({ className }: { className?: string }) {
   const monthKey = `${cursor.y}-${cursor.m}`;
   const monthCount = visible.filter((i) => i.date.startsWith(`${cursor.y}-${String(cursor.m + 1).padStart(2, "0")}`)).length;
 
-  const move = (delta: number) =>
+  // Direção da última troca de mês: o calendário desliza para o lado, nunca sobe ou desce.
+  const [dir, setDir] = useState<"next" | "prev">("next");
+  const slide = `${dir === "next" ? "page-right" : "page-left"} .4s cubic-bezier(.2,1,.3,1) both`;
+
+  const move = (delta: number) => {
+    setDir(delta > 0 ? "next" : "prev");
     setCursor((c) => {
       const d = new Date(Date.UTC(c.y, c.m + delta, 1));
       return { y: d.getUTCFullYear(), m: d.getUTCMonth() };
     });
+  };
   const goToday = () => {
+    setDir(cursor.y * 12 + cursor.m > ty * 12 + tm - 1 ? "prev" : "next");
     setCursor({ y: ty, m: tm - 1 });
     setSelected(today);
   };
@@ -95,7 +102,7 @@ export function Calendar3D({ className }: { className?: string }) {
       <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3.5 sm:px-5">
         <div className="min-w-0 flex-1">
           <p className="eyebrow">Agenda da Atlética</p>
-          <h2 key={monthKey} className="mt-1.5 font-display text-[24px] leading-none font-bold first-letter:uppercase [animation:flip-in_.5s_ease_both]" style={{ transformOrigin: "top" }}>
+          <h2 key={monthKey} className="mt-1.5 font-display text-[24px] leading-none font-bold first-letter:uppercase" style={{ animation: slide }}>
             {formatMonth(cursor.y, cursor.m)}
           </h2>
         </div>
@@ -135,8 +142,8 @@ export function Calendar3D({ className }: { className?: string }) {
         <ErrorState className="py-10" message={errorMessage(error, "Não foi possível carregar a agenda.")} onRetry={retry} />
       ) : (
         <div className="grid gap-5 p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_300px]">
-          <div className="[perspective:1100px] lg:pb-2">
-            <div className="origin-top transition-transform duration-500 lg:[transform:rotateX(8deg)] lg:hover:[transform:rotateX(0deg)]" style={{ transformStyle: "preserve-3d" }}>
+          <div className="min-w-0">
+            <div>
               <div className="mb-1.5 grid grid-cols-7 gap-1.5 text-center text-[11px] font-semibold text-fg-subtle" aria-hidden>
                 {WEEKDAYS.map((d, i) => (
                   <span key={i}>{d}</span>
@@ -149,7 +156,7 @@ export function Calendar3D({ className }: { className?: string }) {
                   ))}
                 </div>
               ) : (
-                <div key={monthKey} className="grid grid-cols-7 gap-1.5">
+                <div key={monthKey} className="grid grid-cols-7 gap-1.5 pb-1" style={{ animation: slide }}>
                   {cells.map((date, i) => {
                     if (!date) return <span key={`b${i}`} aria-hidden />;
                     const list = byDay.get(date) ?? [];
@@ -164,10 +171,15 @@ export function Calendar3D({ className }: { className?: string }) {
                         aria-pressed={isSel}
                         aria-label={`${formatLongDate(date)}${list.length ? `, ${list.length} ${list.length === 1 ? "compromisso" : "compromissos"}` : ""}`}
                         className={cn(
-                          "press relative flex aspect-square flex-col items-center justify-start gap-1 rounded-xl border p-1 text-[13px] font-semibold lg:aspect-[1.15] lg:items-start lg:p-2",
-                          isSel ? "border-gold bg-gold/15 shadow-[0_8px_24px_-8px_rgba(225,175,55,0.5)]" : list.length ? "border-line-strong bg-surface-2 hover:border-gold/40" : "border-line bg-sunken/60 hover:border-line-strong",
+                          "press relative flex aspect-square flex-col items-center justify-start gap-1 rounded-xl border p-1 text-[13px] font-semibold transition-[border-color,background-color,box-shadow] lg:aspect-[1.15] lg:items-start lg:p-2",
+                          // "Teclas": a borda de baixo mais grossa dá profundidade sem mexer o calendário.
+                          isSel
+                            ? "border-gold bg-gold/15 shadow-[0_3px_0_0_rgba(178,132,19,0.9),0_10px_24px_-10px_rgba(225,175,55,0.55)]"
+                            : list.length
+                              ? "border-line-strong bg-surface-2 shadow-[0_3px_0_0_var(--surface-3)] hover:border-gold/40"
+                              : "border-line bg-sunken/60 shadow-[0_2px_0_0_var(--surface-2)] hover:border-line-strong",
                         )}
-                        style={{ animation: `tile-in .45s cubic-bezier(.2,1.2,.4,1) ${Math.min(i * 14, 500)}ms both` }}
+                        style={{ animation: `pop .35s cubic-bezier(.2,1.2,.4,1) ${Math.min(i * 12, 420)}ms both` }}
                       >
                         <span className={cn("grid size-6 place-items-center rounded-full tnum", isToday && "bg-gold text-gold-ink")}>{Number(date.slice(8))}</span>
                         {kinds.length > 0 && (

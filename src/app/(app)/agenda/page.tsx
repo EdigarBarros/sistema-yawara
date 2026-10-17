@@ -7,7 +7,7 @@ export default function AgendaPage() {
   return (
     <>
       <PageHeader eyebrow="Para todo mundo acompanhar" title="Agenda" description="Eventos, reuniões, sorteios e prazos que você pode ver, num lugar só. Toque em um dia para ver os detalhes." />
-      <Calendar3D className="anim-rise" />
+      <Calendar3D />
     </>
   );
 }

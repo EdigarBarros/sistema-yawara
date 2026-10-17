@@ -48,7 +48,7 @@ export function WeekStrip({ className }: { className?: string }) {
                     "press flex h-[68px] flex-col items-center justify-center gap-1 rounded-2xl border",
                     isSel ? "border-gold bg-gold text-gold-ink" : date === today ? "border-gold/50 bg-surface-2" : "border-line bg-surface",
                   )}
-                  style={{ animation: `flip-in .5s ease ${i * 50}ms both`, transformOrigin: "top" }}
+                  style={{ animation: `pop .35s cubic-bezier(.2,1.2,.4,1) ${i * 45}ms both` }}
                 >
                   <span className={cn("text-[10.5px] font-semibold", isSel ? "text-gold-ink/80" : "text-fg-subtle")}>{SHORT[i]}</span>
                   <span className="font-display text-[19px] leading-none font-bold tnum">{Number(date.slice(8))}</span>

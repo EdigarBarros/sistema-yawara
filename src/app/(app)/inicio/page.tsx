@@ -242,7 +242,7 @@ export default function HomePage() {
         <HeroCards />
         <WeekStrip className="anim-rise" />
       </div>
-      <Calendar3D className="anim-rise mb-6 hidden lg:block" />
+      <Calendar3D className="mb-6 hidden lg:block" />
       <HomeContent preset={preset} />
     </>
   );
