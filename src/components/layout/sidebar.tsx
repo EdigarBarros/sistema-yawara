@@ -15,8 +15,8 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-/** Lista de navegação reutilizada na barra lateral e no menu do celular. */
-export function NavList({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) {
+/** Lista de navegação da barra lateral. */
+export function NavList({ collapsed }: { collapsed?: boolean }) {
   const pathname = usePathname();
   const access = useAccess();
 
@@ -40,7 +40,6 @@ export function NavList({ collapsed, onNavigate }: { collapsed?: boolean; onNavi
                 <Link
                   key={item.href}
                   href={item.href}
-                  onClick={onNavigate}
                   aria-current={active ? "page" : undefined}
                   title={collapsed ? item.label : undefined}
                   className={cn(

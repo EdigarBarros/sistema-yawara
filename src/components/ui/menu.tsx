@@ -87,7 +87,7 @@ export function PopoverContent({ className, align = "end", sideOffset = 8, ...pr
 
 export const Tabs = TB.Root;
 export const TabsContent = ({ className, ...props }: ComponentProps<typeof TB.Content>) => (
-  <TB.Content className={cn("outline-none", className)} {...props} />
+  <TB.Content className={cn("outline-none data-[state=active]:[animation:rise_.35s_cubic-bezier(.2,1.2,.4,1)_both]", className)} {...props} />
 );
 
 export function TabsList({ className, ...props }: ComponentProps<typeof TB.List>) {
@@ -102,7 +102,7 @@ export function TabsTrigger({ className, children, count, ...props }: ComponentP
   return (
     <TB.Trigger
       className={cn(
-        "relative -mb-px inline-flex h-10 items-center gap-2 border-b-2 border-transparent px-3 text-[13.5px] font-medium text-fg-muted transition-colors",
+        "relative -mb-px inline-flex h-10 items-center gap-2 border-b-2 border-transparent px-3 text-[13.5px] font-medium text-fg-muted transition-[color,border-color,transform] duration-200 active:scale-95",
         "hover:text-fg data-[state=active]:border-gold data-[state=active]:text-fg [&_svg]:size-4",
         className,
       )}

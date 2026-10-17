@@ -17,7 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/menu";
 import { Button } from "@/components/ui/button";
 import { EmptyState, ErrorState, InlineLoader } from "@/components/shared/states";
 
-const ICONS: Record<AppNotification["kind"], React.ReactNode> = {
+export const NOTIFICATION_ICONS: Record<AppNotification["kind"], React.ReactNode> = {
   document_shared: <FileText />,
   event_updated: <CalendarClock />,
   campaign_closed: <Lock />,
@@ -92,7 +92,7 @@ export function NotificationsButton() {
                     className={cn("flex w-full gap-3 px-4 py-3 text-left hover:bg-surface-2", isUnread && "bg-gold/[0.04]")}
                   >
                     <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg border border-line bg-surface-2 text-fg-muted [&_svg]:size-4">
-                      {ICONS[n.kind]}
+                      {NOTIFICATION_ICONS[n.kind]}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-start gap-2">

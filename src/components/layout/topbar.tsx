@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronRight, LogOut, Menu, Moon, RotateCcw, Search, Settings2, Sun, UserRound } from "lucide-react";
+import { ChevronRight, LogOut, Moon, RotateCcw, Search, Settings2, Sun, UserRound } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { services } from "@/services";
 import { useAccess } from "@/hooks/use-access";
 import { useSession } from "@/stores/session";
 import { resolveTheme, useUI } from "@/stores/ui";
+import { LOGOUT_LEAD_MS, useScene } from "@/stores/scene";
+import { firstName } from "@/lib/format";
 import { useCrumbTitles } from "@/stores/breadcrumb";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { Avatar, Kbd } from "@/components/ui/misc";
@@ -17,6 +19,7 @@ import { isDemoMode } from "@/lib/mode";
 import { ROUTE_LABELS } from "./nav";
 import { ProfileSwitcher } from "./profile-switcher";
 import { NotificationsButton } from "./notifications";
+import { BrandEmblem } from "./brand";
 
 function Breadcrumbs() {
   const pathname = usePathname();
@@ -57,6 +60,7 @@ function AccountMenu() {
   const access = useAccess();
   const signOut = useSession((s) => s.signOut);
   const { theme, setTheme } = useUI();
+  const playScene = useScene((s) => s.play);
   const isDark = resolveTheme(theme) === "dark";
   if (!access.user) return null;
 
@@ -122,6 +126,8 @@ function AccountMenu() {
         <DropdownMenuItem
           icon={<LogOut />}
           onSelect={async () => {
+            playScene("logout", `Até logo, ${firstName(access.user!.name)}`, "Encerrando a sessão com segurança…");
+            await new Promise((r) => setTimeout(r, LOGOUT_LEAD_MS));
             try {
               await services.auth.signOut();
             } finally {
@@ -139,19 +145,13 @@ function AccountMenu() {
 }
 
 export function Topbar() {
-  const setMobileNav = useUI((s) => s.setMobileNav);
   const setSearchOpen = useUI((s) => s.setSearchOpen);
 
   return (
     <header className="sticky top-0 z-30 flex h-[60px] items-center gap-2 border-b border-line bg-bg/80 px-3 backdrop-blur-md sm:gap-3 sm:px-5">
-      <button
-        type="button"
-        onClick={() => setMobileNav(true)}
-        className="grid size-9 shrink-0 place-items-center rounded-lg border border-line-strong text-fg-muted hover:bg-surface-2 lg:hidden"
-        aria-label="Abrir menu"
-      >
-        <Menu className="size-[18px]" />
-      </button>
+      <Link href="/inicio" aria-label="Central Yawara — início" className="shrink-0 lg:hidden">
+        <BrandEmblem size={34} priority />
+      </Link>
       <div className="min-w-0 flex-1">
         <Breadcrumbs />
       </div>
@@ -168,7 +168,9 @@ export function Topbar() {
         </span>
       </button>
       {isDemoMode && <ProfileSwitcher />}
-      <NotificationsButton />
+      <div className="hidden lg:block">
+        <NotificationsButton />
+      </div>
       <AccountMenu />
     </header>
   );

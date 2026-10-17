@@ -275,14 +275,16 @@ function InviteBody({ onClose, onUnsavedChange }: { onClose: () => void; onUnsav
 
 /* ---------------------------------- Lista ---------------------------------- */
 
-type StatusFilter = "all" | InvitationStatus;
+/** Por padrão só os pendentes; aceitos e encerrados (cancelados ou expirados) ficam em abas separadas. */
+type StatusFilter = "pending" | "accepted" | "closed";
+const inFilter = (filter: StatusFilter, s: InvitationStatus) => (filter === "closed" ? s === "revoked" || s === "expired" : s === filter);
 
 export function InvitationsTab({ onInvite }: { onInvite?: () => void }) {
   const access = useAccess();
   const dir = useDirectory();
   const canCreate = access.can("organization.create");
   const { data, isLoading, isError, error, refetch } = useInvitations(canCreate || access.can("organization.edit"));
-  const [status, setStatus] = useState<StatusFilter>("all");
+  const [status, setStatus] = useState<StatusFilter>("pending");
   const [query, setQuery] = useState("");
   const [renewed, setRenewed] = useState<InvitationResult | null>(null);
   const renew = useAction((id: ID) => services.organization.renewInvitation(id), { success: "Convite renovado", successDescription: "O link anterior deixou de funcionar." });
@@ -296,9 +298,9 @@ export function InvitationsTab({ onInvite }: { onInvite?: () => void }) {
    * mostra o integrante criado pelo aceite.
    */
   const contact = (i: Invitation) => i.email || (i.acceptedUserId ? `Integrante: ${dir.memberName(i.acceptedUserId)}` : "");
-  const count = (s: InvitationStatus) => all.filter((i) => i.status === s).length;
+  const count = (f: StatusFilter) => all.filter((i) => inFilter(f, i.status)).length;
   const rows = all
-    .filter((i) => status === "all" || i.status === status)
+    .filter((i) => inFilter(status, i.status))
     .filter((i) => matchesQuery(query, i.name, contact(i), dir.role(i.roleId)?.name))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
@@ -381,11 +383,9 @@ export function InvitationsTab({ onInvite }: { onInvite?: () => void }) {
           value={status}
           onChange={setStatus}
           options={[
-            { value: "all", label: "Todos", count: all.length },
             { value: "pending", label: "Pendentes", count: count("pending") },
-            { value: "expired", label: "Expirados", count: count("expired") },
             { value: "accepted", label: "Aceitos", count: count("accepted") },
-            { value: "revoked", label: "Revogados", count: count("revoked") },
+            { value: "closed", label: "Cancelados ou expirados", count: count("closed") },
           ]}
         />
         <div className="flex flex-wrap gap-2">
@@ -430,12 +430,12 @@ export function InvitationsTab({ onInvite }: { onInvite?: () => void }) {
             </div>
           )}
           empty={
-            all.length === 0 ? (
+            status === "pending" && !query.trim() ? (
               <EmptyState
                 compact
                 icon={<MailPlus />}
-                title="Nenhum convite"
-                description="Os convites criados aparecem aqui, com a situação e a validade de cada um."
+                title="Nenhum convite pendente"
+                description="Convites aceitos, cancelados ou expirados ficam nas outras opções acima."
                 action={
                   canCreate && onInvite ? (
                     <Button variant="primary" onClick={onInvite}>

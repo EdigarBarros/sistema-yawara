@@ -9,11 +9,9 @@ export type ThemePreference = "dark" | "light" | "system";
 interface UIState {
   theme: ThemePreference;
   sidebarCollapsed: boolean;
-  mobileNavOpen: boolean;
   searchOpen: boolean;
   setTheme: (theme: ThemePreference) => void;
   toggleSidebar: () => void;
-  setMobileNav: (open: boolean) => void;
   setSearchOpen: (open: boolean) => void;
 }
 
@@ -22,14 +20,12 @@ export const useUI = create<UIState>()(
     (set) => ({
       theme: "dark",
       sidebarCollapsed: false,
-      mobileNavOpen: false,
       searchOpen: false,
       setTheme: (theme) => {
         set({ theme });
         applyTheme(theme);
       },
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
-      setMobileNav: (mobileNavOpen) => set({ mobileNavOpen }),
       setSearchOpen: (searchOpen) => set({ searchOpen }),
     }),
     {

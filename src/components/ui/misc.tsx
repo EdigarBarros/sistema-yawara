@@ -45,7 +45,7 @@ export function Badge({
 /* ------------------------------- Skeleton ------------------------------ */
 
 export function Skeleton({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div aria-hidden className={cn("animate-pulse rounded-md bg-surface-3/70", className)} {...props} />;
+  return <div aria-hidden className={cn("rounded-md bg-[linear-gradient(110deg,var(--surface-3)_30%,var(--surface-2)_50%,var(--surface-3)_70%)] bg-[length:200%_100%] [animation:shimmer_1.6s_linear_infinite]", className)} {...props} />;
 }
 
 /* -------------------------------- Avatar ------------------------------- */

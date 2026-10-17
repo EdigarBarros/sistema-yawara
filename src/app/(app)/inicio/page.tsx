@@ -29,9 +29,12 @@ import {
   UpcomingContentPanel,
   UpcomingEventsPanel,
 } from "@/features/home/widgets";
+import { HeroCards } from "@/features/home/hero-cards";
+import { Calendar3D } from "@/features/agenda/calendar-3d";
+import { WeekStrip } from "@/features/agenda/week-strip";
 
 function Grid({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">{children}</div>;
+  return <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [&>*]:[animation:rise_.5s_cubic-bezier(.2,1.2,.4,1)_.15s_both]">{children}</div>;
 }
 
 function AdminShortcuts() {
@@ -235,6 +238,11 @@ export default function HomePage() {
         description={`${access.role.name}. Veja o que precisa da sua atenção hoje.`}
         actions={<QuickActions preset={preset} />}
       />
+      <div className="mb-6 flex flex-col gap-6 lg:hidden">
+        <HeroCards />
+        <WeekStrip className="anim-rise" />
+      </div>
+      <Calendar3D className="mb-6 hidden lg:block" />
       <HomeContent preset={preset} />
     </>
   );
