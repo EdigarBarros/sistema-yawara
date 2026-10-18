@@ -28,3 +28,6 @@ firebase.*.local.json
 *service-account*.json
 *serviceAccount*.json
 *-firebase-adminsdk-*.json
+
+# Grafo local do Graphify (gerado; ver docs/setup.md)
+graphify-out/

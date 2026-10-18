@@ -71,6 +71,8 @@ O seed se recusa a rodar sem as variáveis dos emuladores ou com um projeto cujo
 npm run typecheck            # TypeScript do aplicativo
 npm run functions:typecheck  # TypeScript das Cloud Functions
 npm run lint                 # ESLint
+npm run lint:typed           # ESLint com tipos (promessas; lento)
+npm run check                # lint, tipos, testes unitários, lint tipado e build, em sequência
 npm test                     # testes unitários (Vitest)
 npm run test:rules           # regras do Firestore e do Storage, no emulador
 npm run test:functions       # Cloud Functions de ponta a ponta, no emulador
@@ -141,6 +143,10 @@ Documentação completa:
 - [Implantação com o plano Blaze](docs/backend/implantacao.md)
 - [Custos e faturamento](docs/backend/custos.md)
 - [Relatório técnico final da Etapa 2](docs/backend/relatorio-final.md)
+- [Produto e escopo](PRODUCT.md)
+- [Interface e acessibilidade](docs/design.md)
+- [Qualidade: verificações, regras de lint, revisão](docs/quality.md)
+- [Instruções para agentes de IA](AGENTS.md) e [setup das ferramentas](docs/setup.md)
 
 ---
 
