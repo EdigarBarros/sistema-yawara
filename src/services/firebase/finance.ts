@@ -28,12 +28,13 @@ import { fromSnap, mapFirestoreError } from "./convert";
 import { fileSource, isLinkFile } from "./files";
 import { getVisible } from "./queries";
 import { hasPerm, useFirebaseSession, whenAccess } from "./session";
+import { FILE_LIMIT_MB } from "@/lib/mode";
 
 /** Lançamentos carregados na lista do Financeiro (relatórios são calculados sobre eles). */
 export const FINANCE_LIST_LIMIT = 2000;
 
 /** Limite do comprovante (o mesmo do servidor: functions/src/core/files.ts). */
-export const RECEIPT_MAX_BYTES = 15 * 1024 * 1024;
+export const RECEIPT_MAX_BYTES = FILE_LIMIT_MB.financeReceipt * 1024 * 1024;
 
 const RECEIPT_TYPES: Record<string, string> = {
   pdf: "application/pdf",
@@ -76,7 +77,7 @@ function acceptableReceipt(file: File): Blob {
   // Link (implantação gratuita): o servidor confere o endereço.
   if (isLinkFile(file)) return file;
   if (file.size <= 0) throw new ServiceError("invalid", "O comprovante está vazio.");
-  if (file.size > RECEIPT_MAX_BYTES) throw new ServiceError("invalid", "O comprovante deve ter no máximo 15 MB.");
+  if (file.size > RECEIPT_MAX_BYTES) throw new ServiceError("invalid", `O comprovante deve ter no máximo ${FILE_LIMIT_MB.financeReceipt} MB.`);
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
   const type = ACCEPTED.has(file.type) ? file.type : RECEIPT_TYPES[ext];
   if (!type) throw new ServiceError("invalid", "Formato de comprovante não aceito. Envie um PDF ou uma imagem (PNG, JPG, WEBP ou GIF).");

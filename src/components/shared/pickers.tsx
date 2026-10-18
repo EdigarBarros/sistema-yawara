@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/form";
 import { cn, matchesQuery } from "@/lib/utils";
 import { fileExtension, formatBytes } from "@/lib/format";
 import { isLinkFile } from "@/lib/file-links";
-import { usesFileLinks } from "@/lib/mode";
+import { usesFileDatabase, usesFileLinks } from "@/lib/mode";
 import { LinkPicker } from "./file-link";
 
 /* ---------------------------- Seleção de pessoas ---------------------------- */
@@ -156,12 +156,14 @@ interface FilePickerProps {
 
 /**
  * Seleção de arquivo. Modo demonstração: fica na memória do navegador. Modo
- * Firebase com Storage: enviado ao servidor pela operação. Implantação
- * gratuita (sem Storage): a pessoa informa o LINK do arquivo.
+ * Firebase com Storage ou com arquivos no banco: enviado ao servidor pela
+ * operação (no banco, também dá para informar um link). Implantação gratuita
+ * só com links: a pessoa informa o LINK do arquivo.
  */
 export function FilePicker({ file, onChange, accept, hint, label = "Escolher arquivo" }: FilePickerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [linkMode, setLinkMode] = useState(false);
 
   if (file && isLinkFile(file)) {
     return (
@@ -181,6 +183,16 @@ export function FilePicker({ file, onChange, accept, hint, label = "Escolher arq
   }
 
   if (!file && usesFileLinks) return <LinkPicker onChange={onChange} />;
+  if (!file && linkMode) {
+    return (
+      <div className="grid gap-2">
+        <LinkPicker onChange={onChange} />
+        <button type="button" onClick={() => setLinkMode(false)} className="justify-self-start text-[12.5px] font-semibold text-gold-fg hover:underline">
+          Voltar e enviar o arquivo
+        </button>
+      </div>
+    );
+  }
 
   if (file) {
     return (
@@ -225,6 +237,11 @@ export function FilePicker({ file, onChange, accept, hint, label = "Escolher arq
         </button>
       </p>
       {hint && <p className="text-[11.5px] text-fg-subtle">{hint}</p>}
+      {usesFileDatabase && (
+        <button type="button" onClick={() => setLinkMode(true)} className="inline-flex items-center gap-1 text-[12px] text-fg-muted hover:text-fg hover:underline">
+          <Link2 className="size-3.5" aria-hidden /> Arquivo grande? Informe um link
+        </button>
+      )}
       <input
         ref={inputRef}
         type="file"

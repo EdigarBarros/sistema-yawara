@@ -42,7 +42,7 @@ let clients: FirebaseClients | null = null;
 
 export function isFirebaseConfigured() {
   // O bucket só é exigido quando os arquivos vão para o Cloud Storage (plano Blaze).
-  return !!(config.apiKey && config.projectId && config.appId && (FILE_STORAGE === "links" || config.storageBucket));
+  return !!(config.apiKey && config.projectId && config.appId && (FILE_STORAGE !== "storage" || config.storageBucket));
 }
 
 /** Clientes do Firebase (inicialização preguiçosa, apenas no navegador). */

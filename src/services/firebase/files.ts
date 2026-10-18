@@ -8,13 +8,19 @@
  * Abertura: download autenticado pelo SDK (as regras do Storage conferem o
  * acesso ao registro). Nenhum link público é gerado; a URL criada é local ao
  * navegador e expira em seguida.
+ *
+ * Implantação gratuita com arquivos no banco (FILE_STORAGE=database): o envio
+ * vai em pedaços pelo servidor (`system.uploadChunk`) e a abertura lê os
+ * pedaços em `fileChunks/` (as regras do Firestore conferem o acesso).
  */
+import { doc, getDoc, type Bytes } from "firebase/firestore";
 import { getBlob, ref, uploadBytesResumable } from "firebase/storage";
 import type { FileRef } from "@/types";
 import { useUploads } from "@/stores/uploads";
 import type { FileService } from "../contracts";
 import { isLinkFile, isSafeLink } from "@/lib/file-links";
 import { ServiceError } from "../errors";
+import { FILE_STORAGE } from "@/lib/mode";
 import { firebase } from "./app";
 import { callApi } from "./call";
 
@@ -119,13 +125,14 @@ export async function fileSource(
 export async function uploadFile(purpose: UploadPurpose, file: File | Blob, options: { name?: string; targetId?: string } = {}): Promise<string> {
   const name = options.name ?? (file instanceof File ? file.name : "arquivo");
   const contentType = contentTypeOf(file, name);
-  const ticket = await callApi<{ uploadId: string; path: string; fileName: string }>("system", "prepareUpload", {
+  const ticket = await callApi<{ uploadId: string; path: string; fileName: string; chunkBytes?: number }>("system", "prepareUpload", {
     purpose,
     fileName: name,
     size: file.size,
     contentType,
     ...(options.targetId ? { targetId: options.targetId } : {}),
   });
+  if (FILE_STORAGE === "database") return uploadInChunks(ticket.uploadId, ticket.chunkBytes ?? 512 * 1024, file, name);
   const { storage } = firebase();
   const task = uploadBytesResumable(ref(storage, ticket.path), file, { contentType });
   const store = useUploads.getState();
@@ -154,6 +161,80 @@ export async function uploadFile(purpose: UploadPurpose, file: File | Blob, opti
   }
 }
 
+/* ------------------- arquivos no próprio banco (plano gratuito) ------------------- */
+
+function toBase64(bytes: Uint8Array) {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
+
+/** Envia o arquivo em pedaços pelo servidor, com progresso, cancelamento e uma nova tentativa por pedaço. */
+async function uploadInChunks(uploadId: string, chunkBytes: number, file: File | Blob, name: string): Promise<string> {
+  const total = Math.max(1, Math.ceil(file.size / chunkBytes));
+  let cancelled = false;
+  const store = useUploads.getState();
+  const item = { id: uploadId, name, progress: 0, state: "uploading" as const, cancel: () => (cancelled = true) };
+  store.upsert(item);
+  try {
+    for (let index = 0; index < total; index++) {
+      if (cancelled) throw new ServiceError("invalid", "Envio cancelado. Nada foi salvo.");
+      const data = toBase64(new Uint8Array(await file.slice(index * chunkBytes, (index + 1) * chunkBytes).arrayBuffer()));
+      try {
+        await callApi("system", "uploadChunk", { uploadId, index, data });
+      } catch (error) {
+        if ((error as { code?: string })?.code !== "unavailable") throw error;
+        await callApi("system", "uploadChunk", { uploadId, index, data });
+      }
+      store.upsert({ ...item, progress: (index + 1) / total });
+    }
+    store.upsert({ ...item, progress: 1, state: "done", cancel: undefined });
+    setTimeout(() => useUploads.getState().remove(item.id), 2500);
+    return uploadId;
+  } catch (error) {
+    store.upsert({ ...item, state: cancelled ? "cancelled" : "error", cancel: undefined });
+    setTimeout(() => useUploads.getState().remove(item.id), 4000);
+    if (error instanceof ServiceError) throw error;
+    throw new ServiceError("unavailable", "O envio do arquivo falhou. Verifique a conexão e tente novamente. Nada foi salvo.");
+  }
+}
+
+/** O uploadId é o começo do nome no caminho: `{destino}/{uploadId}-{nome}`. */
+function uploadIdOf(file: FileRef) {
+  return file.path?.split("/").pop()?.match(/^([a-f0-9]{32})-/)?.[1] ?? null;
+}
+
+/** Remonta o arquivo a partir dos pedaços (as regras do Firestore conferem o acesso a cada um). */
+async function loadFromDatabase(file: FileRef): Promise<Blob> {
+  const uploadId = uploadIdOf(file);
+  if (!uploadId || !file.chunks) throw new ServiceError("not_found", "O arquivo não foi encontrado no armazenamento.");
+  const { db } = firebase();
+  const parts: Uint8Array[] = [];
+  try {
+    // De 4 em 4 pedaços: rápido sem abrir dezenas de leituras ao mesmo tempo.
+    for (let start = 0; start < file.chunks; start += 4) {
+      const ids = Array.from({ length: Math.min(4, file.chunks - start) }, (_, i) => `${uploadId}_${start + i}`);
+      const snaps = await Promise.all(ids.map((id) => getDoc(doc(db, "fileChunks", id))));
+      for (const snap of snaps) {
+        if (!snap.exists()) throw new ServiceError("not_found", "O arquivo não foi encontrado no armazenamento.");
+        parts.push((snap.get("data") as Bytes).toUint8Array());
+      }
+    }
+  } catch (error) {
+    if (error instanceof ServiceError) throw error;
+    if ((error as { code?: string })?.code === "permission-denied") throw new ServiceError("forbidden", "Seu perfil não tem acesso a este arquivo.");
+    throw new ServiceError("unavailable", "Não foi possível carregar o arquivo agora. Tente novamente.");
+  }
+  return new Blob(parts as BlobPart[], { type: blobType(file, "application/octet-stream") });
+}
+
+/** Conteúdo do arquivo, venha do banco (pedaços) ou do Cloud Storage. */
+async function loadBlob(file: FileRef): Promise<Blob> {
+  if (file.chunks) return loadFromDatabase(file);
+  const blob = await getBlob(ref(firebase().storage, file.path!));
+  return new Blob([blob], { type: blobType(file, blob.type) });
+}
+
 export const firebaseFiles: FileService = {
   getObjectUrl() {
     return null;
@@ -168,9 +249,9 @@ export const firebaseFiles: FileService = {
     if (file.url) throw new ServiceError("unavailable", "Este arquivo é um link externo: abra-o pelo botão.");
     if (!file.path) throw new ServiceError("unavailable", "Este registro não tem arquivo anexado.");
     try {
-      const blob = await getBlob(ref(firebase().storage, file.path));
-      return URL.createObjectURL(new Blob([blob], { type: blobType(file, blob.type) }));
+      return URL.createObjectURL(await loadBlob(file));
     } catch (error) {
+      if (error instanceof ServiceError) throw error;
       const code = (error as { code?: string })?.code;
       if (code === "storage/unauthorized") throw new ServiceError("forbidden", "Seu perfil não tem acesso a este arquivo.");
       throw new ServiceError("unavailable", "Não foi possível carregar o arquivo agora.");
@@ -189,8 +270,7 @@ export const firebaseFiles: FileService = {
     // Abre a janela ainda dentro do clique (evita bloqueio de pop-up) e a preenche depois do download.
     const win = !options?.download && typeof window !== "undefined" ? window.open("", "_blank") : null;
     try {
-      const blob = await getBlob(ref(firebase().storage, file.path));
-      const url = URL.createObjectURL(new Blob([blob], { type: blobType(file, blob.type) }));
+      const url = URL.createObjectURL(await loadBlob(file));
       if (win) {
         win.location.href = url;
       } else {
@@ -203,6 +283,7 @@ export const firebaseFiles: FileService = {
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (error) {
       win?.close();
+      if (error instanceof ServiceError) throw error;
       const code = (error as { code?: string })?.code;
       if (code === "storage/unauthorized") throw new ServiceError("forbidden", "Seu perfil não tem acesso a este arquivo.");
       if (code === "storage/object-not-found") throw new ServiceError("not_found", "O arquivo não foi encontrado no armazenamento.");
