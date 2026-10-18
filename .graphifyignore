@@ -1,0 +1,27 @@
+# Exclusões do Graphify (ver docs/setup.md). Nunca indexar segredos, dependências ou conteúdo gerado.
+.git/
+.next/
+node_modules/
+functions/node_modules/
+functions/lib/
+out/
+coverage/
+graphify-out/
+emulator-data/
+.agents/
+.claude/
+.codex/
+.firebase/
+.env
+.env.*
+functions/.env*
+*service-account*.json
+*serviceAccount*.json
+*-firebase-adminsdk-*.json
+*.pem
+*.key
+*.log
+*.tsbuildinfo
+package-lock.json
+functions/package-lock.json
+public/brand/
