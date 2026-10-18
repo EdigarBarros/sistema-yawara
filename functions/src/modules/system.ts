@@ -9,7 +9,7 @@ import { loadSettings, requirePermission } from "../core/actor";
 import { auditDirect, auditInTx } from "../core/audit";
 import { loadActorOutsideTx, mutation, query } from "../core/dispatch";
 import { fail } from "../core/errors";
-import { createUploadTicket, FILE_CHUNK_BYTES, readDriveFile, storesInDrive, UPLOAD_RULES, writeUploadChunk, type UploadPurpose } from "../core/files";
+import { createUploadTicket, DRIVE_CHUNK_BYTES, FILE_CHUNK_BYTES, readDriveFile, storesInDrive, UPLOAD_RULES, writeUploadChunk, type UploadPurpose } from "../core/files";
 import { requireDoc, toDTO } from "../core/records";
 import { completeDriveConnection, consumeDriveState, driveAuthUrl, driveRedirectUri, driveStatus } from "../core/drive";
 
@@ -225,7 +225,7 @@ export const systemActions = {
       data: z
         .string()
         .min(4)
-        .max(Math.ceil(FILE_CHUNK_BYTES / 3) * 4)
+        .max(Math.ceil(Math.max(FILE_CHUNK_BYTES, DRIVE_CHUNK_BYTES) / 3) * 4)
         .regex(/^[A-Za-z0-9+/]+={0,2}$/, "Pedaço do arquivo inválido."),
     }),
     async run(actor, input) {
@@ -261,7 +261,7 @@ export const systemActions = {
     module: "system",
     schema: z.object({
       uploadId: z.string().regex(/^[a-f0-9]{32}$/),
-      index: z.number().int().min(0).max(100),
+      index: z.number().int().min(0).max(200),
     }),
     async run(actor, input) {
       if (!storesInDrive()) fail("unavailable", "A leitura de arquivos pelo servidor não está ativa nesta instalação.");

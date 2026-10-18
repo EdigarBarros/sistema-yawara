@@ -191,8 +191,8 @@ async function uploadInChunks(uploadId: string, chunkBytes: number, file: File |
       }
       store.upsert({ ...item, progress: (index + 1) / total });
     }
-    store.upsert({ ...item, progress: 1, state: "done", cancel: undefined });
-    setTimeout(() => useUploads.getState().remove(item.id), 2500);
+    // Todas as partes confirmadas; o servidor confere o arquivo ao salvar o registro (ver settleUploads em call.ts).
+    store.upsert({ ...item, progress: 1, state: "verifying", cancel: undefined });
     return uploadId;
   } catch (error) {
     store.upsert({ ...item, state: cancelled ? "cancelled" : "error", cancel: undefined });
