@@ -14,7 +14,8 @@ import { useDirectory, useDocumentCategories, useFinanceCategories, useSettings 
 import { useUI, type ThemePreference } from "@/stores/ui";
 import { MODULES } from "@/lib/modules";
 import { ENTRY_TYPE_LABELS } from "@/lib/labels";
-import { FILE_STORAGE, isDemoMode, isFirebaseMode } from "@/lib/mode";
+import { API_TRANSPORT, FILE_STORAGE, isDemoMode, isFirebaseMode } from "@/lib/mode";
+import { isFirebaseConfigured } from "@/services/firebase/app";
 import { getDriveStatus, startDriveConnection } from "@/services/firebase/drive";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -479,12 +480,20 @@ const ENV = {
   region: process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION || "southamerica-east1",
   emulators: process.env.NEXT_PUBLIC_USE_EMULATORS === "true",
   appCheckKey: !!process.env.NEXT_PUBLIC_RECAPTCHA_ENTERPRISE_SITE_KEY,
-  configured: !!(
-    process.env.NEXT_PUBLIC_FIREBASE_API_KEY &&
-    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID &&
-    process.env.NEXT_PUBLIC_FIREBASE_APP_ID &&
-    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
-  ),
+  // Mesma regra do app: o bucket do Storage só é exigido quando os arquivos vão para o Cloud Storage.
+  configured: isFirebaseConfigured(),
+};
+
+/** Onde as operações rodam e onde ficam os arquivos, conforme a implantação escolhida. */
+const SERVER_LINE =
+  API_TRANSPORT === "functions"
+    ? "Operações, validações e auditoria feitas pelas Cloud Functions, no servidor."
+    : "Operações, validações e auditoria feitas no servidor do próprio aplicativo (rota de API).";
+const FILES_LINE: Record<typeof FILE_STORAGE, string> = {
+  links: "Arquivos informados como link (Google Drive, OneDrive…); o acesso a eles é controlado pelo serviço do link.",
+  database: "Arquivos guardados no próprio banco, abertos apenas por quem tem acesso ao registro (sem links públicos).",
+  drive: "Arquivos numa pasta privada do Google Drive da Atlética, abertos pelo servidor apenas para quem tem acesso ao registro.",
+  storage: "Arquivos no Cloud Storage, com download apenas para quem tem acesso (sem links públicos).",
 };
 
 function EnvironmentSection() {
@@ -514,8 +523,8 @@ function EnvironmentSection() {
       <ul className="mt-5 space-y-2 text-[13px] text-fg-muted">
         <li>• Login pelo Firebase Authentication; contas novas entram somente por convite.</li>
         <li>• Dados no Cloud Firestore, lidos conforme as regras de acesso de cada cargo.</li>
-        <li>• Operações, validações e auditoria feitas pelas Cloud Functions, no servidor.</li>
-        <li>• Arquivos no Cloud Storage, com download apenas para quem tem acesso (sem links públicos).</li>
+        <li>• {SERVER_LINE}</li>
+        <li>• {FILES_LINE[FILE_STORAGE]}</li>
       </ul>
       <ModeNotice className="mt-4">Esta tela mostra apenas a configuração pública do aplicativo. Chaves e credenciais administrativas nunca ficam no navegador.</ModeNotice>
     </Panel>
