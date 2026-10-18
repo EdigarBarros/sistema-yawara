@@ -21,7 +21,7 @@ export default function MaisPage() {
   return (
     <div className="mx-auto flex max-w-[640px] flex-col gap-5">
       <header className="anim-rise flex items-center gap-3.5">
-        <BrandEmblem size={60} className="drop-shadow-[0_6px_14px_rgba(0,0,0,0.45)]" />
+        <BrandEmblem size={60} className="drop-shadow-[0_6px_14px_var(--emblem-shadow)]" />
         <span className="min-w-0 flex-1">
           <span className="block text-[12px] text-fg-muted">Você está em</span>
           <h1 className="font-display text-[26px] leading-none font-extrabold">Todas as áreas</h1>

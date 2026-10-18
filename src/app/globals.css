@@ -46,38 +46,64 @@
   --glow-a: rgba(19, 76, 182, 0.2);
   --glow-b: rgba(225, 175, 55, 0.06);
   --shadow-pop: 0 18px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--line-strong);
+  /* Profundidade e brilhos da marca (variam por tema) */
+  --shadow-card: none;
+  --shadow-float: 0 30px 80px -30px rgba(0, 0, 0, 0.7);
+  --emblem-shadow: rgba(0, 0, 0, 0.55);
+  --aurora-a: rgba(19, 76, 182, 0.35);
+  --aurora-b: rgba(225, 175, 55, 0.16);
+  --halo-a: rgba(225, 175, 55, 0.28);
+  --halo-b: rgba(19, 76, 182, 0.18);
+  --title-from: #f6d77a;
+  --title-via: #e1af37;
+  --title-to: #c9921f;
 }
 
 [data-theme="light"] {
+  /*
+   * Modo claro da marca: papel marfim (puxado do Creme), tinta Marinho,
+   * ouro envelhecido para textos e ouro cheio para ações. Os cartões são
+   * brancos e se destacam por sombra azul-marinho suave, não por cinza.
+   */
   color-scheme: light;
-  --bg: #f3f5fa;
-  --sunken: #ffffff;
+  --bg: #f6f3ea;
+  --sunken: #fbf9f4;
   --surface: #ffffff;
-  --surface-2: #f1f4fa;
-  --surface-3: #e6ebf5;
-  --overlay: rgba(3, 15, 69, 0.38);
-  --line: rgba(3, 15, 69, 0.09);
-  --line-strong: rgba(3, 15, 69, 0.17);
-  --fg: #0b1336;
-  --fg-muted: #46527a;
-  --fg-subtle: #66729a;
+  --surface-2: #faf7f0;
+  --surface-3: #efe9da;
+  --overlay: rgba(3, 15, 69, 0.42);
+  --line: rgba(3, 15, 69, 0.085);
+  --line-strong: rgba(3, 15, 69, 0.16);
+  --fg: #030f45;
+  --fg-muted: #434b70;
+  --fg-subtle: #6b7192;
   --gold: #e1af37;
-  --gold-hover: #d5a128;
-  --gold-fg: #8f6a0c;
+  --gold-hover: #d6a12a;
+  --gold-fg: #8a6508;
   --gold-ink: #1a1404;
   --royal: #134cb6;
   --info: #134cb6;
-  --ice: #4f7896;
-  --ok: #17895a;
-  --warn: #a76300;
-  --danger: #c43c3c;
-  --spots: #030f45;
-  --spots-opacity: 0.03;
+  --ice: #3e6789;
+  --ok: #13804f;
+  --warn: #9a5c00;
+  --danger: #c0392f;
+  --spots: #b28413;
+  --spots-opacity: 0.07;
   --chart-1: #b28413;
   --chart-2: #134cb6;
-  --glow-a: rgba(19, 76, 182, 0.07);
-  --glow-b: rgba(225, 175, 55, 0.08);
+  --glow-a: rgba(225, 175, 55, 0.16);
+  --glow-b: rgba(19, 76, 182, 0.07);
   --shadow-pop: 0 18px 50px -14px rgba(3, 15, 69, 0.28), 0 0 0 1px var(--line-strong);
+  --shadow-card: 0 1px 2px rgba(3, 15, 69, 0.05), 0 8px 24px -14px rgba(3, 15, 69, 0.18);
+  --shadow-float: 0 30px 70px -30px rgba(3, 15, 69, 0.35), 0 2px 8px -2px rgba(3, 15, 69, 0.06);
+  --emblem-shadow: rgba(3, 15, 69, 0.32);
+  --aurora-a: rgba(225, 175, 55, 0.22);
+  --aurora-b: rgba(19, 76, 182, 0.09);
+  --halo-a: rgba(225, 175, 55, 0.38);
+  --halo-b: rgba(251, 235, 160, 0.35);
+  --title-from: #c9921f;
+  --title-via: #a87b10;
+  --title-to: #7d5a06;
 }
 
 @theme inline {
@@ -334,6 +360,11 @@
   }
   .claws > i:nth-child(2) { left: 22px; }
   .claws > i:nth-child(3) { left: 44px; }
+
+  /* Modo claro: cartões brancos ganham sombra marinho suave para não ficarem chapados */
+  .bg-surface.border {
+    box-shadow: var(--shadow-card);
+  }
 
   /* Entrada animada: use com style={{ animationDelay }} para escalonar */
   .anim-rise { animation: rise 0.45s cubic-bezier(0.2, 1.2, 0.4, 1) both; }

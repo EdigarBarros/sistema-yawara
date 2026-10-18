@@ -41,15 +41,15 @@ export function SceneOverlay() {
           className="absolute top-1/2 left-1/2 size-[90vmax] -translate-x-1/2 -translate-y-1/2 rounded-full"
           style={{
             background: isLogin
-              ? "radial-gradient(closest-side, rgba(225,175,55,0.22), rgba(19,76,182,0.18) 45%, transparent)"
-              : "radial-gradient(closest-side, rgba(19,76,182,0.25), transparent)",
+              ? "radial-gradient(closest-side, var(--halo-a), var(--halo-b) 45%, transparent)"
+              : "radial-gradient(closest-side, var(--aurora-a), transparent)",
             animation: "breathe 2.4s ease-in-out infinite",
           }}
         />
       </div>
       <div className="relative flex flex-col items-center px-6 text-center">
         <div style={{ animation: `${isLogin ? "scene-zoom" : "pop"} .7s cubic-bezier(.2,1.3,.4,1) both` }}>
-          <BrandEmblem size={112} className="drop-shadow-[0_18px_40px_rgba(0,0,0,0.55)]" priority />
+          <BrandEmblem size={112} className="drop-shadow-[0_18px_40px_var(--emblem-shadow)]" priority />
         </div>
         <p className="anim-rise mt-6 flex items-center gap-2 text-[12px] font-semibold tracking-[0.18em] text-gold-fg uppercase" style={{ animationDelay: "150ms" }}>
           {isLogin ? <LogIn className="size-4" aria-hidden /> : <LogOut className="size-4" aria-hidden />}
