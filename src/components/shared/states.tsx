@@ -115,9 +115,9 @@ export function FullPageLoader({ label = "Carregando a Central…" }: { label?: 
   return (
     <div role="status" className="atmos grid min-h-dvh place-items-center overflow-hidden bg-bg">
       <div className="relative flex flex-col items-center gap-5">
-        <span aria-hidden className="absolute top-[-40px] size-[200px] rounded-full bg-[radial-gradient(closest-side,rgba(225,175,55,0.22),rgba(19,76,182,0.16),transparent)]" style={{ animation: "breathe 2.4s ease-in-out infinite" }} />
+        <span aria-hidden className="absolute top-[-40px] size-[200px] rounded-full bg-[radial-gradient(closest-side,var(--halo-a),var(--halo-b),transparent)]" style={{ animation: "breathe 2.4s ease-in-out infinite" }} />
         <div className="relative" style={{ animation: "pop .6s cubic-bezier(.2,1.3,.4,1) both, float-soft 3s ease-in-out .6s infinite" }}>
-          <BrandEmblem size={88} className="drop-shadow-[0_14px_30px_rgba(0,0,0,0.5)]" priority />
+          <BrandEmblem size={88} className="drop-shadow-[0_14px_30px_var(--emblem-shadow)]" priority />
         </div>
         <span className="flex gap-1.5" aria-hidden>
           {[0, 1, 2].map((i) => (

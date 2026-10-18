@@ -289,8 +289,8 @@ export default function LoginPage() {
     <div className="atmos relative min-h-dvh overflow-hidden bg-[var(--bg)]">
       {/* Fundo vivo: duas manchas de luz que se movem devagar */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-        <div className="absolute -top-[20%] -left-[10%] size-[70vmax] rounded-full bg-[radial-gradient(closest-side,rgba(19,76,182,0.35),transparent)] blur-2xl" style={{ animation: "drift-a 18s ease-in-out infinite" }} />
-        <div className="absolute -right-[15%] -bottom-[25%] size-[60vmax] rounded-full bg-[radial-gradient(closest-side,rgba(225,175,55,0.16),transparent)] blur-2xl" style={{ animation: "drift-b 22s ease-in-out infinite" }} />
+        <div className="absolute -top-[20%] -left-[10%] size-[70vmax] rounded-full bg-[radial-gradient(closest-side,var(--aurora-a),transparent)] blur-2xl" style={{ animation: "drift-a 18s ease-in-out infinite" }} />
+        <div className="absolute -right-[15%] -bottom-[25%] size-[60vmax] rounded-full bg-[radial-gradient(closest-side,var(--aurora-b),transparent)] blur-2xl" style={{ animation: "drift-b 22s ease-in-out infinite" }} />
       </div>
       <div className="claws top-[-30px] left-[-20px] hidden sm:block" aria-hidden>
         {[0, 1, 2].map((i) => (
@@ -312,9 +312,9 @@ export default function LoginPage() {
           </div>
           <div className="flex max-w-[540px] flex-col items-center lg:items-start">
             <div className="relative mb-6 lg:mb-8">
-              <span aria-hidden className="absolute inset-[-30%] rounded-full bg-[radial-gradient(closest-side,rgba(225,175,55,0.28),rgba(19,76,182,0.18),transparent)]" style={{ animation: "breathe 5s ease-in-out infinite" }} />
+              <span aria-hidden className="absolute inset-[-30%] rounded-full bg-[radial-gradient(closest-side,var(--halo-a),var(--halo-b),transparent)]" style={{ animation: "breathe 5s ease-in-out infinite" }} />
               <div className="relative" style={{ animation: "pop .7s cubic-bezier(.2,1.3,.4,1) both, float-soft 6s ease-in-out .7s infinite" }}>
-                <BrandEmblem size={136} className="size-[104px] drop-shadow-[0_18px_40px_rgba(0,0,0,0.55)] lg:size-[136px]" priority />
+                <BrandEmblem size={136} className="size-[104px] drop-shadow-[0_18px_40px_var(--emblem-shadow)] lg:size-[136px]" priority />
               </div>
             </div>
             <p className="eyebrow anim-rise !text-gold-fg" style={{ animationDelay: "120ms" }}>
@@ -322,7 +322,7 @@ export default function LoginPage() {
             </p>
             <h1 className="anim-rise mt-3 font-display text-[42px] leading-[1.02] font-bold tracking-[-0.01em] sm:text-[60px]" style={{ animationDelay: "200ms" }}>
               Central{" "}
-              <span className="bg-gradient-to-r from-[#f6d77a] via-gold to-[#c9921f] bg-clip-text text-transparent">Yawara</span>
+              <span className="bg-gradient-to-r from-[var(--title-from)] via-[var(--title-via)] to-[var(--title-to)] bg-clip-text text-transparent">Yawara</span>
             </h1>
             <p className="anim-rise mt-2 font-display text-[17px] font-medium text-ice sm:text-[19px]" style={{ animationDelay: "280ms" }}>
               Associação Atlética Acadêmica de Psicologia
@@ -356,7 +356,7 @@ export default function LoginPage() {
         {/* Formulário */}
         <section className="flex justify-center px-4 pb-10 sm:px-10 lg:py-12">
           <div
-            className="anim-rise relative w-full max-w-[440px] rounded-[28px] border border-line-strong bg-surface/70 p-6 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.7)] backdrop-blur-xl sm:p-8"
+            className="anim-rise relative w-full max-w-[440px] rounded-[28px] border border-line-strong bg-surface/80 p-6 shadow-[var(--shadow-float)] backdrop-blur-xl sm:p-8"
             style={{ animationDelay: "250ms" }}
           >
             <span aria-hidden className="absolute inset-x-10 -top-px h-px bg-gradient-to-r from-transparent via-gold/70 to-transparent" />
