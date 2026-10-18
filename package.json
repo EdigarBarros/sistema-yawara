@@ -28,7 +28,8 @@
     "functions:typecheck": "npm --prefix functions run typecheck",
     "bootstrap": "tsx scripts/bootstrap.ts",
     "reset": "tsx scripts/reset.ts",
-    "suporte": "tsx scripts/support.ts"
+    "suporte": "tsx scripts/support.ts",
+    "drive:autorizar": "tsx scripts/drive-auth.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

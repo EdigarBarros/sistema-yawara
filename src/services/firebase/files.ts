@@ -12,6 +12,9 @@
  * Implantação gratuita com arquivos no banco (FILE_STORAGE=database): o envio
  * vai em pedaços pelo servidor (`system.uploadChunk`) e a abertura lê os
  * pedaços em `fileChunks/` (as regras do Firestore conferem o acesso).
+ *
+ * Com arquivos no Google Drive (FILE_STORAGE=drive): o mesmo envio em pedaços;
+ * a abertura pede os pedaços ao servidor (`system.readFile`), que confere o acesso.
  */
 import { doc, getDoc, type Bytes } from "firebase/firestore";
 import { getBlob, ref, uploadBytesResumable } from "firebase/storage";
@@ -132,7 +135,7 @@ export async function uploadFile(purpose: UploadPurpose, file: File | Blob, opti
     contentType,
     ...(options.targetId ? { targetId: options.targetId } : {}),
   });
-  if (FILE_STORAGE === "database") return uploadInChunks(ticket.uploadId, ticket.chunkBytes ?? 512 * 1024, file, name);
+  if (FILE_STORAGE === "database" || FILE_STORAGE === "drive") return uploadInChunks(ticket.uploadId, ticket.chunkBytes ?? 512 * 1024, file, name);
   const { storage } = firebase();
   const task = uploadBytesResumable(ref(storage, ticket.path), file, { contentType });
   const store = useUploads.getState();
@@ -228,8 +231,25 @@ async function loadFromDatabase(file: FileRef): Promise<Blob> {
   return new Blob(parts as BlobPart[], { type: blobType(file, "application/octet-stream") });
 }
 
-/** Conteúdo do arquivo, venha do banco (pedaços) ou do Cloud Storage. */
+/** Remonta o arquivo do Google Drive pedindo os pedaços ao servidor (que confere o acesso). */
+async function loadFromDrive(file: FileRef): Promise<Blob> {
+  const uploadId = uploadIdOf(file);
+  if (!uploadId) throw new ServiceError("not_found", "O arquivo não foi encontrado no armazenamento.");
+  const parts: Uint8Array[] = [];
+  let received = 0;
+  for (let index = 0; received < file.size; index++) {
+    const { data } = await callApi<{ data: string }>("system", "readFile", { uploadId, index });
+    const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+    if (!bytes.length) throw new ServiceError("unavailable", "Não foi possível carregar o arquivo agora. Tente novamente.");
+    parts.push(bytes);
+    received += bytes.length;
+  }
+  return new Blob(parts as BlobPart[], { type: blobType(file, "application/octet-stream") });
+}
+
+/** Conteúdo do arquivo, venha do banco (pedaços), do Google Drive ou do Cloud Storage. */
 async function loadBlob(file: FileRef): Promise<Blob> {
+  if (file.driveId) return loadFromDrive(file);
   if (file.chunks) return loadFromDatabase(file);
   const blob = await getBlob(ref(firebase().storage, file.path!));
   return new Blob([blob], { type: blobType(file, blob.type) });

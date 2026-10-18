@@ -75,6 +75,11 @@ export interface FileRef {
    * `fileChunks/{uploadId}_{n}` (o uploadId é o início do nome no `path`).
    */
   chunks?: number;
+  /**
+   * Implantação gratuita com arquivos no Google Drive da Atlética: id do
+   * arquivo na pasta privada da Central (lido só pelo servidor, que confere o acesso).
+   */
+  driveId?: string;
   /** Firebase: resumo SHA-256 do conteúdo, calculado pelo servidor. */
   sha256?: string;
   /**

@@ -31,15 +31,18 @@ export const API_TRANSPORT: "route" | "functions" = process.env.NEXT_PUBLIC_API_
  * - "database" (implantação gratuita): o arquivo é enviado e guardado em
  *   pedaços no próprio Firestore, com limites menores (até 8 MB, sem vídeo).
  *   Links continuam aceitos como alternativa.
+ * - "drive" (implantação gratuita): mesmo envio em pedaços e mesmos limites,
+ *   mas o arquivo fica no Google Drive da Atlética (pasta privada) e é lido
+ *   pelo servidor, que confere o acesso.
  * - "storage": envio para o Cloud Storage (exige o plano Blaze).
  * No modo demonstração os arquivos ficam no navegador, como antes.
  */
-const FILE_STORAGE_MODES = ["links", "database", "storage"] as const;
+const FILE_STORAGE_MODES = ["links", "database", "drive", "storage"] as const;
 export const FILE_STORAGE: (typeof FILE_STORAGE_MODES)[number] =
   FILE_STORAGE_MODES.find((m) => m === process.env.NEXT_PUBLIC_FILE_STORAGE) ?? "links";
 
-/** Arquivos guardados no próprio banco (só no modo Firebase). */
-export const usesFileDatabase = isFirebaseMode && FILE_STORAGE === "database";
+/** Envio em pedaços pelo servidor, com limites menores: no próprio banco ou no Google Drive (só no modo Firebase). */
+export const usesFileDatabase = isFirebaseMode && (FILE_STORAGE === "database" || FILE_STORAGE === "drive");
 
 /**
  * Limite por arquivo em MB, por finalidade (o mesmo do servidor:

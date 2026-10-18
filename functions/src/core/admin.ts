@@ -62,7 +62,7 @@ export const adminAuth = getAuth();
  * operação é recusada com uma mensagem clara.
  */
 export function bucket() {
-  if (process.env.FILE_STORAGE === "links" || process.env.FILE_STORAGE === "database") {
+  if (process.env.FILE_STORAGE === "links" || process.env.FILE_STORAGE === "database" || process.env.FILE_STORAGE === "drive") {
     throw new AppError("unavailable", "O envio de arquivos não está ativo nesta instalação. Informe um link para o arquivo.");
   }
   return getStorage().bucket();

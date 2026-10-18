@@ -9,7 +9,7 @@ import { loadSettings, requirePermission } from "../core/actor";
 import { auditInTx } from "../core/audit";
 import { mutation, query } from "../core/dispatch";
 import { fail } from "../core/errors";
-import { createUploadTicket, FILE_CHUNK_BYTES, UPLOAD_RULES, writeUploadChunk, type UploadPurpose } from "../core/files";
+import { createUploadTicket, FILE_CHUNK_BYTES, readDriveFile, storesInDrive, UPLOAD_RULES, writeUploadChunk, type UploadPurpose } from "../core/files";
 import { requireDoc, toDTO } from "../core/records";
 
 const MODULE_KEYS = Object.keys(MODULE_MAP) as [ModuleKey, ...ModuleKey[]];
@@ -229,6 +229,22 @@ export const systemActions = {
     }),
     async run(actor, input) {
       return writeUploadChunk(actor!, input);
+    },
+  }),
+
+  /**
+   * Implantação gratuita com arquivos no Google Drive: devolve um pedaço
+   * (base64) de um arquivo anexado a um registro que a pessoa pode ver.
+   */
+  readFile: query({
+    module: "system",
+    schema: z.object({
+      uploadId: z.string().regex(/^[a-f0-9]{32}$/),
+      index: z.number().int().min(0).max(100),
+    }),
+    async run(actor, input) {
+      if (!storesInDrive()) fail("unavailable", "A leitura de arquivos pelo servidor não está ativa nesta instalação.");
+      return readDriveFile(actor!, input);
     },
   }),
 };

@@ -140,6 +140,56 @@ Como funciona e limites:
 - Envios abandonados (a pessoa desistiu no meio) são apagados quando a mesma
   pessoa faz um novo envio.
 
+## 3.2 Arquivos no Google Drive da Atlética (até 15 GB, sem cartão)
+
+Mesmo envio pela Central do §3.1, mas o arquivo fica numa pasta privada do
+Google Drive de uma **conta Google própria da Atlética**, e não no banco. O
+Firestore guarda só os dados; o espaço é o do Drive da conta (15 GB grátis,
+divididos com o Gmail dela). Ninguém recebe link do Drive: a Central confere
+quem pode ver o registro e entrega o arquivo.
+
+**Uma vez só, com a conta Google da Atlética** (ex.: uma conta criada só para a
+Central — não use a conta pessoal de ninguém):
+
+1. Entre em <https://console.cloud.google.com> com essa conta e crie um projeto
+   (ex.: "Central Yawara Arquivos"). Não precisa de cartão.
+2. **APIs e serviços → Biblioteca**: procure **Google Drive API** e ative.
+3. **Tela de consentimento OAuth** (Google Auth Platform): tipo **Externo**,
+   nome "Central Yawara", e-mail de suporte da Atlética. Em escopos, adicione
+   só `.../auth/drive.file`. Depois, em **Público**, clique em **Publicar app**
+   (status **Em produção**). Em "Teste", a autorização expira em 7 dias.
+4. **Clientes → Criar cliente OAuth**, tipo **App para computador**. Copie o
+   ID do cliente e a chave secreta.
+5. No seu computador, na pasta do projeto (`npm install` feito):
+   ```bash
+   GOOGLE_DRIVE_CLIENT_ID=<id> GOOGLE_DRIVE_CLIENT_SECRET=<chave> npm run drive:autorizar
+   ```
+   Abra o endereço mostrado, entre com a **conta da Atlética** e autorize. O
+   Google avisa que o app não foi verificado: é esperado (o app é da própria
+   Atlética e só pede acesso aos arquivos que ele criar) — clique em
+   **Avançado → Acessar Central Yawara**. O script cria a pasta
+   "Central Yawara — arquivos" e mostra `GOOGLE_DRIVE_REFRESH_TOKEN` e
+   `GOOGLE_DRIVE_FOLDER_ID`.
+6. Na Vercel, **Settings → Environment Variables**: `NEXT_PUBLIC_FILE_STORAGE`
+   e `FILE_STORAGE` = `drive`, mais `GOOGLE_DRIVE_CLIENT_ID`,
+   `GOOGLE_DRIVE_CLIENT_SECRET`, `GOOGLE_DRIVE_REFRESH_TOKEN` e
+   `GOOGLE_DRIVE_FOLDER_ID`. Faça um novo deploy (Deployments → ⋯ → Redeploy).
+
+Cuidados:
+
+- O refresh token e a chave secreta dão acesso aos arquivos da Central: só no
+  painel da hospedagem; nunca em chat, e-mail ou no repositório.
+- Não apague nem mova a pasta "Central Yawara — arquivos". Arquivos apagados
+  no Drive deixam de abrir na Central.
+- Se aparecer "A autorização do Google Drive da Central expirou ou foi
+  revogada" (ex.: o acesso foi removido em myaccount.google.com → Segurança,
+  ou a Central ficou 6 meses sem usar o Drive), repita o passo 5 e troque
+  `GOOGLE_DRIVE_REFRESH_TOKEN` na Vercel.
+- Limites por arquivo iguais aos do §3.1 (documentos e marketing até 8 MB,
+  comprovantes até 4 MB, sem vídeo). O arquivo passa pelo banco só durante o
+  envio; ao anexar, vai para o Drive e os pedaços são apagados.
+- Arquivos enviados antes no modo `database` continuam abrindo normalmente.
+
 ## 4. Estrutura inicial e primeiro administrador
 
 Uma única vez, no computador, com o JSON da conta de serviço:
