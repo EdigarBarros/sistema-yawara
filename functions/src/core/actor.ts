@@ -34,6 +34,7 @@ export function memberFromDoc(id: string, data: FirebaseFirestore.DocumentData):
     departmentIds: data.departmentIds ?? [],
     status: data.status,
     joinedAt: data.joinedAt,
+    ...(typeof data.photo === "string" ? { photo: data.photo } : {}),
   };
 }
 

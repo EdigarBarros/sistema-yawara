@@ -1,18 +1,17 @@
 "use client";
 
+import { MemberAvatar } from "@/components/shared/member-avatar";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronRight, LogOut, Moon, RotateCcw, Search, Settings2, Sun, UserRound } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { services } from "@/services";
 import { useAccess } from "@/hooks/use-access";
-import { useSession } from "@/stores/session";
 import { resolveTheme, useUI } from "@/stores/ui";
-import { LOGOUT_LEAD_MS, useScene } from "@/stores/scene";
-import { firstName } from "@/lib/format";
+import { useSignOut } from "@/hooks/use-sign-out";
 import { useCrumbTitles } from "@/stores/breadcrumb";
 import { notifyError, notifySuccess } from "@/lib/notify";
-import { Avatar, Kbd } from "@/components/ui/misc";
+import { Kbd } from "@/components/ui/misc";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/menu";
 import { confirmAction } from "@/components/shared/confirm";
 import { isDemoMode } from "@/lib/mode";
@@ -58,16 +57,15 @@ function AccountMenu() {
   const router = useRouter();
   const qc = useQueryClient();
   const access = useAccess();
-  const signOut = useSession((s) => s.signOut);
   const { theme, setTheme } = useUI();
-  const playScene = useScene((s) => s.play);
+  const leave = useSignOut();
   const isDark = resolveTheme(theme) === "dark";
   if (!access.user) return null;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className="flex shrink-0 items-center gap-2.5 rounded-full border border-line-strong py-1 pr-1 pl-1 hover:bg-surface-2 sm:pr-3" aria-label="Menu da conta">
-        <Avatar name={access.user.name} id={access.user.id} size={28} />
+        <MemberAvatar name={access.user.name} id={access.user.id} size={28} />
         <span className="hidden text-left leading-tight xl:block">
           <span className="block max-w-[150px] truncate text-[13px] font-semibold">{access.user.name}</span>
           <span className="block max-w-[150px] truncate text-[11px] text-fg-subtle">{access.role?.name}</span>
@@ -75,7 +73,7 @@ function AccountMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-[280px]">
         <div className="flex items-center gap-3 px-2.5 py-2.5">
-          <Avatar name={access.user.name} id={access.user.id} size={36} />
+          <MemberAvatar name={access.user.name} id={access.user.id} size={36} />
           <div className="min-w-0">
             <p className="truncate text-[13.5px] font-semibold">{access.user.name}</p>
             <p className="truncate text-[12px] text-fg-muted">{access.role?.name}</p>
@@ -88,8 +86,8 @@ function AccountMenu() {
           </div>
         </div>
         <DropdownMenuSeparator />
-        <DropdownMenuItem icon={<UserRound />} onSelect={() => router.push(`/diretoria?integrante=${access.user!.id}`)}>
-          Meu perfil e permissões
+        <DropdownMenuItem icon={<UserRound />} onSelect={() => router.push("/perfil")}>
+          Meu perfil e foto
         </DropdownMenuItem>
         <DropdownMenuItem icon={isDark ? <Sun /> : <Moon />} onSelect={() => setTheme(isDark ? "light" : "dark")}>
           {isDark ? "Usar modo claro" : "Usar modo escuro"}
@@ -125,17 +123,7 @@ function AccountMenu() {
         <DropdownMenuSeparator />
         <DropdownMenuItem
           icon={<LogOut />}
-          onSelect={async () => {
-            playScene("logout", `Até logo, ${firstName(access.user!.name)}`, "Encerrando a sessão com segurança…");
-            await new Promise((r) => setTimeout(r, LOGOUT_LEAD_MS));
-            try {
-              await services.auth.signOut();
-            } finally {
-              signOut();
-              qc.clear();
-              router.replace("/login");
-            }
-          }}
+          onSelect={() => void leave(access.user!.name)}
         >
           {isDemoMode ? "Sair da demonstração" : "Sair"}
         </DropdownMenuItem>

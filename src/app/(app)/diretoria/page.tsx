@@ -1,5 +1,6 @@
 "use client";
 
+import { MemberAvatar } from "@/components/shared/member-avatar";
 import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Building2, KeyRound, MailPlus, Pencil, Plus, ShieldCheck, Undo2, UserPlus, Users } from "lucide-react";
@@ -15,10 +16,10 @@ import { isDemoMode, isFirebaseMode } from "@/lib/mode";
 import { errorMessage } from "@/lib/notify";
 import { cn, matchesQuery } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Avatar, Badge } from "@/components/ui/misc";
+import { Badge } from "@/components/ui/misc";
 import { Sheet, SheetContent } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/menu";
-import { DetailList, PageHeader, Panel, SectionTitle } from "@/components/shared/page";
+import { PageHeader, Panel, SectionTitle } from "@/components/shared/page";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { FilterChips, FilterSelect, SearchInput, Toolbar } from "@/components/shared/filters";
 import { DemoNotice, EmptyState, ErrorState, InlineLoader, RestrictedState } from "@/components/shared/states";
@@ -27,7 +28,8 @@ import { DepartmentDialog, MemberDialog, Notice, RoleDialog } from "@/features/o
 import { InvitationsTab, InviteDialog, useInvitations } from "@/features/organization/invitations";
 import { memberEditRules, missingPermissions, permissionLock, roleAccessLock } from "@/features/organization/org-rules";
 import { isSupportRole } from "@/lib/support";
-import { PermissionMatrix, PermissionSummary } from "@/features/organization/permission-matrix";
+import { AccessCards, MemberActions, ProfileHero } from "@/features/organization/member-profile";
+import { PermissionMatrix } from "@/features/organization/permission-matrix";
 
 const TABS = ["integrantes", "convites", "cargos", "departamentos", "permissoes"] as const;
 type Tab = (typeof TABS)[number];
@@ -86,7 +88,7 @@ function MembersTab({ onOpenMember }: { onOpenMember: (id: string) => void }) {
       header: "Integrante",
       cell: (m) => (
         <div className="flex items-center gap-3">
-          <Avatar name={m.name} id={m.id} size={32} />
+          <MemberAvatar name={m.name} id={m.id} size={32} />
           <div className="min-w-0">
             <p className="flex items-center gap-2 truncate font-semibold">
               {m.name}
@@ -166,7 +168,7 @@ function MembersTab({ onOpenMember }: { onOpenMember: (id: string) => void }) {
         onRowClick={(m) => onOpenMember(m.id)}
         mobileCard={(m) => (
           <div className="flex items-center gap-3">
-            <Avatar name={m.name} id={m.id} size={34} />
+            <MemberAvatar name={m.name} id={m.id} size={34} />
             <div className="min-w-0 flex-1">
               <p className="truncate font-semibold">{m.name}</p>
               <p className="truncate text-[12px] text-fg-subtle">{dir.role(m.roleId)?.name}</p>
@@ -427,6 +429,7 @@ export default function OrganizationPage() {
   const showInvites = isFirebaseMode && (access.can("organization.create") || access.can("organization.edit"));
   const invitations = useInvitations(showInvites);
   const [inviting, setInviting] = useState(false);
+  const [editingMember, setEditingMember] = useState<Member | null>(null);
   const requested = params.get("aba") as Tab | null;
   const tab: Tab = requested && TABS.includes(requested) && (requested !== "convites" || showInvites) ? requested : "integrantes";
   const memberId = params.get("integrante");
@@ -504,41 +507,22 @@ export default function OrganizationPage() {
 
       <Sheet open={!!member} onOpenChange={(o) => !o && setParams({ integrante: null })}>
         {member && (
-          <SheetContent eyebrow={isDemoMode ? "Integrante (fictício)" : "Integrante"} title={member.name} description={memberRole?.name}>
+          <SheetContent
+            eyebrow={isDemoMode ? "Dados fictícios" : undefined}
+            title="Perfil do integrante"
+            footer={<MemberActions member={member} onEdit={() => setEditingMember(member)} onDeleted={() => setParams({ integrante: null })} />}
+          >
             <div className="space-y-6">
-              <div className="flex items-center gap-4">
-                <Avatar name={member.name} id={member.id} size={56} />
-                <div>
-                  <p className="text-[15px] font-semibold">{member.name}</p>
-                  {member.email && <p className="text-[13px] text-fg-muted">{member.email}</p>}
-                  <div className="mt-1.5">
-                    <MemberStatusPill active={member.status === "active"} />
-                  </div>
-                </div>
-              </div>
-              <DetailList
-                items={[
-                  { label: "Cargo", value: memberRole?.name ?? "—" },
-                  { label: "Departamento", value: dir.departmentOf(member.id)?.name ?? "—" },
-                  { label: "Nível", value: memberRole ? ROLE_LEVEL_LABELS[memberRole.level] : "—" },
-                  {
-                    label: "Departamentos adicionais",
-                    value: (member.departmentIds ?? []).map((d) => dir.department(d)?.name).filter(Boolean).join(", "),
-                    hidden: !(member.departmentIds ?? []).length,
-                  },
-                  { label: "Na Atlética desde", value: formatDate(member.joinedAt) },
-                  { label: "Perfil de demonstração", value: member.demoProfile ? member.demoProfile.label : "Não", hidden: !isDemoMode },
-                ]}
-              />
+              <ProfileHero member={member} role={memberRole} />
               <div>
                 <SectionTitle>O que este cargo pode fazer</SectionTitle>
-                <PermissionSummary value={memberRole?.permissions ?? []} />
+                <AccessCards permissions={memberRole?.permissions ?? []} />
               </div>
-              <ModeNotice>Não há módulo de avaliação ou acompanhamento de desempenho na Central: esse controle ocorre fora do sistema.</ModeNotice>
             </div>
           </SheetContent>
         )}
       </Sheet>
+      {editingMember && <MemberDialog open onOpenChange={(o) => !o && setEditingMember(null)} member={editingMember} />}
     </>
   );
 }

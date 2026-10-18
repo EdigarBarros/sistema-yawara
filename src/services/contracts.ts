@@ -152,6 +152,10 @@ export interface OrganizationService {
   /** Somente demonstração. Com o Firebase, integrantes entram por convite. */
   createMember(input: MemberInput): Promise<Member>;
   updateMember(id: ID, input: Partial<MemberInput> & { departmentIds?: ID[] }): Promise<Member>;
+  /** Foto de perfil da própria conta (data URL pequena); `null` remove. */
+  updateMyPhoto(photo: string | null): Promise<Member>;
+  /** Exclui o perfil (conta de acesso e cadastro). Presidência; não vale para si. */
+  deleteMember(id: ID): Promise<void>;
   listInvitations(): Promise<Invitation[]>;
   inviteMember(input: InviteInput): Promise<InvitationResult>;
   renewInvitation(id: ID): Promise<InvitationResult>;

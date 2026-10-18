@@ -1,5 +1,6 @@
 "use client";
 
+import { MemberAvatar } from "@/components/shared/member-avatar";
 import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -17,7 +18,6 @@ import { isDemoMode } from "@/lib/mode";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { Button, ButtonLink } from "@/components/ui/button";
-import { Avatar } from "@/components/ui/misc";
 import { MetaItem, PageHeader, Panel } from "@/components/shared/page";
 import { DemoNotice, RecordErrorState, PageSkeleton } from "@/components/shared/states";
 import { StatusBadge } from "@/components/shared/badges";
@@ -230,7 +230,7 @@ export default function MeetingDetailPage() {
             <ul className="divide-y divide-line">
               {m.participantIds.map((pid) => (
                 <li key={pid} className="flex items-center gap-3 px-5 py-2">
-                  <Avatar name={dir.memberName(pid)} id={pid} size={28} />
+                  <MemberAvatar name={dir.memberName(pid)} id={pid} size={28} />
                   <div className="min-w-0">
                     <p className="truncate text-[13px] font-medium">{dir.memberName(pid)}</p>
                     <p className="truncate text-[11.5px] text-fg-subtle">{dir.roleOf(pid)?.name}</p>

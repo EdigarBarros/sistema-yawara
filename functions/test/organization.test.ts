@@ -163,6 +163,39 @@ describe("suporte do sistema (acima da presidência)", () => {
   });
 });
 
+describe("foto de perfil e exclusão de perfis", () => {
+  const PHOTO = "data:image/jpeg;base64," + "A".repeat(400);
+
+  it("cada integrante troca e remove a própria foto; formato e tamanho são conferidos", async () => {
+    const res = await org<{ photo?: string }>("updateMyPhoto", "ass", { photo: PHOTO });
+    expect(res.photo).toBe(PHOTO);
+    expect((await db.doc("members/ass").get()).data()!.photo).toBe(PHOTO);
+    await org("updateMyPhoto", "ass", { photo: null });
+    expect((await db.doc("members/ass").get()).data()!.photo).toBeUndefined();
+    await expectCode(org("updateMyPhoto", "ass", { photo: "data:image/svg+xml;base64,PHN2Zz4=" }), "invalid");
+    await expectCode(org("updateMyPhoto", "ass", { photo: "data:image/jpeg;base64," + "A".repeat(130_000) }), "invalid");
+    // Não há como trocar a foto de outra pessoa: a ação só vale para a própria conta.
+    await expectCode(org("updateMyPhoto", "ass", { photo: PHOTO, id: "pres" }), "invalid");
+  });
+
+  it("presidência e vice excluem perfis; a conta some do Auth e do cadastro", async () => {
+    await org("deleteMember", "vice", { id: "ass" });
+    for (const col of ["members", "memberPrivate", "userAccess"]) expect((await db.doc(`${col}/ass`).get()).exists).toBe(false);
+    await expect(adminAuth.getUser("ass")).rejects.toThrow();
+    expect((await auditFor("ass")).some((a) => a.action === "organization.deleteMember")).toBe(true);
+  });
+
+  it("quem não é da presidência não exclui; ninguém exclui a si mesmo, a presidência (pela vice) nem o suporte", async () => {
+    await expectCode(org("deleteMember", "sec", { id: "ass" }), "forbidden");
+    await expectCode(org("deleteMember", "pres", { id: "pres" }), "invalid");
+    await expectCode(org("deleteMember", "vice", { id: "pres" }), "forbidden");
+    await db.doc(`roles/${SUPPORT_ROLE_ID}`).set({ ...supportRoleDefinition(), createdAt: "2026-10-14T12:00:00.000Z", updatedAt: "2026-10-14T12:00:00.000Z" });
+    await createMember("sup", "Suporte Teste", SUPPORT_ROLE_ID);
+    await expectCode(org("deleteMember", "pres", { id: "sup" }), "forbidden");
+    expect((await db.doc("members/sup").get()).exists).toBe(true);
+  });
+});
+
 describe("integridade", () => {
   it("repetir a mesma requisição (mesmo requestId) não duplica o registro", async () => {
     const requestId = "req-teste-idempotencia-001";

@@ -97,6 +97,28 @@ export const localOrganization: OrganizationService = {
     });
   },
 
+  async updateMyPhoto(photo) {
+    await latency();
+    return commit((db) => {
+      const ctx = accessContext(db);
+      const member = findOrThrow(db.members, ctx.user.id, "Integrante");
+      if (photo) member.photo = photo;
+      else delete member.photo;
+      return clone(member);
+    });
+  },
+
+  async deleteMember(id) {
+    await latency();
+    commit((db) => {
+      const ctx = accessContext(db);
+      requirePermission(ctx, "organization.admin", "Somente a presidência pode excluir perfis.");
+      if (id === ctx.user.id) throw new ServiceError("invalid", "Você não pode excluir o seu próprio perfil.");
+      findOrThrow(db.members, id, "Integrante");
+      db.members = db.members.filter((m) => m.id !== id);
+    });
+  },
+
   async updateMember(id, input) {
     await latency();
     return commit((db) => {
