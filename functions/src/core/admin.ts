@@ -58,11 +58,11 @@ export const adminAuth = getAuth();
 
 /**
  * Bucket do Cloud Storage. Na implantação gratuita (sem Storage, que exige o
- * plano Blaze) os arquivos são links e esta função não é usada; se for, a
+ * plano Blaze) os arquivos são links ou ficam no banco e esta função não é usada; se for, a
  * operação é recusada com uma mensagem clara.
  */
 export function bucket() {
-  if (process.env.FILE_STORAGE === "links") {
+  if (process.env.FILE_STORAGE === "links" || process.env.FILE_STORAGE === "database") {
     throw new AppError("unavailable", "O envio de arquivos não está ativo nesta instalação. Informe um link para o arquivo.");
   }
   return getStorage().bucket();

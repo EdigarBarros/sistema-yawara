@@ -27,11 +27,12 @@ import { fromSnap, mapFirestoreError } from "./convert";
 import { contentTypeOf, fileSource, isLinkFile } from "./files";
 import { getVisible, listVisible } from "./queries";
 import { useFirebaseSession, whenAccess } from "./session";
+import { FILE_LIMIT_MB } from "@/lib/mode";
 
 /* --------------------------- regras dos arquivos --------------------------- */
 
 /** Limite de tamanho de um documento (o mesmo do servidor: functions/src/core/files.ts). */
-export const DOCUMENT_MAX_BYTES = 25 * 1024 * 1024;
+export const DOCUMENT_MAX_BYTES = FILE_LIMIT_MB.document * 1024 * 1024;
 
 /** Tipos aceitos para documentos (conferidos de novo pelo servidor, pelo conteúdo real). */
 export const DOCUMENT_MIME_TYPES = [
@@ -95,7 +96,7 @@ export function documentFileProblem(file: File | Blob, name?: string): string | 
   // Link (implantação gratuita): o servidor confere o endereço.
   if (isLinkFile(file)) return null;
   if (file.size <= 0) return "O arquivo está vazio.";
-  if (file.size > DOCUMENT_MAX_BYTES) return "O arquivo é maior que 25 MB. Escolha um arquivo menor.";
+  if (file.size > DOCUMENT_MAX_BYTES) return `O arquivo é maior que ${FILE_LIMIT_MB.document} MB. Escolha um arquivo menor.`;
   if (!documentTypeOf(file, name)) return `Formato não aceito. Formatos aceitos: ${DOCUMENT_FORMATS_LABEL}.`;
   return null;
 }

@@ -20,6 +20,11 @@
  *
  * Envios abandonados e arquivos órfãos são removidos pela rotina diária
  * `cleanupUploads` (ver modules/maintenance.ts).
+ *
+ * Implantação gratuita com arquivos no banco (`FILE_STORAGE=database`): o
+ * mesmo tíquete e a mesma conferência, mas o navegador envia o arquivo em
+ * pedaços pelo servidor (`systemApi.uploadChunk`) e cada pedaço fica em
+ * `fileChunks/{uploadId}_{n}` no Firestore. Ver o fim deste arquivo.
  */
 import { createHash, randomUUID } from "node:crypto";
 import { FieldValue, type DocumentData, type DocumentReference, type Transaction } from "firebase-admin/firestore";
@@ -78,6 +83,11 @@ export const EXTENSION_BY_MIME: Record<string, string> = {
   "application/vnd.oasis.opendocument.spreadsheet": "ods",
   "application/vnd.oasis.opendocument.presentation": "odp",
 };
+
+/** Regra de envio da instalação: no banco os limites são menores e vídeo não é aceito. */
+export function uploadRule(purpose: UploadPurpose) {
+  return storesInDatabase() ? { ...UPLOAD_RULES[purpose], ...DATABASE_LIMITS[purpose] } : UPLOAD_RULES[purpose];
+}
 
 export function kindOfMime(mime: string): FileKind | null {
   for (const [kind, list] of Object.entries(MIME_BY_KIND) as [FileKind, string[]][]) if (list.includes(mime)) return kind;
@@ -197,7 +207,7 @@ export interface TicketInput {
 
 /** Cria o tíquete de envio. A permissão específica é conferida de novo ao anexar. */
 export async function createUploadTicket(actor: Actor, input: TicketInput) {
-  const rule = UPLOAD_RULES[input.purpose];
+  const rule = uploadRule(input.purpose);
   const kind = kindOfMime(input.contentType);
   if (!kind || !rule.kinds.includes(kind)) {
     fail("invalid", `Tipo de arquivo não aceito para ${rule.label}. Formatos aceitos: ${acceptedLabel(input.purpose)}.`);
@@ -208,7 +218,10 @@ export async function createUploadTicket(actor: Actor, input: TicketInput) {
   if (!officeNameMatches(fileName, input.contentType)) fail("invalid", OFFICE_NAME_MISMATCH);
   const id = randomUUID().replace(/-/g, "");
   const path = `staging/${actor.uid}/${id}/${fileName}`;
+  const inDatabase = storesInDatabase();
+  if (inDatabase) await discardMyStaleChunks(actor.uid);
   await db.doc(`uploads/${id}`).create({
+    ...(inDatabase ? { storage: "database", chunks: chunkCount(input.size) } : {}),
     uid: actor.uid,
     purpose: input.purpose,
     targetId: input.targetId ?? null,
@@ -222,12 +235,12 @@ export async function createUploadTicket(actor: Actor, input: TicketInput) {
     expiresAt: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
     expireAt: timestampInDays(7),
   });
-  return { uploadId: id, path, fileName };
+  return { uploadId: id, path, fileName, ...(inDatabase ? { chunkBytes: FILE_CHUNK_BYTES } : {}) };
 }
 
 export function acceptedLabel(purpose: UploadPurpose) {
   const names: Record<FileKind, string> = { pdf: "PDF", image: "imagens (PNG, JPG, WEBP, GIF)", office: "Word/Excel/PowerPoint/ODF", text: "TXT/CSV", video: "vídeos MP4/MOV" };
-  return UPLOAD_RULES[purpose].kinds.map((k) => names[k]).join(", ");
+  return uploadRule(purpose).kinds.map((k) => names[k]).join(", ");
 }
 
 async function sha256Of(file: StorageFile) {
@@ -310,6 +323,7 @@ export async function finalizeUpload(actor: Actor, uploadId: string, purpose: Up
   });
   if (claim.file) return claim.file;
   const ticket = claim.ticket;
+  if (ticket.storage === "database") return finalizeDatabaseUpload(uploadId, purpose, destDir, ctx, ticketRef, ticket);
 
   // 2) Compensação registrada ANTES de copiar: se a operação falhar (inclusive
   //    na própria preparação), o tíquete é descartado e o arquivo definitivo apagado.
@@ -324,19 +338,11 @@ export async function finalizeUpload(actor: Actor, uploadId: string, purpose: Up
   if (size !== ticket.size || size > ticket.maxBytes) fail("invalid", "O arquivo recebido não corresponde ao arquivo informado. Envie novamente.");
 
   const [head] = await staged.download({ start: 0, end: 4095 });
-  const detected = sniffMime(head, ticket.contentType);
-  const allowed = UPLOAD_RULES[purpose as UploadPurpose].kinds;
-  const detectedKind = detected ? kindOfMime(detected) : null;
-  if (
-    !detected ||
-    !detectedKind ||
-    !allowed.includes(detectedKind) ||
-    kindOfMime(ticket.contentType) !== detectedKind ||
-    !officeNameMatches(ticket.fileName, detected)
-  ) {
+  const detected = acceptedContent(head, ticket, purpose);
+  if (!detected) {
     await staged.delete({ ignoreNotFound: true });
     await ticketRef.update({ status: "rejected", rejectedAt: nowISO() });
-    fail("invalid", `O conteúdo do arquivo não corresponde a um formato aceito (${acceptedLabel(purpose as UploadPurpose)}).`);
+    fail("invalid", `O conteúdo do arquivo não corresponde a um formato aceito (${acceptedLabel(purpose)}).`);
   }
 
   // 3) Nome com a extensão do tipo REAL (o nome enviado nunca define como o arquivo é aberto).
@@ -356,6 +362,22 @@ export async function finalizeUpload(actor: Actor, uploadId: string, purpose: Up
   const file: FileRef = { name, size, mimeType: detected, path: destPath, sha256 };
   await ticketRef.update({ status: "finalized", file, finalizedAt: nowISO() });
   return file;
+}
+
+/** Tipo real do conteúdo, se for aceito para a finalidade e coerente com o declarado; null quando recusado. */
+function acceptedContent(head: Buffer, ticket: DocumentData, purpose: UploadPurpose): string | null {
+  const detected = sniffMime(head, ticket.contentType);
+  const detectedKind = detected ? kindOfMime(detected) : null;
+  if (
+    !detected ||
+    !detectedKind ||
+    !uploadRule(purpose).kinds.includes(detectedKind) ||
+    kindOfMime(ticket.contentType) !== detectedKind ||
+    !officeNameMatches(ticket.fileName, detected)
+  ) {
+    return null;
+  }
+  return detected;
 }
 
 /** Marca o tíquete como anexado (na fase de escrita da transação da operação). */
@@ -421,3 +443,128 @@ export async function resolveFile(
 
 /** Mensagem para quando arquivo e link chegam juntos. */
 export const ONE_FILE_SOURCE = "Informe o arquivo OU o link, não os dois.";
+
+/* ------------------------------------------------------------------------
+ * ARQUIVOS NO PRÓPRIO BANCO (implantação gratuita, sem Cloud Storage)
+ * ------------------------------------------------------------------------
+ * `FILE_STORAGE=database`. O arquivo é guardado em pedaços de 512 KB no
+ * Firestore (`fileChunks/{uploadId}_{n}`, campo `data` binário), sem custo e
+ * sem cartão, dentro da cota gratuita do banco (1 GB no total). Por isso os
+ * limites são menores (DATABASE_LIMITS) e vídeo não é aceito.
+ *
+ *  - Envio: o navegador manda cada pedaço ao servidor (`systemApi.uploadChunk`),
+ *    que confere o tíquete (dono, situação, validade) e o tamanho exato do
+ *    pedaço numa transação. O navegador nunca grava no banco diretamente.
+ *  - Conferência: igual ao Storage (assinatura binária, SHA-256, nome com a
+ *    extensão do tipo real); os pedaços não são copiados, só passam a valer
+ *    quando o tíquete vira "attached" na transação da operação.
+ *  - Leitura: as regras do Firestore liberam cada pedaço só para quem pode ver
+ *    o registro dono do arquivo (o mesmo critério das regras do Storage),
+ *    lendo o destino gravado no tíquete.
+ *  - Limpeza: sem rotina agendada no plano gratuito; ao pedir um novo envio,
+ *    os envios vencidos da própria pessoa são apagados.
+ */
+export const FILE_CHUNK_BYTES = 512 * 1024;
+
+const DATABASE_LIMITS: Record<UploadPurpose, { maxBytes: number; kinds: FileKind[] }> = {
+  document: { maxBytes: 8 * MB, kinds: ["pdf", "image", "office", "text"] },
+  saleReceipt: { maxBytes: 4 * MB, kinds: ["pdf", "image"] },
+  financeReceipt: { maxBytes: 4 * MB, kinds: ["pdf", "image"] },
+  marketingFile: { maxBytes: 8 * MB, kinds: ["pdf", "image", "office"] },
+};
+
+export function storesInDatabase() {
+  return process.env.FILE_STORAGE === "database";
+}
+
+export function chunkCount(size: number) {
+  return Math.max(1, Math.ceil(size / FILE_CHUNK_BYTES));
+}
+
+export function chunkId(uploadId: string, index: number) {
+  return `${uploadId}_${index}`;
+}
+
+function chunkRefs(uploadId: string, total: number) {
+  return Array.from({ length: total }, (_, i) => db.doc(`fileChunks/${chunkId(uploadId, i)}`));
+}
+
+async function deleteChunks(uploadId: string, total: number) {
+  const batch = db.batch();
+  for (const ref of chunkRefs(uploadId, total)) batch.delete(ref);
+  await batch.commit();
+}
+
+/** Grava um pedaço do arquivo de um tíquete pendente da própria pessoa. */
+export async function writeUploadChunk(actor: Actor, input: { uploadId: string; index: number; data: string }) {
+  if (!storesInDatabase()) fail("unavailable", "O envio em pedaços não está ativo nesta instalação.");
+  if (!/^[a-f0-9]{32}$/.test(input.uploadId)) fail("invalid", "Envio de arquivo inválido.");
+  const bytes = Buffer.from(input.data, "base64");
+  const ticketRef = db.doc(`uploads/${input.uploadId}`);
+  await db.runTransaction(async (tx) => {
+    const ticket = (await tx.get(ticketRef)).data();
+    if (!ticket) fail("invalid", "O envio do arquivo expirou ou não foi encontrado. Envie o arquivo novamente.");
+    if (ticket.uid !== actor.uid || ticket.storage !== "database") fail("forbidden", "Este envio de arquivo pertence a outra operação.");
+    if (ticket.status !== "pending") fail("conflict", USED_ELSEWHERE);
+    if (ticketExpired(ticket)) fail("invalid", EXPIRED);
+    const total = Number(ticket.chunks);
+    if (!Number.isInteger(input.index) || input.index < 0 || input.index >= total) fail("invalid", "Pedaço do arquivo fora do esperado.");
+    const expected = input.index < total - 1 ? FILE_CHUNK_BYTES : ticket.size - FILE_CHUNK_BYTES * (total - 1);
+    if (bytes.length !== expected) fail("invalid", "O arquivo recebido não corresponde ao arquivo informado. Envie novamente.");
+    tx.set(db.doc(`fileChunks/${chunkId(input.uploadId, input.index)}`), { uploadId: input.uploadId, index: input.index, uid: actor.uid, data: bytes, createdAt: nowISO() });
+  });
+  return { received: input.index };
+}
+
+/** Compensação no banco: devolve o tíquete a "pending" (os pedaços continuam, a operação pode ser repetida). */
+async function releaseDatabaseClaim(ticketRef: DocumentReference, destDir: string) {
+  await db.runTransaction(async (tx) => {
+    const ticket = (await tx.get(ticketRef)).data();
+    if (!ticket || ticket.destDir !== destDir || (ticket.status !== "finalizing" && ticket.status !== "finalized")) return;
+    tx.update(ticketRef, { status: "pending", destDir: FieldValue.delete(), file: FieldValue.delete(), claimedAt: FieldValue.delete(), claimRequestId: FieldValue.delete(), finalizedAt: FieldValue.delete(), releasedAt: nowISO() });
+  });
+}
+
+async function finalizeDatabaseUpload(
+  uploadId: string,
+  purpose: UploadPurpose,
+  destDir: string,
+  ctx: PrepareContext,
+  ticketRef: DocumentReference,
+  ticket: DocumentData,
+): Promise<FileRef> {
+  ctx.onAbort(() => releaseDatabaseClaim(ticketRef, destDir));
+  const total = Number(ticket.chunks);
+  const snaps = await db.getAll(...chunkRefs(uploadId, total));
+  if (snaps.some((snap) => !snap.exists)) fail("invalid", "O envio do arquivo não foi concluído. Envie o arquivo novamente.");
+  const content = Buffer.concat(snaps.map((snap) => Buffer.from(snap.get("data") as Uint8Array)));
+  if (content.length !== ticket.size || content.length > ticket.maxBytes) fail("invalid", "O arquivo recebido não corresponde ao arquivo informado. Envie novamente.");
+
+  const detected = acceptedContent(content.subarray(0, 4096), ticket, purpose);
+  if (!detected) {
+    await deleteChunks(uploadId, total);
+    await ticketRef.update({ status: "rejected", rejectedAt: nowISO() });
+    fail("invalid", `O conteúdo do arquivo não corresponde a um formato aceito (${acceptedLabel(purpose)}).`);
+  }
+  const name = storedFileName(ticket.fileName, detected);
+  const sha256 = createHash("sha256").update(content).digest("hex");
+  const file: FileRef = { name, size: content.length, mimeType: detected, path: `${destDir}/${uploadId}-${name}`, sha256, chunks: total };
+  await ticketRef.update({ status: "finalized", file, finalizedAt: nowISO() });
+  return file;
+}
+
+/** Apaga os pedaços de envios vencidos e nunca anexados da própria pessoa (não há rotina agendada no plano gratuito). */
+async function discardMyStaleChunks(uid: string) {
+  const stale = await db.collection("uploads").where("uid", "==", uid).where("status", "==", "pending").limit(20).get();
+  for (const doc of stale.docs) {
+    const ticket = doc.data();
+    if (ticket.storage !== "database" || !ticketExpired(ticket)) continue;
+    const discarded = await db.runTransaction(async (tx) => {
+      const fresh = (await tx.get(doc.ref)).data();
+      if (!fresh || fresh.status !== "pending") return false;
+      tx.update(doc.ref, { status: "discarded", discardedAt: nowISO() });
+      return true;
+    });
+    if (discarded) await deleteChunks(doc.id, Number(ticket.chunks) || 1);
+  }
+}

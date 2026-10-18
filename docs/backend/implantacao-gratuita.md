@@ -9,16 +9,23 @@ gratuita de Next.js (recomendado: **Vercel**, plano Hobby).
 | Login (Authentication, e-mail e senha) | Firebase Spark | gratuito |
 | Banco de dados (Cloud Firestore) e regras de segurança | Firebase Spark | gratuito dentro da cota diária |
 | Telas e operações do servidor (rota `/api/...`) | Vercel (Hobby) | gratuito |
-| Arquivos | **Links** (Google Drive, OneDrive…) | gratuito |
+| Arquivos | **No próprio banco** (até 8 MB cada) ou **links** (Google Drive, OneDrive…) | gratuito |
 
 O que muda em relação ao plano Blaze (ver [implantacao.md](implantacao.md)):
 
 - **Não há Cloud Functions.** As mesmas operações do servidor (as mesmas
   regras, transações, auditoria e testes) rodam na rota
   `src/app/api/[api]/route.ts` do aplicativo, na hospedagem.
-- **Não há Cloud Storage** (exige o Blaze). Documentos, comprovantes e artes
-  são informados como **links** de compartilhamento. Quem controla o acesso a
-  cada arquivo é o serviço onde ele está: compartilhe só com quem deve ver.
+- **Não há Cloud Storage** (exige o Blaze). Duas opções gratuitas, escolhidas
+  por `FILE_STORAGE` (ver a seção 3.1):
+  - `database` (**recomendado**): o arquivo é enviado pela Central e guardado
+    em pedaços no próprio Firestore. Até 8 MB por documento e 4 MB por
+    comprovante; vídeo não é aceito. Quem pode abrir é decidido pelas regras
+    da Central, igual aos registros. Links continuam aceitos para arquivos
+    grandes.
+  - `links`: documentos, comprovantes e artes são informados como **links**
+    de compartilhamento. Quem controla o acesso a cada arquivo é o serviço
+    onde ele está: compartilhe só com quem deve ver.
 - Não há a rotina diária de limpeza (ela só existe para envios de arquivos).
 
 > Nada aqui foi feito num projeto real durante o desenvolvimento: tudo foi
@@ -85,7 +92,7 @@ Blaze, ative com `scripts/enable-ttl.sh`.
    |---|---|
    | `NEXT_PUBLIC_DATA_SOURCE` | `firebase` |
    | `NEXT_PUBLIC_API_TRANSPORT` | `route` |
-   | `NEXT_PUBLIC_FILE_STORAGE` | `links` |
+   | `NEXT_PUBLIC_FILE_STORAGE` | `database` (ou `links`) |
    | `NEXT_PUBLIC_FIREBASE_API_KEY` | do app da Web |
    | `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | do app da Web |
    | `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | do app da Web |
@@ -94,7 +101,7 @@ Blaze, ative com `scripts/enable-ttl.sh`.
    | `FIREBASE_PROJECT_ID` | `project_id` do JSON da conta de serviço |
    | `FIREBASE_CLIENT_EMAIL` | `client_email` do JSON |
    | `FIREBASE_PRIVATE_KEY` | `private_key` do JSON (o texto inteiro, de `-----BEGIN` a `END PRIVATE KEY-----`) |
-   | `FILE_STORAGE` | `links` |
+   | `FILE_STORAGE` | o mesmo valor de `NEXT_PUBLIC_FILE_STORAGE` |
    | `APP_BASE_URL` | endereço público do site (ex.: `https://central-yawara.vercel.app`) — usado nos links de convite |
 
    As variáveis **sem** `NEXT_PUBLIC_` ficam só no servidor e nunca chegam ao
@@ -104,6 +111,34 @@ Blaze, ative com `scripts/enable-ttl.sh`.
 > Outras hospedagens com suporte a Next.js (ex.: Netlify) também servem: as
 > variáveis são as mesmas. O plano Hobby da Vercel é para uso não comercial;
 > confira os limites atuais do plano escolhido.
+
+## 3.1 Arquivos no próprio banco (sem link e sem custo)
+
+Para enviar arquivos direto pela Central, sem depender de link:
+
+1. Publique as regras atualizadas do Firestore (passo 2): elas liberam a
+   leitura de cada arquivo só para quem pode ver o registro dono dele.
+   ```bash
+   npx firebase deploy --only firestore:rules
+   ```
+2. Na Vercel, Settings → Environment Variables: troque
+   `NEXT_PUBLIC_FILE_STORAGE` **e** `FILE_STORAGE` para `database` (os dois
+   precisam ser iguais) e faça um novo deploy (Deployments → ⋯ → Redeploy).
+
+Como funciona e limites:
+
+- O arquivo vai em pedaços de 512 KB pela rota do servidor, que confere dono,
+  tamanho e validade do envio; o conteúdo real é conferido (um "PDF" que é
+  texto é recusado) e ganha um resumo SHA-256, como no Cloud Storage.
+- Tudo conta na cota gratuita do Firestore: **1 GiB no total**, somando
+  registros e arquivos. Um PDF de 2 MB usa 4 gravações para enviar e cerca de
+  16 leituras para abrir: centenas de documentos cabem com folga, mas não é
+  lugar para fotos em alta ou vídeos (use link para esses).
+- Limites por arquivo: documentos e arquivos de Marketing até 8 MB,
+  comprovantes até 4 MB.
+- Arquivos já informados como link continuam funcionando.
+- Envios abandonados (a pessoa desistiu no meio) são apagados quando a mesma
+  pessoa faz um novo envio.
 
 ## 4. Estrutura inicial e primeiro administrador
 
@@ -147,8 +182,9 @@ npm run reset -- --project <id-do-projeto> --manter <email-do-admin> --apagar
 
 O script recusa rodar se o e-mail de `--manter` não tiver conta e cadastro
 ativos, não mexe em coleções que não conhece e deixa um registro na auditoria
-nova dizendo que o reset foi feito. Com `FILE_STORAGE=links`, os arquivos
-ficam nas pastas compartilhadas e não são afetados.
+nova dizendo que o reset foi feito. Arquivos guardados no banco
+(`FILE_STORAGE=database`) também são apagados. Com `FILE_STORAGE=links`, os
+arquivos ficam nas pastas compartilhadas e não são afetados.
 
 ## 4.2 Conta de suporte (acima da Presidência)
 

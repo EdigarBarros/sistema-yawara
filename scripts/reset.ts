@@ -13,7 +13,7 @@
  *  - campanhas/rifas (com vendas e compradores), eventos (com tarefas e
  *    programação — é o que alimenta a agenda), documentos, reuniões e atas,
  *    lançamentos financeiros, conteúdos de marketing, projetos de extensão
- *    (com listas de presença);
+ *    (com listas de presença) e os arquivos guardados no próprio banco;
  *  - dados internos do servidor: índice de busca, tíquetes de envio,
  *    idempotência e contadores de códigos (os códigos recomeçam do 001).
  *
@@ -51,6 +51,7 @@ const WIPE = [
   "projects",
   "searchIndex",
   "uploads",
+  "fileChunks",
   "idempotency",
   "counters",
 ] as const;

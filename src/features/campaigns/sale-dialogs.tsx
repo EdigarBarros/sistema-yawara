@@ -14,7 +14,7 @@ import { PAYMENT_METHOD_LABELS } from "@/lib/labels";
 import { formatMoney } from "@/lib/format";
 import { formatNumberRanges, padNumber, parseNumberList } from "@/lib/raffle";
 import { errorMessage } from "@/lib/notify";
-import { isDemoMode, isFirebaseMode } from "@/lib/mode";
+import { FILE_LIMIT_MB, isDemoMode, isFirebaseMode } from "@/lib/mode";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ChoiceCards, Field, Input, Select, Textarea } from "@/components/ui/form";
@@ -472,7 +472,7 @@ function ConfirmPaymentBody({ onOpenChange, campaign, sale }: SaleDialogProps) {
               hint={
                 isDemoMode
                   ? "PDF ou imagem. Fica apenas neste navegador nesta etapa."
-                  : "PDF ou imagem, até 10 MB. Visível apenas para quem pode consultar os dados deste comprador."
+                  : `PDF ou imagem, até ${FILE_LIMIT_MB.saleReceipt} MB. Visível apenas para quem pode consultar os dados deste comprador.`
               }
             />
           </div>

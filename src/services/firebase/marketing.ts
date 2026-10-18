@@ -27,13 +27,17 @@ import { mapFirestoreError } from "./convert";
 import { contentTypeOf, isLinkFile, uploadFile } from "./files";
 import { getVisible, listVisible } from "./queries";
 import { whenAccess } from "./session";
+import { FILE_LIMIT_MB, usesFileDatabase } from "@/lib/mode";
 
 /* --------------------------- regras dos arquivos --------------------------- */
 
 /** Limite por arquivo (o mesmo do servidor: functions/src/core/files.ts). */
-export const MARKETING_MAX_BYTES = 50 * 1024 * 1024;
+export const MARKETING_MAX_BYTES = FILE_LIMIT_MB.marketingFile * 1024 * 1024;
 /** Arquivos por envio (o mesmo do servidor: functions/src/modules/marketing.ts). */
 export const MARKETING_MAX_FILES_PER_CALL = 10;
+
+/** Vídeo só com o Cloud Storage: no banco gratuito os arquivos são pequenos (até 8 MB). */
+const VIDEO_TYPES = usesFileDatabase ? [] : ["video/mp4", "video/quicktime"];
 
 const MARKETING_MIME_TYPES = [
   "application/pdf",
@@ -41,8 +45,7 @@ const MARKETING_MIME_TYPES = [
   "image/jpeg",
   "image/webp",
   "image/gif",
-  "video/mp4",
-  "video/quicktime",
+  ...VIDEO_TYPES,
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
@@ -69,16 +72,17 @@ const MIME_BY_EXTENSION: Record<string, string> = {
 };
 
 /** Valor do atributo `accept` do seletor de arquivos. */
-export const MARKETING_ACCEPT = ".pdf,.png,.jpg,.jpeg,.webp,.gif,.mp4,.mov,.docx,.xlsx,.pptx,.odt,.ods,.odp";
+export const MARKETING_ACCEPT = `.pdf,.png,.jpg,.jpeg,.webp,.gif,${usesFileDatabase ? "" : ".mp4,.mov,"}.docx,.xlsx,.pptx,.odt,.ods,.odp`;
 
-export const MARKETING_FORMATS_LABEL = "PDF, imagens (PNG, JPG, WEBP, GIF), vídeos MP4/MOV, Word/Excel/PowerPoint/ODF";
+export const MARKETING_FORMATS_LABEL = `PDF, imagens (PNG, JPG, WEBP, GIF), ${usesFileDatabase ? "" : "vídeos MP4/MOV, "}Word/Excel/PowerPoint/ODF`;
 
 /** Tipo aceito com que o arquivo será enviado: o do navegador, se aceito; senão, o da extensão. */
 function marketingTypeOf(file: File): string | null {
   const declared = contentTypeOf(file, file.name);
   if (MARKETING_MIME_TYPES.includes(declared)) return declared;
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-  return MIME_BY_EXTENSION[ext] ?? null;
+  const byExtension = MIME_BY_EXTENSION[ext];
+  return byExtension && MARKETING_MIME_TYPES.includes(byExtension) ? byExtension : null;
 }
 
 /** Problema do arquivo escolhido (tipo ou tamanho), ou `null` quando pode ser enviado. */
@@ -86,7 +90,7 @@ export function marketingFileProblem(file: File): string | null {
   // Link (implantação gratuita): o servidor confere o endereço.
   if (isLinkFile(file)) return null;
   if (file.size <= 0) return `O arquivo “${file.name}” está vazio.`;
-  if (file.size > MARKETING_MAX_BYTES) return `O arquivo “${file.name}” é maior que 50 MB. Cada arquivo deve ter no máximo 50 MB.`;
+  if (file.size > MARKETING_MAX_BYTES) return `O arquivo “${file.name}” é maior que ${FILE_LIMIT_MB.marketingFile} MB. Cada arquivo deve ter no máximo ${FILE_LIMIT_MB.marketingFile} MB.`;
   if (!marketingTypeOf(file)) return `Formato não aceito em “${file.name}”. Formatos aceitos: ${MARKETING_FORMATS_LABEL}.`;
   return null;
 }

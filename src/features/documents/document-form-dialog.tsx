@@ -24,14 +24,14 @@ import { AudiencePicker, AudienceSummary } from "@/components/shared/audience";
 import { DemoNotice } from "@/components/shared/states";
 import { DetailList } from "@/components/shared/page";
 import { FormAlert } from "@/components/shared/form-alert";
-import { isDemoMode, isFirebaseMode } from "@/lib/mode";
+import { FILE_LIMIT_MB, isDemoMode, isFirebaseMode } from "@/lib/mode";
 import { DOCUMENT_ACCEPT, DOCUMENT_FORMATS_LABEL, documentFileProblem } from "@/services/firebase/documents";
 
 export const DOC_SCOPES = ["department", "board", "all", "roles", "people"] as const;
 export const DOC_SCOPE_LABELS = { all: "Todos os integrantes autorizados" };
 
 /** Seletor de arquivo de documentos: no modo Firebase, mostra e aplica os formatos e o limite conferidos pelo servidor. */
-export const DOCUMENT_FILE_HINT = isDemoMode ? "PDF, imagens, planilhas ou textos — até 25 MB." : `${DOCUMENT_FORMATS_LABEL} — até 25 MB.`;
+export const DOCUMENT_FILE_HINT = isDemoMode ? "PDF, imagens, planilhas ou textos — até 25 MB." : `${DOCUMENT_FORMATS_LABEL} — até ${FILE_LIMIT_MB.document} MB.`;
 export const DOCUMENT_FILE_ACCEPT = isFirebaseMode ? DOCUMENT_ACCEPT : undefined;
 
 /** Modo Firebase: confere tipo e tamanho antes do envio (o servidor confere de novo, pelo conteúdo). */

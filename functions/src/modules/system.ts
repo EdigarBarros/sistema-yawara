@@ -9,7 +9,7 @@ import { loadSettings, requirePermission } from "../core/actor";
 import { auditInTx } from "../core/audit";
 import { mutation, query } from "../core/dispatch";
 import { fail } from "../core/errors";
-import { createUploadTicket, UPLOAD_RULES, type UploadPurpose } from "../core/files";
+import { createUploadTicket, FILE_CHUNK_BYTES, UPLOAD_RULES, writeUploadChunk, type UploadPurpose } from "../core/files";
 import { requireDoc, toDTO } from "../core/records";
 
 const MODULE_KEYS = Object.keys(MODULE_MAP) as [ModuleKey, ...ModuleKey[]];
@@ -209,6 +209,26 @@ export const systemActions = {
       };
       if (!allowed[input.purpose]) fail("forbidden", "Seu perfil não pode enviar este tipo de arquivo.");
       return createUploadTicket(actor, input);
+    },
+  }),
+
+  /**
+   * Implantação gratuita com arquivos no banco: recebe um pedaço (base64) do
+   * arquivo de um tíquete pendente da própria pessoa (ver core/files.ts).
+   */
+  uploadChunk: query({
+    module: "system",
+    schema: z.object({
+      uploadId: z.string().regex(/^[a-f0-9]{32}$/),
+      index: z.number().int().min(0).max(1000),
+      data: z
+        .string()
+        .min(4)
+        .max(Math.ceil(FILE_CHUNK_BYTES / 3) * 4)
+        .regex(/^[A-Za-z0-9+/]+={0,2}$/, "Pedaço do arquivo inválido."),
+    }),
+    async run(actor, input) {
+      return writeUploadChunk(actor!, input);
     },
   }),
 };

@@ -70,6 +70,11 @@ export interface FileRef {
   blobId?: string;
   /** Firebase: caminho do objeto no Cloud Storage (nunca uma URL pública). */
   path?: string;
+  /**
+   * Implantação gratuita com arquivos no banco: quantidade de pedaços em
+   * `fileChunks/{uploadId}_{n}` (o uploadId é o início do nome no `path`).
+   */
+  chunks?: number;
   /** Firebase: resumo SHA-256 do conteúdo, calculado pelo servidor. */
   sha256?: string;
   /**

@@ -252,6 +252,37 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    /*
+     * Arquivos guardados no próprio banco (implantação gratuita, FILE_STORAGE=database).
+     * Cada pedaço só pode ser lido depois que o envio foi ANEXADO a um registro
+     * (tíquete "attached", gravado na mesma transação do registro) e só por quem
+     * pode ver esse registro — o mesmo critério das regras do Storage. O destino
+     * vem do tíquete (`destDir`), nunca do navegador. Gravação só pelo servidor;
+     * listar é proibido (cada pedaço é lido pelo id).
+     */
+    function fileOwnerVisible(destDir) {
+      let parts = destDir.split('/');
+      return (parts[0] == 'documents' && parts.size() >= 2
+          && visible('documents', get(/databases/$(database)/documents/documents/$(parts[1])).data))
+        || (parts[0] == 'campaigns' && parts.size() == 4 && parts[2] == 'receipts'
+          && campaignVisible(parts[1])
+          && (can('campaigns.admin')
+              || get(/databases/$(database)/documents/campaigns/$(parts[1])/buyers/$(parts[3])).data.readers.hasAny(myTokens())))
+        || (parts[0] == 'finance' && parts.size() == 2 && can('finance.view') && moduleOn('finance'))
+        || (parts[0] == 'marketing' && parts.size() == 2
+          && visible('marketing', get(/databases/$(database)/documents/contents/$(parts[1])).data));
+    }
+
+    function chunkReadable(uploadId) {
+      let ticket = get(/databases/$(database)/documents/uploads/$(uploadId)).data;
+      return ticket.status == 'attached' && fileOwnerVisible(ticket.destDir);
+    }
+
+    match /fileChunks/{chunkId} {
+      allow get: if active() && chunkReadable(resource.data.uploadId);
+      allow list, write: if false;
+    }
+
     // Qualquer outro caminho: negado.
     match /{document=**} {
       allow read, write: if false;
