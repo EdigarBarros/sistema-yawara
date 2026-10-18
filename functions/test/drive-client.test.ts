@@ -74,6 +74,6 @@ describe("cliente do Google Drive", () => {
   it("sem configuração, recusa com mensagem para o suporte", async () => {
     vi.stubEnv("GOOGLE_DRIVE_REFRESH_TOKEN", "");
     const drive = await load([]);
-    await expect(drive.readDriveRange("x", 0, 1)).rejects.toThrow(/não está configurado/);
+    await expect(drive.readDriveRange("x", 0, 1)).rejects.toThrow(/não está conectado/);
   });
 });
