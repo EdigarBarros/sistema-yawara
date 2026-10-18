@@ -43,24 +43,36 @@ afterEach(() => {
 });
 
 describe("cliente do Google Drive", () => {
-  it("envia em duas etapas para a pasta da Central e reaproveita o token", async () => {
+  it("abre a sessão na pasta da Central, envia partes com Content-Range e reaproveita o token", async () => {
     const drive = await load([
       token,
       () => reply(200, {}, { location: "https://upload.example/sessao" }),
+      () => reply(308, {}, { range: "bytes=0-3" }),
       () => reply(200, { id: "arquivo-1" }),
       () => reply(206, new Uint8Array([1, 2, 3])),
     ]);
-    const id = await drive.uploadToDrive("ata.pdf", "application/pdf", Buffer.from("%PDF-1.4"), "a".repeat(32));
-    expect(id).toBe("arquivo-1");
+    const uri = await drive.startDriveUpload("ata.pdf", "application/pdf", 8, "a".repeat(32));
+    expect(uri).toBe("https://upload.example/sessao");
     expect(String(calls[0].init.body)).toContain("grant_type=refresh_token");
-    const meta = JSON.parse(String(calls[1].init.body));
-    expect(meta).toMatchObject({ name: "ata.pdf", parents: ["pasta-ficticia"], appProperties: { uploadId: "a".repeat(32) } });
-    expect(calls[2]).toMatchObject({ url: "https://upload.example/sessao", init: { method: "PUT" } });
+    expect(JSON.parse(String(calls[1].init.body))).toMatchObject({ name: "ata.pdf", parents: ["pasta-ficticia"], appProperties: { uploadId: "a".repeat(32) } });
+    expect((calls[1].init.headers as Record<string, string>)["x-upload-content-length"]).toBe("8");
+
+    expect(await drive.putDriveChunk(uri, Buffer.from("%PDF"), 0, 8)).toEqual({ done: false });
+    expect((calls[2].init.headers as Record<string, string>)["content-range"]).toBe("bytes 0-3/8");
+    expect(await drive.putDriveChunk(uri, Buffer.from("-1.4"), 4, 8)).toEqual({ done: true, id: "arquivo-1" });
+    expect((calls[3].init.headers as Record<string, string>)["content-range"]).toBe("bytes 4-7/8");
 
     const bytes = await drive.readDriveRange("arquivo-1", 10, 12);
     expect([...bytes]).toEqual([1, 2, 3]);
-    expect((calls[3].init.headers as Record<string, string>).range).toBe("bytes=10-12");
+    expect((calls[4].init.headers as Record<string, string>).range).toBe("bytes=10-12");
     expect(calls.filter((c) => c.url.includes("oauth2"))).toHaveLength(1);
+  });
+
+  it("parte que o Drive não guardou inteira falha (para reenviar); sessão vencida pede novo envio", async () => {
+    const short = await load([token, () => reply(308, {}, { range: "bytes=0-1" })]);
+    await expect(short.putDriveChunk("https://upload.example/s", Buffer.from("%PDF"), 0, 8)).rejects.toThrow(/não respondeu/);
+    const gone = await load([token, () => reply(404)]);
+    await expect(gone.putDriveChunk("https://upload.example/s", Buffer.from("%PDF"), 0, 8)).rejects.toThrow(/expirou/);
   });
 
   it("autorização revogada vira mensagem clara; arquivo já apagado não é erro", async () => {

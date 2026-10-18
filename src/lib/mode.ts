@@ -46,11 +46,15 @@ export const usesFileDatabase = isFirebaseMode && (FILE_STORAGE === "database" |
 
 /**
  * Limite por arquivo em MB, por finalidade (o mesmo do servidor:
- * functions/src/core/files.ts). No banco os limites são menores.
+ * functions/src/core/files.ts). No banco os limites são menores; no Google
+ * Drive o arquivo vai em partes direto para lá, até 500 MB.
  */
-export const FILE_LIMIT_MB = usesFileDatabase
-  ? { document: 8, saleReceipt: 4, financeReceipt: 4, marketingFile: 8 }
-  : { document: 25, saleReceipt: 10, financeReceipt: 15, marketingFile: 50 };
+export const FILE_LIMIT_MB =
+  isFirebaseMode && FILE_STORAGE === "drive"
+    ? { document: 500, saleReceipt: 500, financeReceipt: 500, marketingFile: 500 }
+    : usesFileDatabase
+      ? { document: 8, saleReceipt: 4, financeReceipt: 4, marketingFile: 8 }
+      : { document: 25, saleReceipt: 10, financeReceipt: 15, marketingFile: 50 };
 
 /** Arquivos como links (só no modo Firebase). */
 export const usesFileLinks = isFirebaseMode && FILE_STORAGE === "links";

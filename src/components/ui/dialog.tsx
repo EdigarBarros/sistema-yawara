@@ -4,6 +4,7 @@ import * as RD from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { UploadProgress } from "@/components/shared/upload-progress";
 
 export const Dialog = RD.Root;
 export const DialogTrigger = RD.Trigger;
@@ -56,6 +57,7 @@ export function DialogContent({ title, description, children, footer, size = "md
           </RD.Close>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">{children}</div>
+        <UploadProgress />
         {footer && <div className="flex flex-col-reverse gap-2 border-t border-line px-5 py-3.5 sm:flex-row sm:justify-end sm:px-6">{footer}</div>}
       </RD.Content>
     </RD.Portal>
@@ -97,6 +99,7 @@ export function SheetContent({ title, description, eyebrow, children, footer, wi
           </RD.Close>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">{children}</div>
+        <UploadProgress />
         {footer && <div className="flex flex-wrap gap-2 border-t border-line px-5 py-3.5">{footer}</div>}
       </RD.Content>
     </RD.Portal>

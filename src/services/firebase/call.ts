@@ -15,6 +15,7 @@ import { httpsCallable } from "firebase/functions";
 import { API_TRANSPORT } from "@/lib/mode";
 import { ServiceError, type ServiceErrorCode } from "../errors";
 import { firebase } from "./app";
+import { settleUploads } from "@/stores/uploads";
 
 export type ApiName = "auth" | "organization" | "system" | "campaigns" | "events" | "documents" | "meetings" | "finance" | "marketing" | "extension";
 
@@ -132,7 +133,29 @@ async function callRoute<T>(api: ApiName, body: { action: string; payload: unkno
   throw mapRouteError(res.status, json);
 }
 
+/** `uploadId`/`uploadIds` citados na entrada (em qualquer nível): os envios que esta operação anexa. */
+function uploadIdsIn(value: unknown, depth = 0): string[] {
+  if (!value || typeof value !== "object" || depth > 3) return [];
+  return Object.entries(value).flatMap(([key, v]) =>
+    key === "uploadId" && typeof v === "string" ? [v] : key === "uploadIds" && Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : uploadIdsIn(v, depth + 1),
+  );
+}
+
 export async function callApi<T>(api: ApiName, action: string, payload: unknown = {}, requestId: string = newRequestId()): Promise<T> {
+  const ids = uploadIdsIn(payload);
+  if (!ids.length) return callApiRaw<T>(api, action, payload, requestId);
+  // Envios em "verifying" terminam junto com a operação que os anexa (uploadChunk não os afeta: ainda estão "uploading").
+  try {
+    const result = await callApiRaw<T>(api, action, payload, requestId);
+    settleUploads(ids, true);
+    return result;
+  } catch (error) {
+    settleUploads(ids, false);
+    throw error;
+  }
+}
+
+async function callApiRaw<T>(api: ApiName, action: string, payload: unknown, requestId: string): Promise<T> {
   if (API_TRANSPORT === "route") return callRoute<T>(api, { action, payload: stripUndefined(payload), requestId });
   const { functions } = firebase();
   const fn = httpsCallable<{ action: string; payload: unknown; requestId: string }, T>(functions, `${api}Api`, { timeout: 120_000 });

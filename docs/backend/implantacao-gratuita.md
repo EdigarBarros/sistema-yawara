@@ -142,7 +142,7 @@ Como funciona e limites:
 
 ## 3.2 Arquivos no Google Drive da Atlética (até 15 GB, sem cartão)
 
-Mesmo envio pela Central do §3.1, mas o arquivo fica numa pasta privada do
+Envio pela Central, sem link: o arquivo fica numa pasta privada do
 Google Drive de uma **conta Google própria da Atlética**, e não no banco. O
 Firestore guarda só os dados; o espaço é o do Drive da conta (15 GB grátis,
 divididos com o Gmail dela). Ninguém recebe link do Drive: a Central confere
@@ -195,9 +195,15 @@ Cuidados:
   revogada" (ex.: o acesso foi removido em myaccount.google.com → Segurança,
   ou a Central ficou 6 meses sem usar o Drive), clique em **Conectar de novo**
   em Configurações → Ambiente (ou repita o script, na alternativa sem tela).
-- Limites por arquivo iguais aos do §3.1 (documentos e marketing até 8 MB,
-  comprovantes até 4 MB, sem vídeo). O arquivo passa pelo banco só durante o
-  envio; ao anexar, vai para o Drive e os pedaços são apagados.
+- Até **500 MB por arquivo** (PDF, imagens, Word/Excel/PowerPoint/ODF,
+  TXT/CSV; sem vídeo). O espaço total é o da conta da Atlética (15 GB,
+  dividido com o Gmail dela).
+- O arquivo vai em partes de 3 MB pelo servidor, que confere cada parte e a
+  repassa na hora ao Drive; nada fica no banco. A primeira parte já tem o tipo
+  real conferido; ao salvar, o servidor confere tamanho e SHA-256 no próprio
+  Drive. A barra de progresso só avança quando o Drive confirma cada parte.
+- Envios abandonados no meio são apagados do Drive quando a mesma pessoa faz
+  um novo envio.
 - Arquivos enviados antes no modo `database` continuam abrindo normalmente.
 
 ## 4. Estrutura inicial e primeiro administrador
