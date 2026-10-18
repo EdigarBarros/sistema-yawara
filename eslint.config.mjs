@@ -19,7 +19,7 @@ const config = [
   {
     // Telas falam com o Firebase só pelos serviços (src/services). O componente de sessão é a ponte autorizada.
     files: ["src/app/**/*.{ts,tsx}", "src/features/**/*.{ts,tsx}", "src/components/**/*.{ts,tsx}"],
-    ignores: ["src/app/api/**", "src/components/auth/firebase-session.tsx", "**/*.test.ts"],
+    ignores: ["src/app/api/**", "src/components/auth/firebase-session.tsx", "**/*.{test,spec}.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
         "error",

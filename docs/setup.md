@@ -72,7 +72,7 @@ Legenda: **validado** (executado com resultado observado) · **configurado** (no
 | `npm run build` | ok | ok |
 | `npm run test:functions` (emuladores) | 272 ok | sem alteração de código do servidor |
 | `npm run test:rules` (emuladores) | 6 falhas no Storage (proxy) | 38 ok com proxy desligado (causa em [quality.md](quality.md#problemas-conhecidos)) |
-| `npm run lint:typed` / `lint:rules` / `check` | não existiam | ok / ok / ok |
+| `npm run lint:typed` / `lint:rules` / `check` | não existiam | ok / ok / ok (com teto de avisos) |
 | `npm audit` | — | produção: 4 high via `firebase@13` (sem correção compatível); detalhes em [quality.md](quality.md#dependências) |
 | Fluxo no navegador (390×844, modo demo) | — | `/login` → aba Demonstração → perfil Rebeca → `/inicio` ("Bom dia, Rebeca") → `/campanhas`; 0 erros de console. Servidor de teste na porta 3100, encerrado |
 | Reaplicação | — | Rodar de novo marketplace/plugin/skill não alterou `.claude/settings.json` nem `skills-lock.json`; 12 skills, sem duplicatas |
@@ -102,6 +102,20 @@ npm run lint:rules && npm run check                       # quality gates
 Para repetir este setup preservando o que existe: reexecute o prompt 12 do toolkit; ele descobre o estado atual. Para atualizar as regras locais, copie `templates/eslint/eslint-rules/*.cjs` de uma revisão nova, rode `npm run lint:rules` e meça de novo.
 
 **Pré-requisitos para a máquina local do Edigar** (não instalados aqui): RTK (`brew install rtk-ai/tap/rtk && rtk init --global`), agent-browser (`npm i -g agent-browser@latest && agent-browser install`), Graphify (`uv tool install graphifyy`), e login do Context7 (`npx ctx7 setup --claude` ou aprovar o `.mcp.json`).
+
+## Revisão independente (18/10/2026)
+
+Subagente Sonnet, só leitura, sobre o diff completo. Configuração do lint e contagens: confirmadas, sem achados. Achados e destino:
+
+| Achado | Severidade | Destino |
+|---|---|---|
+| Faltavam avisos de licença das skills e regras copiadas (MIT; CC BY-SA 4.0 da Trail of Bits) | média | **Corrigido**: [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) |
+| Plugins de marketplaces pessoais (Ponytail, Caveman) sem versão fixa; o Caveman roda hooks em toda sessão | média | **Risco aceito e registrado**: só ativam para quem confiar no projeto no Claude Code. Versões observadas: 7.0.0 / 5.3.2 / 4.0.1. Para travar ou remover, edite `enabledPlugins` em `.claude/settings.json` |
+| Avisos não falhavam o `check` (regressão silenciosa) | baixa | **Corrigido**: teto `--max-warnings` (ver [quality.md](quality.md#regras-de-lint)) |
+| AGENTS.md mandava usar a `next-bundle-optimizer`, que está inutilizável | baixa | **Corrigido** |
+| A exclusão de testes na fronteira do Firebase cobria só `*.test.ts` | baixa | **Corrigido**: `**/*.{test,spec}.{ts,tsx}` |
+| `deploy-to-vercel/Archive.zip` duplica os scripts da skill | baixa | Mantido como veio do upstream (o `skills update` gerencia a pasta); não executa nada sozinho |
+| Nome do responsável e detalhes do container nos docs | baixa | Mantido: não há credencial, caminho pessoal nem e-mail |
 
 ## Pendências e próximos passos
 

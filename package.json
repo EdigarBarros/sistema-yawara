@@ -19,7 +19,7 @@
     "lint:typed": "eslint . --config eslint.typed.config.mjs",
     "lint:rules": "node scripts/verify-quality-rules.mjs",
     "typecheck": "tsc --noEmit",
-    "check": "npm run lint:rules && npm run lint && npm run typecheck && npm run functions:typecheck && npm test && npm run lint:typed && npm run build",
+    "check": "npm run lint:rules && npm run lint -- --max-warnings 24 && npm run typecheck && npm run functions:typecheck && npm test && npm run lint:typed -- --max-warnings 159 && npm run build",
     "test": "vitest run",
     "dev:firebase": "next dev",
     "emulators": "firebase emulators:start --project demo-yawara",

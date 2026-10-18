@@ -31,6 +31,8 @@ Rode o teste afetado durante o trabalho e `npm run check` antes de entregar. Mud
 
 Regras locais: `eslint-rules/*.cjs` são cópias byte a byte do Vibe Coding Toolkit (revisão em [setup.md](setup.md)). Não edite à mão; para atualizar, copie de novo da mesma revisão e rode `npm run lint:rules`. As regras `no-direct-console` e `no-direct-data-access` do toolkit **não** foram ativadas: o projeto não tem um módulo de log (os `console.*` existentes são avisos intencionais no navegador) nem um cliente de banco único; a fronteira de dados usa a regra nativa acima.
 
+**Teto (catraca)**: `npm run check` falha se os avisos passarem da linha de base — `lint` com `--max-warnings 24` e `lint:typed` com `--max-warnings 159` (24 de tamanho + 135 de promessas). Ao reduzir avisos, baixe o teto no `package.json` junto; nunca suba o teto para acomodar código novo.
+
 Quando uma contagem chegar a zero, promova a regra para `error`. Não aumente o limite, não adicione `eslint-disable` genérico nem ignore pastas para "zerar" uma contagem. Os 24 arquivos grandes (maior: `functions/src/modules/campaigns.ts`, 1193 linhas) são dívida para refatorar por responsabilidade, um arquivo por vez, com testes entre cada passo — trabalho separado deste setup.
 
 ## Estratégia de testes
