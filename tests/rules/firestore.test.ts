@@ -58,6 +58,7 @@ beforeEach(async () => {
     await setDoc(doc(db, "projects/p2/private/attendance"), { attendees: [{ id: "b", name: "Participante", present: false }], editors: projectEditors({ createdBy: "ext", responsibleId: "ext" }) });
     await setDoc(doc(db, "searchIndex/campaign__c-evt"), { terms: ["rifa"] });
     await setDoc(doc(db, "uploads/u1"), { uid: "ass" });
+    await setDoc(doc(db, "serverSecrets/drive"), { refreshToken: "token-ficticio", folderId: "pasta" });
   });
 });
 
@@ -193,6 +194,11 @@ describe("financeiro, auditoria, extensão e coleções internas", () => {
     await assertFails(getDoc(doc(fs("ass"), "uploads/u1")));
     await assertFails(getDoc(doc(fs("pres"), "idempotency/x")));
     await assertFails(setDoc(doc(fs("pres"), "counters/RIFA-2026"), { value: 1 }));
+  });
+  it("a conexão com o Google Drive (serverSecrets) é só do servidor, nem a Presidência lê", async () => {
+    await assertFails(getDoc(doc(fs("pres"), "serverSecrets/drive")));
+    await assertFails(setDoc(doc(fs("pres"), "serverSecrets/drive"), { refreshToken: "outro" }));
+    await assertFails(getDoc(doc(fs(), "serverSecrets/drive")));
   });
 });
 

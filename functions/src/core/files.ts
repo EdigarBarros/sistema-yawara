@@ -28,12 +28,14 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { FieldValue, type DocumentData, type DocumentReference, type Transaction } from "firebase-admin/firestore";
-import type { FileRef } from "@/types";
 import type { Actor } from "./actor";
 import { bucket, db, nowISO, Timestamp, timestampInDays } from "./admin";
 import type { PrepareContext } from "./dispatch";
 import { z } from "zod";
 import { fail } from "./errors";
+import { deleteDriveFile, readDriveRange, uploadToDrive } from "./drive";
+import { intersects } from "@/lib/access-tokens";
+import type { FileRef, Permission } from "@/types";
 
 type StorageFile = ReturnType<ReturnType<typeof bucket>["file"]>;
 
@@ -473,8 +475,18 @@ const DATABASE_LIMITS: Record<UploadPurpose, { maxBytes: number; kinds: FileKind
   marketingFile: { maxBytes: 8 * MB, kinds: ["pdf", "image", "office"] },
 };
 
+/** Envio em pedaços pelo servidor, com os limites menores: no banco e no Google Drive. */
 export function storesInDatabase() {
-  return process.env.FILE_STORAGE === "database";
+  return process.env.FILE_STORAGE === "database" || storesInDrive();
+}
+
+/**
+ * `FILE_STORAGE=drive`: o envio chega em pedaços como no banco; ao anexar, o
+ * conteúdo conferido vai para o Google Drive da Atlética e os pedaços são
+ * apagados depois da confirmação. A leitura é pelo servidor (`readDriveFile`).
+ */
+export function storesInDrive() {
+  return process.env.FILE_STORAGE === "drive";
 }
 
 export function chunkCount(size: number) {
@@ -548,9 +560,59 @@ async function finalizeDatabaseUpload(
   }
   const name = storedFileName(ticket.fileName, detected);
   const sha256 = createHash("sha256").update(content).digest("hex");
-  const file: FileRef = { name, size: content.length, mimeType: detected, path: `${destDir}/${uploadId}-${name}`, sha256, chunks: total };
+  const path = `${destDir}/${uploadId}-${name}`;
+  let file: FileRef = { name, size: content.length, mimeType: detected, path, sha256, chunks: total };
+  if (storesInDrive()) {
+    const driveId = await uploadToDrive(name, detected, content, uploadId);
+    // Se a operação falhar, o arquivo sai do Drive (os pedaços ficam para repetir a operação).
+    ctx.onAbort(() => deleteDriveFile(driveId));
+    ctx.afterCommit(() => deleteChunks(uploadId, total));
+    file = { name, size: content.length, mimeType: detected, path, sha256, driveId };
+  }
   await ticketRef.update({ status: "finalized", file, finalizedAt: nowISO() });
   return file;
+}
+
+/** Pedaço lido por vez no Drive: em base64 cabe no limite de 4,5 MB por resposta da hospedagem. */
+export const DRIVE_READ_BYTES = 3 * MB;
+
+/**
+ * Mesmo critério das regras do Firestore para os pedaços (`fileOwnerVisible`):
+ * quem pode ver o registro dono do arquivo pode abrir o arquivo.
+ */
+async function canReadFileOf(actor: Actor, destDir: string) {
+  const settings = (await db.doc("settings/system").get()).data();
+  const moduleOn = (module: string) => settings?.modules?.[module] !== false;
+  const visible = (module: string, data: DocumentData | undefined) =>
+    !!data &&
+    actor.can(`${module}.view` as Permission) &&
+    moduleOn(module) &&
+    (actor.can(`${module}.admin` as Permission) || intersects(actor.tokens, Array.isArray(data.readers) ? data.readers : []));
+  const parts = destDir.split("/");
+  if (parts[0] === "documents" && parts.length >= 2) return visible("documents", (await db.doc(`documents/${parts[1]}`).get()).data());
+  if (parts[0] === "campaigns" && parts.length === 4 && parts[2] === "receipts") {
+    if (!visible("campaigns", (await db.doc(`campaigns/${parts[1]}`).get()).data())) return false;
+    if (actor.can("campaigns.admin")) return true;
+    const buyer = (await db.doc(`campaigns/${parts[1]}/buyers/${parts[3]}`).get()).data();
+    return intersects(actor.tokens, Array.isArray(buyer?.readers) ? buyer.readers : []);
+  }
+  if (parts[0] === "finance" && parts.length === 2) return actor.can("finance.view") && moduleOn("finance");
+  if (parts[0] === "marketing" && parts.length === 2) return visible("marketing", (await db.doc(`contents/${parts[1]}`).get()).data());
+  return false;
+}
+
+/** Lê um pedaço de um arquivo do Drive já anexado a um registro que a pessoa pode ver. */
+export async function readDriveFile(actor: Actor, input: { uploadId: string; index: number }) {
+  const ticket = (await db.doc(`uploads/${input.uploadId}`).get()).data();
+  const file = ticket?.file as FileRef | undefined;
+  // Mesma resposta para "não existe" e "sem acesso": não revela quais arquivos existem.
+  if (!ticket || ticket.status !== "attached" || !file?.driveId || !(await canReadFileOf(actor, String(ticket.destDir)))) {
+    fail("forbidden", "Seu perfil não tem acesso a este arquivo.");
+  }
+  const start = input.index * DRIVE_READ_BYTES;
+  if (start >= file.size) fail("invalid", "Pedaço do arquivo fora do esperado.");
+  const data = await readDriveRange(file.driveId, start, Math.min(start + DRIVE_READ_BYTES, file.size) - 1);
+  return { data: data.toString("base64"), size: file.size };
 }
 
 /** Apaga os pedaços de envios vencidos e nunca anexados da própria pessoa (não há rotina agendada no plano gratuito). */

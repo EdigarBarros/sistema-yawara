@@ -6,11 +6,12 @@ import { MODULE_MAP } from "@/lib/modules";
 import type { DocumentCategory, FinanceCategory, InstitutionSettings, ModuleKey, SystemSettings } from "@/types";
 import { db } from "../core/admin";
 import { loadSettings, requirePermission } from "../core/actor";
-import { auditInTx } from "../core/audit";
-import { mutation, query } from "../core/dispatch";
+import { auditDirect, auditInTx } from "../core/audit";
+import { loadActorOutsideTx, mutation, query } from "../core/dispatch";
 import { fail } from "../core/errors";
-import { createUploadTicket, FILE_CHUNK_BYTES, UPLOAD_RULES, writeUploadChunk, type UploadPurpose } from "../core/files";
+import { createUploadTicket, FILE_CHUNK_BYTES, readDriveFile, storesInDrive, UPLOAD_RULES, writeUploadChunk, type UploadPurpose } from "../core/files";
 import { requireDoc, toDTO } from "../core/records";
+import { completeDriveConnection, consumeDriveState, driveAuthUrl, driveRedirectUri, driveStatus } from "../core/drive";
 
 const MODULE_KEYS = Object.keys(MODULE_MAP) as [ModuleKey, ...ModuleKey[]];
 const categoryName = z.string().trim().min(2, "Informe um nome com pelo menos 2 caracteres.").max(80, "O nome da categoria pode ter no máximo 80 caracteres.");
@@ -231,4 +232,68 @@ export const systemActions = {
       return writeUploadChunk(actor!, input);
     },
   }),
+
+  /**
+   * Implantação gratuita com arquivos no Google Drive: devolve um pedaço
+   * (base64) de um arquivo anexado a um registro que a pessoa pode ver.
+   */
+  /** Situação da conexão com o Google Drive da Atlética (sem segredos). */
+  driveStatus: query({
+    module: "system",
+    schema: z.object({}),
+    async run(actor) {
+      requirePermission(actor!, "settings.admin", "Somente quem administra as configurações pode ver a conexão com o Google Drive.");
+      return driveStatus();
+    },
+  }),
+
+  /** Começa a conexão com o Google Drive: devolve o endereço de autorização do Google. */
+  driveConnectUrl: query({
+    module: "system",
+    schema: z.object({}),
+    async run(actor) {
+      requirePermission(actor!, "settings.admin", "Somente quem administra as configurações pode conectar o Google Drive.");
+      return { url: await driveAuthUrl(actor!.uid, driveRedirectUri()) };
+    },
+  }),
+
+  readFile: query({
+    module: "system",
+    schema: z.object({
+      uploadId: z.string().regex(/^[a-f0-9]{32}$/),
+      index: z.number().int().min(0).max(100),
+    }),
+    async run(actor, input) {
+      if (!storesInDrive()) fail("unavailable", "A leitura de arquivos pelo servidor não está ativa nesta instalação.");
+      return readDriveFile(actor!, input);
+    },
+  }),
 };
+
+/**
+ * Retorno do Google depois de "Conectar Google Drive" (rota /api/drive/callback).
+ * O `state` de uso único identifica quem iniciou; a permissão é conferida de
+ * novo aqui. Devolve o resultado para a tela de Configurações, sem segredos.
+ */
+export async function finishDriveConnection(params: { code?: string | null; state?: string | null; error?: string | null }) {
+  const uid = params.state ? await consumeDriveState(params.state) : null;
+  if (!uid) return "invalid" as const;
+  if (params.error || !params.code) return "denied" as const;
+  let actor;
+  try {
+    actor = await loadActorOutsideTx(uid);
+  } catch {
+    return "forbidden" as const;
+  }
+  if (!actor.can("settings.admin")) return "forbidden" as const;
+  try {
+    await completeDriveConnection(params.code, driveRedirectUri(), { uid: actor.uid, name: actor.name });
+  } catch {
+    return "error" as const;
+  }
+  await auditDirect(
+    { uid: actor.uid, name: actor.name },
+    { action: "settings.connectDrive", module: "settings", resourceType: "settings", resourceId: "drive", summary: "Google Drive da Atlética conectado para guardar os arquivos" },
+  );
+  return "ok" as const;
+}
