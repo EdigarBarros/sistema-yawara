@@ -3,7 +3,7 @@
 import { MemberAvatar } from "@/components/shared/member-avatar";
 import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Building2, KeyRound, MailPlus, Pencil, Plus, ShieldCheck, Undo2, UserPlus, Users } from "lucide-react";
+import { Building2, KeyRound, LayoutGrid, List, MailPlus, Pencil, Plus, ShieldCheck, Undo2, UserPlus, Users } from "lucide-react";
 import type { Department, Member, Permission, Role } from "@/types";
 import { services } from "@/services";
 import { useAccess } from "@/hooks/use-access";
@@ -16,6 +16,7 @@ import { isDemoMode, isFirebaseMode } from "@/lib/mode";
 import { errorMessage } from "@/lib/notify";
 import { cn, matchesQuery } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Segmented } from "@/components/ui/form";
 import { Badge } from "@/components/ui/misc";
 import { Sheet, SheetContent } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/menu";
@@ -28,6 +29,7 @@ import { DepartmentDialog, MemberDialog, Notice, RoleDialog } from "@/features/o
 import { InvitationsTab, InviteDialog, useInvitations } from "@/features/organization/invitations";
 import { memberEditRules, missingPermissions, permissionLock, roleAccessLock } from "@/features/organization/org-rules";
 import { isSupportRole } from "@/lib/support";
+import { compareMembers, MemberCard, memberColor } from "@/features/organization/member-cards";
 import { AccessCards, MemberActions, ProfileHero } from "@/features/organization/member-profile";
 import { PermissionMatrix } from "@/features/organization/permission-matrix";
 
@@ -75,12 +77,19 @@ function MembersTab({ onOpenMember }: { onOpenMember: (id: string) => void }) {
   const [query, setQuery] = useState("");
   const [dialog, setDialog] = useState<{ member?: Member } | null>(null);
   const [inviting, setInviting] = useState(false);
+  const [view, setView] = useState<"cards" | "list">("cards");
+
+  /** Ambiente real: não oferece a edição de quem tem um cargo acima do seu (o servidor recusaria). */
+  const editLock = (m: Member) => {
+    const rules = isFirebaseMode ? memberEditRules(access.ctx, m, dir.roles) : null;
+    return rules && !rules.canEdit ? (rules.reason ?? "Você não pode editar este integrante.") : undefined;
+  };
 
   const rows = dir.members
     .filter((m) => status === "all" || m.status === status)
     .filter((m) => !dep || dir.role(m.roleId)?.departmentId === dep)
     .filter((m) => matchesQuery(query, m.name, m.email, dir.role(m.roleId)?.name))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => compareMembers(a, b, dir.role));
 
   const columns: Column<Member>[] = [
     {
@@ -88,7 +97,7 @@ function MembersTab({ onOpenMember }: { onOpenMember: (id: string) => void }) {
       header: "Integrante",
       cell: (m) => (
         <div className="flex items-center gap-3">
-          <MemberAvatar name={m.name} id={m.id} size={32} />
+          <MemberAvatar name={m.name} id={m.id} size={44} />
           <div className="min-w-0">
             <p className="flex items-center gap-2 truncate font-semibold">
               {m.name}
@@ -100,7 +109,18 @@ function MembersTab({ onOpenMember }: { onOpenMember: (id: string) => void }) {
         </div>
       ),
     },
-    { key: "role", header: "Cargo", cell: (m) => <span>{dir.role(m.roleId)?.name}</span> },
+    {
+      key: "role",
+      header: "Cargo",
+      cell: (m) => {
+        const color = memberColor(m, dir.departmentOf(m.id));
+        return (
+          <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-[12.5px] font-semibold" style={{ color, borderColor: `${color}66`, background: `${color}1a` }}>
+            {dir.role(m.roleId)?.name}
+          </span>
+        );
+      },
+    },
     { key: "dep", header: "Departamento", hideBelow: "lg", cell: (m) => <span className="text-fg-muted">{dir.departmentOf(m.id)?.name}</span> },
     { key: "since", header: "Desde", hideBelow: "xl", cell: (m) => <span className="tnum font-mono text-[12.5px] text-fg-muted">{formatDate(m.joinedAt)}</span> },
     { key: "status", header: "Situação", cell: (m) => <MemberStatusPill active={m.status === "active"} /> },
@@ -110,14 +130,13 @@ function MembersTab({ onOpenMember }: { onOpenMember: (id: string) => void }) {
       align: "right",
       cell: (m) => {
         if (!access.can("organization.edit")) return null;
-        // Ambiente real: não oferece a edição de quem tem um cargo acima do seu (o servidor recusaria).
-        const rules = isFirebaseMode ? memberEditRules(access.ctx, m, dir.roles) : null;
+        const lock = editLock(m);
         return (
-          <span title={rules && !rules.canEdit ? rules.reason : undefined}>
+          <span title={lock}>
             <Button
               size="sm"
               variant="ghost"
-              disabled={!!rules && !rules.canEdit}
+              disabled={!!lock}
               onClick={(e) => {
                 e.stopPropagation();
                 setDialog({ member: m });
@@ -134,16 +153,27 @@ function MembersTab({ onOpenMember }: { onOpenMember: (id: string) => void }) {
   return (
     <section className="rounded-xl border border-line bg-surface">
       <Toolbar>
-        <FilterChips
-          ariaLabel="Situação"
-          value={status}
-          onChange={setStatus}
-          options={[
-            { value: "active", label: "Ativos", count: dir.members.filter((m) => m.status === "active").length },
-            { value: "inactive", label: isFirebaseMode ? "Desativados" : "Inativos", count: dir.members.filter((m) => m.status === "inactive").length },
-            { value: "all", label: "Todos", count: dir.members.length },
-          ]}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <FilterChips
+            ariaLabel="Situação"
+            value={status}
+            onChange={setStatus}
+            options={[
+              { value: "active", label: "Ativos", count: dir.members.filter((m) => m.status === "active").length },
+              { value: "inactive", label: isFirebaseMode ? "Desativados" : "Inativos", count: dir.members.filter((m) => m.status === "inactive").length },
+              { value: "all", label: "Todos", count: dir.members.length },
+            ]}
+          />
+          <Segmented
+            ariaLabel="Visualização"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: "cards", label: "Cartões", icon: <LayoutGrid /> },
+              { value: "list", label: "Lista", icon: <List /> },
+            ]}
+          />
+        </div>
         <div className="flex flex-wrap gap-2">
           <FilterSelect label="Departamento" value={dep} onChange={setDep} options={[{ value: "", label: "Todos os departamentos" }, ...dir.departments.map((d) => ({ value: d.id, label: d.name }))]} />
           <SearchInput value={query} onChange={setQuery} placeholder="Buscar nome ou cargo" className="w-full sm:w-56" />
@@ -159,25 +189,47 @@ function MembersTab({ onOpenMember }: { onOpenMember: (id: string) => void }) {
             ))}
         </div>
       </Toolbar>
-      <DataTable
-        caption="Integrantes"
-        rows={rows}
-        columns={columns}
-        loading={dir.loading}
-        getRowId={(m) => m.id}
-        onRowClick={(m) => onOpenMember(m.id)}
-        mobileCard={(m) => (
-          <div className="flex items-center gap-3">
-            <MemberAvatar name={m.name} id={m.id} size={34} />
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-semibold">{m.name}</p>
-              <p className="truncate text-[12px] text-fg-subtle">{dir.role(m.roleId)?.name}</p>
+      {view === "cards" ? (
+        dir.loading ? (
+          <InlineLoader />
+        ) : rows.length === 0 ? (
+          <EmptyState compact icon={<Users />} title="Ninguém encontrado" />
+        ) : (
+          <ul className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+            {rows.map((m, i) => (
+              <MemberCard
+                key={m.id}
+                member={m}
+                index={i}
+                isMe={m.id === access.user?.id}
+                onOpen={() => onOpenMember(m.id)}
+                onEdit={access.can("organization.edit") ? () => setDialog({ member: m }) : undefined}
+                editLock={editLock(m)}
+              />
+            ))}
+          </ul>
+        )
+      ) : (
+        <DataTable
+          caption="Integrantes"
+          rows={rows}
+          columns={columns}
+          loading={dir.loading}
+          getRowId={(m) => m.id}
+          onRowClick={(m) => onOpenMember(m.id)}
+          mobileCard={(m) => (
+            <div className="flex items-center gap-3">
+              <MemberAvatar name={m.name} id={m.id} size={34} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold">{m.name}</p>
+                <p className="truncate text-[12px] text-fg-subtle">{dir.role(m.roleId)?.name}</p>
+              </div>
+              <MemberStatusPill active={m.status === "active"} />
             </div>
-            <MemberStatusPill active={m.status === "active"} />
-          </div>
-        )}
-        empty={<EmptyState compact icon={<Users />} title="Ninguém encontrado" />}
-      />
+          )}
+          empty={<EmptyState compact icon={<Users />} title="Ninguém encontrado" />}
+        />
+      )}
       {dialog && <MemberDialog open onOpenChange={(o) => !o && setDialog(null)} member={dialog.member} />}
       {isFirebaseMode && <InviteDialog open={inviting} onOpenChange={setInviting} />}
     </section>
