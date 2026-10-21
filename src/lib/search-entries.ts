@@ -4,10 +4,10 @@
  * transação da criação/edição; a busca filtra pelo acesso de quem pesquisa.
  * Título e subtítulo NUNCA levam dados pessoais.
  */
-import type { AtleticaEvent, Campaign, ContentItem, ExtensionProject, FinanceEntry, InstitutionalDocument, Meeting, ModuleKey, SearchResultKind } from "@/types";
-import { ENTRY_TYPE_LABELS, EVENT_TYPE_LABELS, MEETING_STATUS } from "./labels";
+import type { AtleticaEvent, Campaign, ContentItem, ExtensionProject, FinanceEntry, InstitutionalDocument, Meeting, ModuleKey, SearchResultKind, SportTeam } from "@/types";
+import { ENTRY_TYPE_LABELS, EVENT_TYPE_LABELS, MEETING_STATUS, SPORT_CATEGORY_LABELS } from "./labels";
 import { formatDate, formatMoney } from "./format";
-import { campaignReaders, contentReaders, documentReaders, eventReaders, meetingReaders, projectReaders } from "./record-readers";
+import { campaignReaders, contentReaders, documentReaders, eventReaders, meetingReaders, projectReaders, teamReaders } from "./record-readers";
 import { TOKEN } from "./access-tokens";
 
 export interface SearchIndexEntry {
@@ -109,5 +109,18 @@ export const searchEntryFor = {
     text: [c.code, c.briefing],
     readers: contentReaders(c),
     archived: c.status === "cancelled",
+  }),
+  team: (t: SportTeam): SearchIndexEntry => ({
+    kind: "team",
+    module: "sports",
+    id: t.id,
+    title: t.name,
+    subtitle: `${t.code} · ${t.sport} ${SPORT_CATEGORY_LABELS[t.category].toLowerCase()}`,
+    href: `/esportes/${t.id}`,
+    at: t.updatedAt,
+    // Nomes de atletas não entram no índice (só o que é da modalidade).
+    text: [t.code, t.sport, t.coach, t.description, ...t.competitions.map((c) => c.name)],
+    readers: teamReaders(t),
+    archived: t.status === "archived",
   }),
 };

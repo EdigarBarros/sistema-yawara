@@ -9,6 +9,13 @@
  */
 import type {
   AppNotification,
+  Athlete,
+  Competition,
+  Match,
+  SportCategory,
+  SportTeam,
+  TeamStatus,
+  TrainingSlot,
   AtleticaEvent,
   Audience,
   Campaign,
@@ -430,6 +437,36 @@ export interface ExtensionService {
   linkDocument(id: ID, documentId: ID): Promise<ExtensionProject>;
 }
 
+/* -------------------------------- Esportes ------------------------------- */
+
+export interface TeamInput {
+  name: string;
+  sport: string;
+  category: SportCategory;
+  description: string;
+  coach?: string;
+  responsibleId: ID;
+  access: Audience;
+}
+
+/** Item de uma lista da modalidade: com `id` atualiza; sem `id` inclui. */
+export type ItemInput<T extends { id: ID }> = Omit<T, "id"> & { id?: ID };
+
+export type TeamList = "trainings" | "athletes" | "matches" | "competitions";
+
+export interface SportsService {
+  list(): Promise<SportTeam[]>;
+  get(id: ID): Promise<SportTeam>;
+  create(input: TeamInput): Promise<SportTeam>;
+  update(id: ID, input: Partial<TeamInput>): Promise<SportTeam>;
+  setStatus(id: ID, status: TeamStatus): Promise<SportTeam>;
+  saveTraining(id: ID, item: ItemInput<TrainingSlot>): Promise<SportTeam>;
+  saveAthlete(id: ID, item: ItemInput<Athlete>): Promise<SportTeam>;
+  saveMatch(id: ID, item: ItemInput<Match>): Promise<SportTeam>;
+  saveCompetition(id: ID, item: ItemInput<Competition>): Promise<SportTeam>;
+  removeItem(id: ID, list: TeamList, itemId: ID): Promise<SportTeam>;
+}
+
 /* ---------------------------- Configurações ----------------------------- */
 
 export interface SettingsService {
@@ -509,6 +546,7 @@ export interface Services {
   finance: FinanceService;
   marketing: MarketingService;
   extension: ExtensionService;
+  sports: SportsService;
   settings: SettingsService;
   notifications: NotificationService;
   search: SearchService;

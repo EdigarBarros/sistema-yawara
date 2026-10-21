@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { AlertTriangle, ArrowRight, CalendarDays, ClipboardList, FileText, GraduationCap, Megaphone, Ticket, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarDays, ClipboardList, FileText, GraduationCap, Megaphone, Ticket, Trophy, Wallet } from "lucide-react";
 import type { AppNotification } from "@/types";
 import {
   useAllSales,
@@ -16,6 +16,7 @@ import {
   useMeetings,
   useNotifications,
   useProjects,
+  useSportsTeams,
 } from "@/hooks/use-data";
 import { useAccess } from "@/hooks/use-access";
 import { useSession } from "@/stores/session";
@@ -625,3 +626,54 @@ export function QuickAction({ href, icon, label, primary }: { href: string; icon
   );
 }
 
+
+/* --------------------------------- Esportes --------------------------------- */
+
+export function SportsStats() {
+  const { data, isError, error, refetch } = useSportsTeams();
+  const today = todayDateOnly();
+  const list = data && !isError ? data.filter((t) => t.status !== "archived") : null;
+  const footer = (text: string) => (isError ? <StatError error={error} onRetry={() => void refetch()} /> : <span>{text}</span>);
+  const upcoming = list ? list.flatMap((t) => t.matches.filter((m) => m.status === "scheduled" && m.date >= today)) : null;
+  return (
+    <>
+      <Stat label="Modalidades em atividade" value={list ? list.filter((t) => t.status === "active").length : "—"} footer={footer(list ? `${list.filter((t) => t.status === "paused").length} pausada(s)` : "")} />
+      <Stat label="Próximos jogos" value={upcoming ? upcoming.length : "—"} footer={footer("Agendados")} />
+      <Stat label="Atletas no elenco" value={list ? list.reduce((n, t) => n + t.athletes.length, 0) : "—"} footer={footer("Somando as modalidades")} />
+    </>
+  );
+}
+
+export function SportsPanel() {
+  const { data, isLoading, isError, error, refetch } = useSportsTeams();
+  const today = todayDateOnly();
+  const list = (data ?? [])
+    .filter((t) => t.status !== "archived")
+    .flatMap((t) => t.matches.filter((m) => m.status === "scheduled" && m.date >= today).map((m) => ({ team: t, match: m })))
+    .sort((a, b) => a.match.date.localeCompare(b.match.date) || (a.match.time ?? "").localeCompare(b.match.time ?? ""))
+    .slice(0, 5);
+  return (
+    <Panel title="Próximos jogos" actions={<SeeAll href="/esportes" />} bodyClassName="py-1.5">
+      {isLoading ? (
+        <PanelSkeleton />
+      ) : isError ? (
+        <PanelError error={error} onRetry={() => void refetch()} />
+      ) : list.length === 0 ? (
+        <EmptyState compact icon={<Trophy />} title="Nenhum jogo agendado" />
+      ) : (
+        <ul className="divide-y divide-line">
+          {list.map(({ team, match }) => (
+            <li key={match.id}>
+              <ListRow
+                href={`/esportes/${team.id}?aba=jogos`}
+                leading={<DateChip date={match.date} />}
+                title={`${team.name} × ${match.opponent}`}
+                subtitle={`${match.time ? `${formatTime(match.time)} · ` : ""}${match.location}`}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}

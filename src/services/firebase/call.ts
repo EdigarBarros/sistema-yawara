@@ -17,7 +17,7 @@ import { ServiceError, type ServiceErrorCode } from "../errors";
 import { firebase } from "./app";
 import { settleUploads } from "@/stores/uploads";
 
-export type ApiName = "auth" | "organization" | "system" | "campaigns" | "events" | "documents" | "meetings" | "finance" | "marketing" | "extension";
+export type ApiName = "auth" | "organization" | "system" | "campaigns" | "events" | "documents" | "meetings" | "finance" | "marketing" | "extension" | "sports";
 
 let ambientRequestId: string | null = null;
 

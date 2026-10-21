@@ -135,6 +135,15 @@ export function useProject(id: ID) {
   return useQuery({ queryKey: [uid, "extension", id], queryFn: () => services.extension.get(id), retry: false });
 }
 
+export function useSportsTeams(enabled = true) {
+  const uid = useUid();
+  return useQuery({ queryKey: [uid, "sports"], queryFn: () => services.sports.list(), enabled });
+}
+export function useSportsTeam(id: ID) {
+  const uid = useUid();
+  return useQuery({ queryKey: [uid, "sports", id], queryFn: () => services.sports.get(id), retry: false });
+}
+
 export function useNotifications() {
   const uid = useUid();
   return useQuery({ queryKey: [uid, "notifications"], queryFn: () => services.notifications.list(), enabled: uid !== "anon" });

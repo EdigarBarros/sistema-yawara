@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as RD from "@radix-ui/react-dialog";
-import { AlertTriangle, CalendarDays, ClipboardList, CornerDownLeft, FolderOpen, GraduationCap, Loader2, Megaphone, RotateCcw, Search, Ticket, Wallet } from "lucide-react";
+import { AlertTriangle, CalendarDays, ClipboardList, CornerDownLeft, FolderOpen, GraduationCap, Loader2, Megaphone, RotateCcw, Search, Ticket, Trophy, Wallet } from "lucide-react";
 import type { SearchResult, SearchResultKind } from "@/types";
 import { useSearch } from "@/hooks/use-data";
 import { useUI } from "@/stores/ui";
@@ -19,8 +19,9 @@ const GROUPS: Record<SearchResultKind, { label: string; icon: React.ReactNode }>
   finance: { label: "Lançamentos financeiros", icon: <Wallet /> },
   project: { label: "Ensino e Extensão", icon: <GraduationCap /> },
   content: { label: "Marketing", icon: <Megaphone /> },
+  team: { label: "Esportes", icon: <Trophy /> },
 };
-const ORDER: SearchResultKind[] = ["campaign", "event", "document", "meeting", "finance", "project", "content"];
+const ORDER: SearchResultKind[] = ["campaign", "event", "document", "meeting", "finance", "project", "team", "content"];
 /** Espera entre a digitação e a busca (evita uma consulta ao servidor por tecla). */
 const DEBOUNCE_MS = 250;
 

@@ -283,6 +283,25 @@ própria Central:
 
 Tudo isso é conferido no servidor (`requireSupport`), não só na tela.
 
+## 4.3 Atualização: área de Esportes (instalações já em uso)
+
+O módulo **Esportes** (modalidades, treinos, elenco, jogos e competições) usa
+uma coleção nova (`sportsTeams`). Numa Central que já estava funcionando, faça
+uma vez, no Cloud Shell, dentro da pasta do projeto atualizada (`git pull`):
+
+```bash
+export GOOGLE_CLOUD_QUOTA_PROJECT=<id-do-projeto>
+npx firebase deploy --only firestore:rules,firestore:indexes --project <id-do-projeto>   # regras e índices novos
+npm run esportes -- --project <id-do-projeto>            # ensaio: mostra o que vai mudar
+npm run esportes -- --project <id-do-projeto> --aplicar  # de verdade
+```
+
+O script só cria o que falta e só soma permissões (nunca apaga nem retira):
+liga o módulo, cria o departamento Esportes e os cargos Diretor(a) e
+Assessor(a) de Esportes, dá as permissões de Esportes ao Suporte do sistema e
+à presidência, e recalcula o acesso de quem está nesses cargos. Depois, quem
+estava logado sai e entra de novo.
+
 ## 5. Cotas gratuitas e cuidados
 
 - **Firestore (Spark):** 50 mil leituras, 20 mil gravações e 20 mil exclusões

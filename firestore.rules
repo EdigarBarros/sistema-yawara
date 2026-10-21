@@ -214,6 +214,14 @@ service cloud.firestore {
       }
     }
 
+    /* ------------------------------- esportes ------------------------------ */
+
+    // Modalidades (treinos, elenco, jogos e competições no mesmo documento).
+    match /sportsTeams/{teamId} {
+      allow get, list: if visible('sports', resource.data);
+      allow write: if false;
+    }
+
     /* ----------------------------- notificações ---------------------------- */
 
     match /notifications/{id} {

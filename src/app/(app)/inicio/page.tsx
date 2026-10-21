@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarPlus, ClipboardPlus, FilePlus2, GraduationCap, KeyRound, Megaphone, MinusCircle, PlusCircle, ScrollText, Settings, Ticket, UserX, Users } from "lucide-react";
+import { CalendarPlus, ClipboardPlus, FilePlus2, GraduationCap, KeyRound, Megaphone, MinusCircle, PlusCircle, ScrollText, Settings, Ticket, Trophy, UserX, Users } from "lucide-react";
 import type { HomePreset } from "@/types";
 import { useAccess } from "@/hooks/use-access";
 import { firstName, formatLongDate, greeting } from "@/lib/format";
@@ -23,6 +23,8 @@ import {
   QuickAction,
   RecentDocumentsPanel,
   RecentEntriesPanel,
+  SportsPanel,
+  SportsStats,
   StatsRow,
   TasksPanel,
   TaskStats,
@@ -159,10 +161,23 @@ function HomeContent({ preset }: { preset: HomePreset }) {
           </Grid>
         </div>
       );
+    case "sports":
+      return (
+        <div className="space-y-4">
+          <StatsRow>{has("sports") && <SportsStats />}</StatsRow>
+          <Grid>
+            {has("sports") && <SportsPanel />}
+            {has("campaigns") && <ActiveCampaignsPanel />}
+            {has("events") && <UpcomingEventsPanel limit={4} />}
+            <NoticesPanel />
+          </Grid>
+        </div>
+      );
     case "advisor":
     default:
       return (
         <Grid>
+          {has("sports") && <SportsPanel />}
           {has("events") && <TasksPanel mine />}
           {has("campaigns") && <ActiveCampaignsPanel sellOnly title="Campanhas para vender" />}
           {has("events") && <UpcomingEventsPanel limit={4} />}
@@ -201,6 +216,10 @@ function QuickActions({ preset }: { preset: HomePreset }) {
     extension: [
       { href: "/extensao?novo=1", icon: <GraduationCap />, label: "Novo projeto", show: can("extension.create") },
       { href: "/documentos?novo=1", icon: <FilePlus2 />, label: "Adicionar documento", show: can("documents.create") },
+    ],
+    sports: [
+      { href: "/esportes?novo=1", icon: <Trophy />, label: "Nova modalidade", show: can("sports.create") },
+      { href: "/esportes", icon: <CalendarPlus />, label: "Ver jogos e treinos", show: can("sports.view") },
     ],
     advisor: [
       { href: "/campanhas", icon: <Ticket />, label: "Registrar venda", show: can("campaigns.register") },

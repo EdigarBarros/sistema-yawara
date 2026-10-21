@@ -47,6 +47,8 @@ export const PEOPLE: Record<string, { roleId: string; status?: "active" | "inact
   sec: { roleId: "secretario" },
   ass: { roleId: "assessor-eventos" },
   assext: { roleId: "assessor-extensao" },
+  esp: { roleId: "diretor-esportes" },
+  assesp: { roleId: "assessor-esportes" },
   off: { roleId: "diretor-eventos", status: "inactive" },
 };
 
