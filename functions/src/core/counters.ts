@@ -11,7 +11,7 @@ import { toDateOnly } from "@/lib/format";
 import { db } from "./admin";
 import type { RunContext } from "./dispatch";
 
-export type CodePrefix = "RIFA" | "EVT" | "REU" | "LAN" | "MKT" | "ENS" | "DOC";
+export type CodePrefix = "RIFA" | "EVT" | "REU" | "LAN" | "MKT" | "ENS" | "DOC" | "ESP";
 
 export async function nextCode(tx: Transaction, ctx: RunContext, prefix: CodePrefix): Promise<string> {
   // Ano no fuso da instituição (America/Sao_Paulo), não em UTC: 31/12 à noite ainda é o ano corrente.

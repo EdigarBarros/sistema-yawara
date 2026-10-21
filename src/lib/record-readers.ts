@@ -10,7 +10,7 @@
  * Quem tem `<módulo>.admin` vê todos os registros do módulo (as regras tratam
  * esse caso pela permissão, sem depender de `readers`).
  */
-import type { AtleticaEvent, Campaign, ContentItem, ExtensionProject, ID, InstitutionalDocument, Meeting, Sale } from "@/types";
+import type { AtleticaEvent, Campaign, ContentItem, ExtensionProject, ID, InstitutionalDocument, Meeting, Sale, SportTeam } from "@/types";
 import { readersFor, TOKEN } from "./access-tokens";
 
 /** Também copiado em `buyers/{saleId}.viewReaders` (as regras do Storage exigem ver a campanha para abrir o comprovante). */
@@ -46,4 +46,8 @@ export function projectReaders(p: Pick<ExtensionProject, "access" | "createdBy" 
 /** Quem pode ver a lista de presença além de quem tem `extension.edit`/`extension.admin`. */
 export function projectEditors(p: Pick<ExtensionProject, "createdBy" | "responsibleId">): string[] {
   return [...new Set([p.createdBy, p.responsibleId].filter(Boolean).map((id) => TOKEN.user(id as ID)))].sort();
+}
+
+export function teamReaders(t: Pick<SportTeam, "access" | "createdBy" | "responsibleId">) {
+  return readersFor([{ audience: t.access }], [t.createdBy, t.responsibleId]);
 }

@@ -54,7 +54,7 @@ const roleInput = z.object({
   level: z.enum(["presidency", "director", "advisor", "member"]),
   isBoard: z.boolean(),
   active: z.boolean(),
-  homePreset: z.enum(["presidency", "secretary", "finance", "marketing", "events", "extension", "advisor"]),
+  homePreset: z.enum(["presidency", "secretary", "finance", "marketing", "events", "extension", "sports", "advisor"]),
   permissions: z.array(z.enum(ALL_PERMISSIONS)).max(200, "Permissões demais para um cargo."),
 }).strict();
 

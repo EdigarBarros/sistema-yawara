@@ -30,6 +30,7 @@ const HOME_LABELS: Record<HomePreset, string> = {
   marketing: "Marketing (produção de conteúdo)",
   events: "Eventos (agenda e tarefas)",
   extension: "Ensino e Extensão (atividades)",
+  sports: "Esportes (modalidades e jogos)",
   advisor: "Assessoria (tarefas e vendas)",
 };
 

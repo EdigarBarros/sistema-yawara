@@ -242,10 +242,10 @@ describe("foto de perfil e exclusão de perfis", () => {
 describe("integridade", () => {
   it("repetir a mesma requisição (mesmo requestId) não duplica o registro", async () => {
     const requestId = "req-teste-idempotencia-001";
-    const a = await org<{ id: string }>("createDepartment", "pres", { name: "Esportes", shortName: "ESP", description: "", active: true }, requestId);
-    const b = await org<{ id: string }>("createDepartment", "pres", { name: "Esportes", shortName: "ESP", description: "", active: true }, requestId);
+    const a = await org<{ id: string }>("createDepartment", "pres", { name: "Bateria", shortName: "BAT", description: "", active: true }, requestId);
+    const b = await org<{ id: string }>("createDepartment", "pres", { name: "Bateria", shortName: "BAT", description: "", active: true }, requestId);
     expect(b.id).toBe(a.id);
-    const all = await db.collection("departments").where("name", "==", "Esportes").get();
+    const all = await db.collection("departments").where("name", "==", "Bateria").get();
     expect(all.size).toBe(1);
   });
 

@@ -34,8 +34,9 @@ import {
   canSeeEvent,
   canSeeMeeting,
   canSeeProject,
+  canSeeTeam,
 } from "@/lib/policies";
-import type { AtleticaEvent, Campaign, ContentItem, ExtensionProject, InstitutionalDocument, Meeting, ModuleKey, Permission, SystemSettings } from "@/types";
+import type { AtleticaEvent, Campaign, ContentItem, ExtensionProject, InstitutionalDocument, Meeting, ModuleKey, Permission, SportTeam, SystemSettings } from "@/types";
 import { db } from "../core/admin";
 import { requirePermission, requireSupport, type Actor } from "../core/actor";
 import { auditDirect, auditInTx } from "../core/audit";
@@ -60,6 +61,7 @@ const RESOURCES: Record<string, { module: ModuleKey; collection: string; visible
   document: { module: "documents", collection: "documents", visible: (a, r) => canSeeDocument(a.ctx, r as unknown as InstitutionalDocument) },
   meeting: { module: "meetings", collection: "meetings", visible: (a, r) => canSeeMeeting(a.ctx, r as unknown as Meeting) },
   content: { module: "marketing", collection: "contents", visible: (a, r) => canSeeContent(a.ctx, r as unknown as ContentItem) },
+  team: { module: "sports", collection: "sportsTeams", visible: (a, r) => canSeeTeam(a.ctx, r as unknown as SportTeam) },
   project: {
     module: "extension",
     collection: "projects",

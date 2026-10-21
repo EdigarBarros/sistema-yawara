@@ -41,6 +41,7 @@ export const localAudit: AuditService = {
       ...collect("finance", "financeEntry", db.financeEntries),
       ...collect("marketing", "content", db.contents),
       ...collect("extension", "project", db.projects),
+      ...collect("sports", "team", db.sportsTeams),
     ].sort((a, b) => b.at.localeCompare(a.at));
     if (query.module) entries = entries.filter((e) => e.module === query.module);
     if (query.actorId) entries = entries.filter((e) => e.actorId === query.actorId);
