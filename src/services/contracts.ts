@@ -143,6 +143,14 @@ export interface InvitationResult {
   link: string | null;
 }
 
+/** Correção de conta feita pelo Suporte do sistema. Só os campos enviados mudam; `photo: null` remove a foto. */
+export interface SupportAccountInput {
+  name?: string;
+  email?: string;
+  password?: string;
+  photo?: string | null;
+}
+
 export interface OrganizationService {
   snapshot(): Promise<OrganizationSnapshot>;
   createRole(input: RoleInput): Promise<Role>;
@@ -160,6 +168,10 @@ export interface OrganizationService {
   inviteMember(input: InviteInput): Promise<InvitationResult>;
   renewInvitation(id: ID): Promise<InvitationResult>;
   revokeInvitation(id: ID): Promise<Invitation>;
+  /** Suporte do sistema: troca nome, foto, e-mail de acesso e senha de qualquer integrante. */
+  supportUpdateAccount(id: ID, input: SupportAccountInput): Promise<Member>;
+  /** Suporte do sistema: link de um convite pendente. */
+  invitationLink(id: ID): Promise<string>;
 }
 
 /* ------------------------------ Campanhas ------------------------------- */
@@ -296,6 +308,8 @@ export interface DocumentService {
   addVersion(id: ID, file: File, note?: string): Promise<InstitutionalDocument>;
   archive(id: ID): Promise<InstitutionalDocument>;
   restore(id: ID): Promise<InstitutionalDocument>;
+  /** Suporte do sistema: exclui o documento e os arquivos de todas as versões. Não tem volta. */
+  remove(id: ID): Promise<void>;
 }
 
 /* ------------------------------- Reuniões ------------------------------- */
@@ -481,6 +495,8 @@ export interface AuditService {
    * falhas não impedem a exportação. Demonstração: não faz nada.
    */
   recordExport(input: ExportRecordInput): Promise<void>;
+  /** Suporte do sistema: apaga registros da auditoria (até 100 por vez). */
+  remove(ids: ID[]): Promise<void>;
 }
 
 export interface Services {

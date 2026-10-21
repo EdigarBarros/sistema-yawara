@@ -8,7 +8,7 @@
  */
 import { useId, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, Copy, MailPlus, RefreshCw, Send, Undo2 } from "lucide-react";
+import { Check, Copy, Link2, MailPlus, RefreshCw, Send, Undo2 } from "lucide-react";
 import type { ID, Invitation, InvitationStatus } from "@/types";
 import { services, type InvitationResult, type InviteInput } from "@/services";
 import { useAccess } from "@/hooks/use-access";
@@ -16,7 +16,8 @@ import { useAction } from "@/hooks/use-action";
 import { useDirectory } from "@/hooks/use-data";
 import { useSession } from "@/stores/session";
 import { formatDate, formatDateTime } from "@/lib/format";
-import { errorMessage, notifyError } from "@/lib/notify";
+import { errorMessage, notifyError, notifySuccess } from "@/lib/notify";
+import { isSupportRole } from "@/lib/support";
 import { matchesQuery } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -290,6 +291,7 @@ export function InvitationsTab({ onInvite }: { onInvite?: () => void }) {
   const renew = useAction((id: ID) => services.organization.renewInvitation(id), { success: "Convite renovado", successDescription: "O link anterior deixou de funcionar." });
   const revoke = useAction((id: ID) => services.organization.revokeInvitation(id), { success: "Convite revogado" });
   const [busy, setBusy] = useState<string | null>(null);
+  const support = isSupportRole(access.role?.id);
 
   const all = data ?? [];
   /**
@@ -330,6 +332,24 @@ export function InvitationsTab({ onInvite }: { onInvite?: () => void }) {
     setBusy(null);
   };
 
+  /** Suporte: recupera o link de um convite pendente e copia. */
+  const onCopyLink = async (inv: Invitation) => {
+    setBusy(inv.id);
+    try {
+      const link = await services.organization.invitationLink(inv.id);
+      try {
+        await navigator.clipboard.writeText(link);
+        notifySuccess("Link do convite copiado", `Envie diretamente para ${inv.name}.`);
+      } catch {
+        window.prompt("Copie o link do convite:", link);
+      }
+    } catch (e) {
+      notifyError(e);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const validity = (i: Invitation) => {
     if (i.status === "accepted") return i.acceptedAt ? `Aceito em ${formatDate(i.acceptedAt)}` : "Aceito";
     if (i.status === "revoked") return i.revokedAt ? `Revogado em ${formatDate(i.revokedAt)}` : "Revogado";
@@ -340,9 +360,15 @@ export function InvitationsTab({ onInvite }: { onInvite?: () => void }) {
     if (!canCreate) return null;
     const rl = renewLock(access.ctx, i, dir.roles, all);
     const vl = revokeLock(access.ctx, i);
-    if (rl && vl) return null;
+    const copyable = support && i.status === "pending";
+    if (rl && vl && !copyable) return null;
     return (
       <div className="flex justify-end gap-1.5">
+        {copyable && (
+          <Button size="sm" variant="ghost" disabled={busy === i.id} onClick={() => onCopyLink(i)}>
+            <Link2 /> Copiar link
+          </Button>
+        )}
         <span title={rl}>
           <Button size="sm" variant="ghost" disabled={!!rl || busy === i.id} onClick={() => onRenew(i)}>
             <RefreshCw /> Renovar

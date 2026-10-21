@@ -11,6 +11,7 @@ import type { Transaction } from "firebase-admin/firestore";
 import type { AccessContext } from "@/lib/permissions";
 import { hasPermission } from "@/lib/permissions";
 import { userTokens } from "@/lib/access-tokens";
+import { isSupportRole } from "@/lib/support";
 import type { Member, ModuleKey, Permission, Role, SystemSettings } from "@/types";
 import { db } from "./admin";
 import { AppError, fail } from "./errors";
@@ -86,6 +87,11 @@ export async function loadActor(tx: Transaction, uid: string | undefined): Promi
 
 export function requirePermission(actor: Actor, permission: Permission, message: string) {
   if (!actor.can(permission)) fail("forbidden", message);
+}
+
+/** Ações de manutenção que só o cargo "Suporte do sistema" pode fazer (src/lib/support.ts). */
+export function requireSupport(actor: Actor, message = "Somente o Suporte do sistema pode fazer isso.") {
+  if (!isSupportRole(actor.role.id)) fail("forbidden", message);
 }
 
 /** Configurações do sistema (lidas na transação). */

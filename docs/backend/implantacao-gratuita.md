@@ -199,6 +199,24 @@ npm run suporte -- --project <id-do-projeto> --email <email-do-suporte> --remove
 npm run suporte -- --project <id-do-projeto> --email <email-do-suporte> --remover <email-a-apagar> --aplicar  # de verdade
 ```
 
+Além das permissões normais, só quem está no cargo de suporte pode, pela
+própria Central:
+
+- **Conta de qualquer integrante** (Diretoria → perfil → *Conta (suporte)*):
+  trocar foto, nome, e-mail de acesso e senha. Trocar e-mail ou senha encerra
+  as sessões abertas da pessoa. A senha nunca é gravada nem registrada.
+- **Links de convite** (Diretoria → Convites → *Copiar link*): recupera o link
+  de um convite pendente. Por isso o token dos convites pendentes fica guardado
+  em `invitationLinks/{id}`, coleção que só o servidor lê; ele some quando o
+  convite é aceito ou revogado. Convites criados antes desta função não têm o
+  link guardado: use *Renovar*.
+- **Auditoria:** apagar registros (um a um ou a lista carregada). Fica um
+  registro dizendo quantos foram apagados e por quem.
+- **Documentos:** excluir de vez (documento, versões e arquivos), na página do
+  documento. Não tem volta.
+
+Tudo isso é conferido no servidor (`requireSupport`), não só na tela.
+
 ## 5. Cotas gratuitas e cuidados
 
 - **Firestore (Spark):** 50 mil leituras, 20 mil gravações e 20 mil exclusões

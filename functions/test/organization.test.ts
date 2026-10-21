@@ -161,6 +161,49 @@ describe("suporte do sistema (acima da presidência)", () => {
     expect((await db.doc("members/vice").get()).data()!.status).toBe("inactive");
     await org("updateRole", "sup", { id: SUPPORT_ROLE_ID, input: { description: "Manutenção" } });
   });
+
+  it("o suporte troca nome, foto, e-mail e senha de qualquer integrante; ninguém mais pode", async () => {
+    await seedSupport();
+    const photo = "data:image/jpeg;base64," + "A".repeat(400);
+    const input = { name: "Presidente Renomeada", email: "Nova.Presidente@Example.org", password: "NovaSenha123", photo };
+    await expectCode(org("supportUpdateAccount", "pres", { id: "ass", input }), "forbidden");
+
+    const res = await org<{ name: string; email: string; photo?: string }>("supportUpdateAccount", "sup", { id: "pres", input });
+    expect(res).toMatchObject({ name: "Presidente Renomeada", email: "nova.presidente@example.org", photo });
+    const user = await adminAuth.getUser("pres");
+    expect(user.email).toBe("nova.presidente@example.org");
+    expect(user.displayName).toBe("Presidente Renomeada");
+    expect((await db.doc("memberPrivate/pres").get()).data()!.email).toBe("nova.presidente@example.org");
+    // A senha não aparece em lugar nenhum da auditoria nem do controle de repetição.
+    const logs = await auditFor("pres");
+    expect(logs.some((l) => l.action === "organization.supportUpdateAccount")).toBe(true);
+    expect(JSON.stringify(logs)).not.toContain("NovaSenha123");
+    const idem = await db.collection("idempotency").get();
+    expect(JSON.stringify(idem.docs.map((d) => d.data()))).not.toContain("NovaSenha123");
+
+    await org("supportUpdateAccount", "sup", { id: "pres", input: { photo: null } });
+    expect((await db.doc("members/pres").get()).data()!.photo).toBeUndefined();
+    // E-mail já usado por outra pessoa: recusado, nada muda.
+    await expectCode(org("supportUpdateAccount", "sup", { id: "ass", input: { email: "nova.presidente@example.org" } }), "conflict");
+    expect((await adminAuth.getUser("ass")).email).toBe("ass@example.org");
+    await expectCode(org("supportUpdateAccount", "sup", { id: "ass", input: { password: "curta" } }), "invalid");
+  });
+
+  it("só o suporte recupera o link de um convite pendente; aceito ou revogado, o link some", async () => {
+    await seedSupport();
+    const res = await org<InviteResult>("inviteMember", "pres", { name: "Pessoa Convidada", email: "convidada@example.org", roleId: "assessor-eventos" });
+    await expectCode(org("invitationLink", "pres", { id: res.invitation.id }), "forbidden");
+    const { link } = await org<{ link: string }>("invitationLink", "sup", { id: res.invitation.id });
+    expect(link).toBe(res.link);
+
+    await auth("acceptInvitation", undefined, { token: tokenOf(link), password: "SenhaForte123" });
+    expect((await db.doc(`invitationLinks/${res.invitation.id}`).get()).exists).toBe(false);
+    await expectCode(org("invitationLink", "sup", { id: res.invitation.id }), "conflict");
+
+    const other = await org<InviteResult>("inviteMember", "pres", { name: "Outra Pessoa", email: "outra@example.org", roleId: "assessor-eventos" });
+    await org("revokeInvitation", "pres", { id: other.invitation.id });
+    expect((await db.doc(`invitationLinks/${other.invitation.id}`).get()).exists).toBe(false);
+  });
 });
 
 describe("foto de perfil e exclusão de perfis", () => {
