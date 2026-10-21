@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, type ReactNode } from "react";
-import { Building2, CalendarDays, Camera, Layers, Loader2, LifeBuoy, Pencil, ShieldCheck, Trash2, UserCheck, UserX } from "lucide-react";
+import { Building2, CalendarDays, Camera, Layers, Loader2, Pencil, ShieldCheck, Trash2, UserCheck, UserX } from "lucide-react";
 import type { Member, Permission, PermissionAction, Role } from "@/types";
 import { services } from "@/services";
 import { useAccess } from "@/hooks/use-access";
@@ -21,7 +21,6 @@ import { confirmAction } from "@/components/shared/confirm";
 import { Badge } from "@/components/ui/misc";
 import { Button } from "@/components/ui/button";
 import { memberEditRules } from "./org-rules";
-import { SupportAccountDialog } from "./support-account-dialog";
 
 const MODULE_NAV = new Map(NAV.flatMap((g) => g.items).flatMap((i) => (i.module ? [[i.module, i] as const] : [])));
 
@@ -170,8 +169,6 @@ export function MemberActions({ member, onEdit, onDeleted }: { member: Member; o
   const self = member.id === access.user?.id;
   const canDelete = canEdit && !self && access.can("organization.admin");
   const active = member.status === "active";
-  const support = isSupportRole(access.role?.id);
-  const [supportOpen, setSupportOpen] = useState(false);
 
   const setStatus = useAction((status: Member["status"]) => services.organization.updateMember(member.id, { status }), {
     success: (m) => (m.status === "active" ? `Acesso de ${m.name} devolvido` : `Acesso de ${m.name} removido`),
@@ -184,14 +181,6 @@ export function MemberActions({ member, onEdit, onDeleted }: { member: Member; o
       <Button variant="secondary" onClick={onEdit}>
         <Pencil /> Editar
       </Button>
-      {support && (
-        <>
-          <Button variant="secondary" onClick={() => setSupportOpen(true)}>
-            <LifeBuoy /> Conta (suporte)
-          </Button>
-          <SupportAccountDialog member={member} open={supportOpen} onOpenChange={setSupportOpen} />
-        </>
-      )}
       {!self && (
         <Button
           variant="secondary"
