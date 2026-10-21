@@ -3,14 +3,15 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, Info } from "lucide-react";
 import type { Department, HomePreset, ID, Member, Permission, Role, RoleLevel } from "@/types";
-import { services, type MemberInput } from "@/services";
+import { services, type MemberInput, type SupportAccountInput } from "@/services";
 import { useAccess } from "@/hooks/use-access";
 import { useAction } from "@/hooks/use-action";
 import { useDirectory } from "@/hooks/use-data";
 import { MAX_EXTRA_DEPARTMENTS } from "@/lib/access-tokens";
 import { ROLE_LEVEL_LABELS } from "@/lib/labels";
 import { isFirebaseMode } from "@/lib/mode";
-import { errorMessage } from "@/lib/notify";
+import { errorMessage, notifySuccess } from "@/lib/notify";
+import { isSupportRole } from "@/lib/support";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -20,6 +21,7 @@ import { confirmAction } from "@/components/shared/confirm";
 import { PermissionMatrix } from "./permission-matrix";
 import { assignableRoles, canAssignRole, canChangeRoleAccess, memberEditRules, permissionLock, roleAccessLock } from "./org-rules";
 import { FormAlert } from "@/components/shared/form-alert";
+import { PASSWORD_RULE, PasswordInput, PhotoPicker, validPassword } from "./support-fields";
 
 const HOME_LABELS: Record<HomePreset, string> = {
   presidency: "Presidência (visão institucional)",
@@ -491,6 +493,9 @@ const sameIds = (a: ID[], b: ID[]) => a.length === b.length && [...a].sort().joi
  * organization.admin; departamentos adicionais exigem organization.admin; o
  * e-mail de acesso não muda por aqui.
  * Só os campos alterados são enviados.
+ *
+ * Suporte do sistema: a mesma janela também troca foto, e-mail de acesso e
+ * senha (organization.supportUpdateAccount, enviado antes do resto).
  */
 function MemberEditBody({ onOpenChange, member }: { onOpenChange: (o: boolean) => void; member: Member }) {
   const access = useAccess();
@@ -498,6 +503,10 @@ function MemberEditBody({ onOpenChange, member }: { onOpenChange: (o: boolean) =
   const rules = memberEditRules(access.ctx, member, dir.roles);
   const [form, setForm] = useState({ name: member.name, roleId: member.roleId, status: member.status, departmentIds: member.departmentIds ?? [] });
   const [error, setError] = useState<string>();
+  const support = isSupportRole(access.role?.id);
+  const [email, setEmail] = useState(member.email);
+  const [password, setPassword] = useState("");
+  const [photo, setPhoto] = useState<string | null | undefined>(undefined);
   const roleOptions = useMemo(() => {
     const list = assignableRoles(access.ctx, dir.roles);
     const current = dir.role(member.roleId);
@@ -505,15 +514,28 @@ function MemberEditBody({ onOpenChange, member }: { onOpenChange: (o: boolean) =
   }, [access.ctx, dir, member.roleId]);
   const nextRole = dir.role(form.roleId);
   const save = useAction((input: Partial<MemberInput> & { departmentIds?: ID[] }) => services.organization.updateMember(member.id, input), {
-    success: "Integrante atualizado",
     silentError: true,
   });
+  const saveAccount = useAction((input: SupportAccountInput) => services.organization.supportUpdateAccount(member.id, input), { silentError: true });
 
   const submit = async () => {
     const name = form.name.trim();
     if (name.length < 2) return setError("Informe o nome com pelo menos 2 caracteres.");
     const input: Partial<MemberInput> & { departmentIds?: ID[] } = {};
-    if (name !== member.name) input.name = name;
+    const account: SupportAccountInput = {};
+    if (support) {
+      const nextEmail = email.trim().toLowerCase();
+      if (nextEmail !== member.email.toLowerCase()) {
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(nextEmail)) return setError("Informe um e-mail válido.");
+        account.email = nextEmail;
+      }
+      if (password) {
+        if (!validPassword(password)) return setError(PASSWORD_RULE);
+        account.password = password;
+      }
+      if (photo !== undefined) account.photo = photo;
+      if (name !== member.name) account.name = name;
+    } else if (name !== member.name) input.name = name;
     if (rules.canChangeRole && form.roleId !== member.roleId) {
       if (!nextRole || !nextRole.active || !canAssignRole(access.ctx, nextRole)) return setError("Escolha um cargo ativo que você possa atribuir.");
       input.roleId = form.roleId;
@@ -532,7 +554,7 @@ function MemberEditBody({ onOpenChange, member }: { onOpenChange: (o: boolean) =
         input.departmentIds = extra;
       }
     }
-    if (Object.keys(input).length === 0) return onOpenChange(false);
+    if (Object.keys(input).length === 0 && Object.keys(account).length === 0) return onOpenChange(false);
     if (input.status === "inactive") {
       const ok = await confirmAction({
         title: `Desativar a conta de ${member.name}?`,
@@ -545,7 +567,9 @@ function MemberEditBody({ onOpenChange, member }: { onOpenChange: (o: boolean) =
     }
     setError(undefined);
     try {
-      await save.run(input);
+      if (Object.keys(account).length > 0) await saveAccount.run(account);
+      if (Object.keys(input).length > 0) await save.run(input);
+      notifySuccess("Integrante atualizado");
       onOpenChange(false);
     } catch (e) {
       setError(errorMessage(e));
@@ -561,7 +585,7 @@ function MemberEditBody({ onOpenChange, member }: { onOpenChange: (o: boolean) =
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button variant="primary" loading={save.pending} disabled={!rules.canEdit} onClick={submit}>
+          <Button variant="primary" loading={save.pending || saveAccount.pending} disabled={!rules.canEdit} onClick={submit}>
             Salvar
           </Button>
         </>
@@ -571,10 +595,24 @@ function MemberEditBody({ onOpenChange, member }: { onOpenChange: (o: boolean) =
         <Notice tone="warn">{rules.reason}</Notice>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
+          {support && (
+            <div className="sm:col-span-2">
+              <PhotoPicker id={member.id} name={form.name || member.name} current={member.photo} value={photo} onChange={setPhoto} onError={setError} />
+            </div>
+          )}
           <Field label="Nome" required className="sm:col-span-2">
             <Input value={form.name} maxLength={100} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
           </Field>
-          {member.email && (
+          {support ? (
+            <>
+              <Field label="E-mail de acesso" required hint="É o e-mail usado para entrar na Central." className="sm:col-span-2">
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              </Field>
+              <Field label="Nova senha" optional hint="Trocar o e-mail ou a senha encerra as sessões abertas da pessoa." className="sm:col-span-2">
+                <PasswordInput value={password} onChange={setPassword} />
+              </Field>
+            </>
+          ) : member.email && (
             <div className="sm:col-span-2">
               <p className="mb-1.5 text-[13px] font-medium">E-mail de acesso</p>
               <p className="rounded-lg border border-line bg-sunken px-3 py-2.5 text-[13.5px] text-fg-muted">{member.email}</p>
