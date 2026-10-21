@@ -18,6 +18,10 @@
  *
  * O resumo é texto curto, sem dados pessoais (ex.: "PDF da ata",
  * "CSV interno com dados dos compradores (12 números)").
+ *
+ * APAGAR REGISTROS (deleteAuditLogs): só o Suporte do sistema. Fica um
+ * registro dizendo quantos foram apagados e por quem (que também pode ser
+ * apagado depois).
  */
 import { z } from "zod";
 import { MODULE_MAP } from "@/lib/modules";
@@ -33,9 +37,9 @@ import {
 } from "@/lib/policies";
 import type { AtleticaEvent, Campaign, ContentItem, ExtensionProject, InstitutionalDocument, Meeting, ModuleKey, Permission, SystemSettings } from "@/types";
 import { db } from "../core/admin";
-import { requirePermission, type Actor } from "../core/actor";
-import { auditDirect } from "../core/audit";
-import { query } from "../core/dispatch";
+import { requirePermission, requireSupport, type Actor } from "../core/actor";
+import { auditDirect, auditInTx } from "../core/audit";
+import { mutation, query } from "../core/dispatch";
 import { fail } from "../core/errors";
 
 const MODULE_KEYS = Object.keys(MODULE_MAP) as [ModuleKey, ...ModuleKey[]];
@@ -97,7 +101,32 @@ function safeVisible(check: Visibility, actor: Actor, record: Record<string, unk
   }
 }
 
+const auditIds = z
+  .array(z.string(INVALID_ID).regex(/^[A-Za-z0-9_-]{1,128}$/, INVALID_ID), "Escolha os registros.")
+  .min(1, "Escolha pelo menos um registro.")
+  .max(100, "Apague no máximo 100 registros por vez.");
+
 export const auditActions = {
+  deleteAuditLogs: mutation({
+    module: "audit",
+    schema: z.object({ ids: auditIds }).strict(),
+    async run(tx, actor, { ids }, ctx) {
+      actor = actor!;
+      requireSupport(actor, "Somente o Suporte do sistema pode apagar registros da auditoria.");
+      const unique = [...new Set(ids)];
+      for (const logId of unique) tx.delete(db.doc(`auditLogs/${logId}`));
+      auditInTx(
+        tx,
+        { uid: actor.uid, name: actor.name },
+        { action: "audit.deleteLogs", module: "audit", resourceType: "auditLog", resourceId: null, summary: `Suporte apagou ${unique.length} registro(s) da auditoria`, details: { count: unique.length } },
+        ctx.requestId,
+        ctx.now,
+      );
+      return { deleted: unique.length };
+    },
+  }),
+
+
   recordExport: query({
     module: "audit",
     schema: recordExportSchema,

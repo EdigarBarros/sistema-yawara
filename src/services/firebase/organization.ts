@@ -94,4 +94,13 @@ export const firebaseOrganization: OrganizationService = {
     const rid = takeRequestId();
     return callApi<Invitation>("organization", "revokeInvitation", { id }, rid);
   },
+
+  async supportUpdateAccount(id, input) {
+    const rid = takeRequestId();
+    return callApi<Member>("organization", "supportUpdateAccount", { id, input }, rid);
+  },
+  async invitationLink(id) {
+    const rid = takeRequestId();
+    return (await callApi<{ link: string }>("organization", "invitationLink", { id }, rid)).link;
+  },
 };

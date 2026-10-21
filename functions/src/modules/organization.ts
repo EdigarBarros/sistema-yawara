@@ -16,7 +16,9 @@
  *  - Sempre resta pelo menos um integrante ativo com `organization.admin`.
  *  - O cargo "Suporte do sistema" (src/lib/support.ts) fica acima da
  *    Presidência: só quem está nele altera esse cargo, os integrantes dele ou
- *    o atribui a alguém.
+ *    o atribui a alguém. Só o suporte troca nome, foto, e-mail de acesso e
+ *    senha de qualquer integrante (supportUpdateAccount) e recupera o link de
+ *    um convite pendente (invitationLink), para ajudar quem precisar.
  *  - Toda mudança recalcula o retrato de acesso (`userAccess`) dos afetados na
  *    mesma transação; contas desativadas são bloqueadas no Auth e têm as
  *    sessões revogadas.
@@ -31,9 +33,9 @@ import { isPrivileged } from "@/lib/permissions";
 import { isSupportRole, LOCK_SUPPORT } from "@/lib/support";
 import type { Department, Invitation, Member, Permission, Role } from "@/types";
 import { adminAuth, db, FieldValue, nowISO, Timestamp, timestampInDays } from "../core/admin";
-import { memberFromDoc, requirePermission, roleFromDoc, type Actor } from "../core/actor";
+import { memberFromDoc, requirePermission, requireSupport, roleFromDoc, type Actor } from "../core/actor";
 import { auditDirect, auditInTx } from "../core/audit";
-import { mutation, query, type RunContext } from "../core/dispatch";
+import { alreadyCompleted, mutation, query, type RunContext } from "../core/dispatch";
 import { AppError, ensure, fail } from "../core/errors";
 import { APP_BASE_URL, INVITE_TTL_DAYS, intParam, stringParam } from "../core/params";
 import { requireDoc, toDTO } from "../core/records";
@@ -88,6 +90,26 @@ const inviteInput = z.object({
   roleId: id,
   departmentIds: z.array(id).max(MAX_EXTRA_DEPARTMENTS, `Escolha no máximo ${MAX_EXTRA_DEPARTMENTS} departamentos adicionais.`).default([]),
 }).strict();
+
+const PASSWORD_RULE = "A senha precisa ter de 8 a 128 caracteres, com pelo menos uma letra e um número.";
+const password = z
+  .string()
+  .min(8, PASSWORD_RULE)
+  .max(128, PASSWORD_RULE)
+  .refine((v) => /[A-Za-zÀ-ÿ]/.test(v) && /\d/.test(v), PASSWORD_RULE);
+
+/** Correção de conta feita pelo suporte: só os campos enviados mudam; `photo: null` remove a foto. */
+const supportAccountUpdate = z.object({
+  id,
+  input: z
+    .object({
+      name: name("O nome").optional(),
+      email: email.optional(),
+      password: password.optional(),
+      photo: photoSchema.nullable().optional(),
+    })
+    .strict(),
+});
 
 const memberUpdate = z.object({
   id,
@@ -222,6 +244,15 @@ function validateDepartments(ids: string[], state: OrgState) {
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
+}
+
+/**
+ * Token dos convites pendentes, guardado à parte (`invitationLinks/{id}`,
+ * fechado pelas regras: só o servidor lê) para que o suporte recupere o link.
+ * Some quando o convite é aceito, revogado ou substituído.
+ */
+function linkRef(invitationId: string) {
+  return db.doc(`invitationLinks/${invitationId}`);
 }
 
 function inviteLink(token: string) {
@@ -478,6 +509,7 @@ export const organizationActions = {
         createdBy: actor.uid,
         createdAt: ctx.now,
       });
+      tx.set(linkRef(ref.id), { token, createdAt: ctx.now });
       audit(tx, actor, ctx, "inviteMember", "invitation", ref.id, `Convite criado para ${input.name} (cargo ${role.name})`);
       ephemeral.set(ctx.requestId, { link: inviteLink(token) });
       return { id: ref.id, requestId: ctx.requestId };
@@ -520,6 +552,7 @@ export const organizationActions = {
         renewedAt: ctx.now,
         renewedBy: actor.uid,
       });
+      tx.set(linkRef(snap.id), { token, createdAt: ctx.now });
       audit(tx, actor, ctx, "renewInvitation", "invitation", snap.id, "Convite renovado (link anterior invalidado)");
       ephemeral.set(ctx.requestId, { link: inviteLink(token) });
       return { id: snap.id, requestId: ctx.requestId };
@@ -540,6 +573,7 @@ export const organizationActions = {
       if (openStatus(snap.data()!) !== "pending") fail("conflict", "Este convite não está mais pendente.");
       // O hash continua gravado: o link antigo passa a mostrar "convite cancelado" (a situação impede o uso).
       tx.update(snap.ref, { status: "revoked", revokedAt: ctx.now, revokedBy: actor.uid, ...CLEAR_CLAIM });
+      tx.delete(linkRef(snap.id));
       audit(tx, actor, ctx, "revokeInvitation", "invitation", snap.id, "Convite revogado");
       return { id: snap.id };
     },
@@ -684,6 +718,100 @@ export const organizationActions = {
     },
   }),
 
+  /**
+   * SUPORTE: corrige a conta de qualquer integrante — nome, foto, e-mail de
+   * acesso e senha. E-mail e senha mudam primeiro no Authentication (etapa
+   * `prepare`; se a transação falhar, o e-mail volta ao anterior) e depois no
+   * cadastro. A senha nunca é gravada nem registrada; a auditoria só diz
+   * quais campos mudaram. Com e-mail ou senha novos, as sessões abertas da
+   * pessoa são encerradas (exceto quando o suporte altera a própria conta).
+   */
+  supportUpdateAccount: mutation({
+    module: "organization",
+    schema: supportAccountUpdate,
+    async prepare(actor, { id: memberId, input }, ctx) {
+      // Reenvio da mesma requisição: o Authentication já foi alterado.
+      if (await alreadyCompleted(actor.uid, ctx.requestId)) return;
+      requireSupport(actor);
+      if (input.email === undefined && input.password === undefined && input.name === undefined) return;
+      const user = await adminAuth.getUser(memberId).catch(() => null);
+      ensure(user, "not_found", "Conta de acesso não encontrada.");
+      const emailChanged = input.email !== undefined && input.email !== user.email?.toLowerCase();
+      if (emailChanged) {
+        const taken = await db.collection("memberPrivate").where("email", "==", input.email).limit(1).get();
+        if (taken.docs.some((d) => d.id !== memberId)) fail("conflict", "Já existe um integrante com esse e-mail.");
+      }
+      try {
+        await adminAuth.updateUser(memberId, {
+          ...(emailChanged ? { email: input.email, emailVerified: false } : {}),
+          ...(input.password !== undefined ? { password: input.password } : {}),
+          ...(input.name !== undefined ? { displayName: input.name } : {}),
+        });
+      } catch (error) {
+        if ((error as { code?: string }).code === "auth/email-already-exists") fail("conflict", "Esse e-mail já é usado por outra conta de acesso.");
+        throw error;
+      }
+      if (emailChanged && user.email) {
+        const previous = user.email;
+        ctx.onAbort(async () => {
+          await adminAuth.updateUser(memberId, { email: previous });
+        });
+      }
+    },
+    async run(tx, actor, { id: memberId, input }, ctx) {
+      actor = actor!;
+      requireSupport(actor);
+      const ref = db.doc(`members/${memberId}`);
+      const snap = await tx.get(ref);
+      ensure(snap.exists, "not_found", "Integrante não encontrado.");
+      const privateSnap = await tx.get(db.doc(`memberPrivate/${memberId}`));
+      const current = memberFromDoc(snap.id, snap.data()!);
+      const emailChanged = input.email !== undefined && input.email !== privateSnap.data()?.email;
+
+      const update: Record<string, unknown> = { updatedAt: ctx.now, updatedBy: actor.uid };
+      if (input.name !== undefined) update.name = input.name;
+      if (input.photo !== undefined) update.photo = input.photo ?? FieldValue.delete();
+      tx.update(ref, update);
+      if (emailChanged) tx.set(db.doc(`memberPrivate/${memberId}`), { email: input.email, emailChangedAt: ctx.now, emailChangedBy: actor.uid }, { merge: true });
+
+      const changes = [
+        input.name !== undefined && input.name !== current.name ? "nome" : null,
+        input.photo !== undefined ? (input.photo ? "foto" : "foto removida") : null,
+        emailChanged ? "e-mail de acesso" : null,
+        input.password !== undefined ? "senha" : null,
+      ].filter(Boolean);
+      audit(tx, actor, ctx, "supportUpdateAccount", "member", memberId, `Suporte: conta de ${input.name ?? current.name} — ${changes.join(", ") || "sem alterações"}`);
+
+      if ((emailChanged || input.password !== undefined) && memberId !== actor.uid) {
+        ctx.after(async () => {
+          await adminAuth.revokeRefreshTokens(memberId);
+        });
+      }
+      return { id: memberId };
+    },
+    async present(result, actor) {
+      return presentMember(result.id, actor!);
+    },
+  }),
+
+  /** SUPORTE: link de um convite pendente, para reenviar a quem perdeu a mensagem. */
+  invitationLink: query({
+    module: "organization",
+    schema: z.object({ id }).strict(),
+    async run(actor, { id: invitationId }) {
+      actor = actor!;
+      requireSupport(actor, "Somente o Suporte do sistema pode ver links de convites já enviados.");
+      const [inv, link] = await Promise.all([db.doc(`invitations/${invitationId}`).get(), linkRef(invitationId).get()]);
+      ensure(inv.exists, "not_found", "Convite não encontrado.");
+      const status = invitationDTO(inv.id, inv.data()!).status;
+      if (status !== "pending") fail("conflict", "Só convites pendentes têm link válido. Para um convite expirado, use Renovar.");
+      const token = link.data()?.token as string | undefined;
+      if (!token) fail("not_found", "Este convite foi criado antes de os links serem guardados. Use Renovar para gerar um link novo.");
+      await auditDirect({ uid: actor.uid, name: actor.name }, { action: "organization.invitationLink", module: "organization", resourceType: "invitation", resourceId: invitationId, summary: "Suporte consultou o link de um convite" });
+      return { link: inviteLink(token) };
+    },
+  }),
+
   /** Cadastro direto existe apenas no modo demonstração; com o Firebase, use convites. */
   createMember: mutation({
     module: "organization",
@@ -706,12 +834,6 @@ async function presentMember(memberId: string, actor: Actor) {
 
 /* --------------------------- convites (público) ------------------------- */
 
-const PASSWORD_RULE = "A senha precisa ter de 8 a 128 caracteres, com pelo menos uma letra e um número.";
-const password = z
-  .string()
-  .min(8, PASSWORD_RULE)
-  .max(128, PASSWORD_RULE)
-  .refine((v) => /[A-Za-zÀ-ÿ]/.test(v) && /\d/.test(v), PASSWORD_RULE);
 const INVALID_INVITE = "Convite inválido. Peça um novo link a quem convidou você.";
 const tokenSchema = z.string({ error: INVALID_INVITE }).trim().min(20, INVALID_INVITE).max(200, INVALID_INVITE);
 
@@ -886,11 +1008,13 @@ export const authActions = {
           writeAccess(tx, member, role, now);
           // O e-mail sai do convite (a fonte é memberPrivate); o hash fica para o link usado mostrar a mensagem certa.
           tx.update(claim.ref, { status: "accepted", acceptedAt: now, acceptedUserId: accountId, email: FieldValue.delete(), ...CLEAR_CLAIM });
+          tx.delete(linkRef(claim.ref.id));
           // Os outros convites deste e-mail (revogados ou expirados) também deixam de guardá-lo; os ainda abertos são revogados.
           const superseded = others.docs.filter((d) => d.id !== claim.ref.id);
           for (const d of superseded) {
             const open = (OPEN_STATUSES as readonly string[]).includes(d.data().status);
             tx.update(d.ref, open ? { status: "revoked", revokedAt: now, email: FieldValue.delete(), ...CLEAR_CLAIM } : { email: FieldValue.delete() });
+            if (open) tx.delete(linkRef(d.id));
           }
           auditInTx(
             tx,

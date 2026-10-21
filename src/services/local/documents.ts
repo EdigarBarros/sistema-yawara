@@ -4,6 +4,7 @@ import type { DemoDB } from "@/data/demo/seed";
 import type { AccessContext } from "@/lib/permissions";
 import { AUDIENCE_SCOPE_LABELS, DOCUMENT_STATUS } from "@/lib/labels";
 import { newId } from "@/lib/utils";
+import { isSupportRole } from "@/lib/support";
 import { commit, getDB } from "./db";
 import { storeFile } from "./blob-store";
 import {
@@ -184,6 +185,16 @@ export const localDocuments: DocumentService = {
       doc.updatedAt = now();
       doc.history.push(historyEntry(ctx.user.id, "restored", doc.status === "current" ? "Documento restaurado" : "Documento restaurado (em elaboração)"));
       return clone(doc);
+    });
+  },
+
+  async remove(id) {
+    await latency();
+    commit((db) => {
+      const ctx = accessContext(db);
+      if (!isSupportRole(ctx.role.id)) throw new ServiceError("forbidden", "Somente o Suporte do sistema pode excluir documentos de vez. Use Arquivar.");
+      findOrThrow(db.documents, id, "Documento");
+      db.documents = db.documents.filter((d) => d.id !== id);
     });
   },
 };

@@ -1,7 +1,7 @@
 import type { AuditService } from "../contracts";
 import type { AuditLogEntry, HistoryEntry, ModuleKey } from "@/types";
 import { getDB } from "./db";
-import { accessContext, latency, requirePermission } from "./context";
+import { accessContext, latency, requirePermission, ServiceError } from "./context";
 
 /**
  * Demonstração: a "auditoria" é montada a partir dos históricos dos registros
@@ -54,5 +54,9 @@ export const localAudit: AuditService = {
 
   async recordExport() {
     // Demonstração: não há auditoria oficial.
+  },
+
+  async remove() {
+    throw new ServiceError("unavailable", "Na demonstração, a auditoria é montada a partir dos históricos e não pode ser apagada.");
   },
 };

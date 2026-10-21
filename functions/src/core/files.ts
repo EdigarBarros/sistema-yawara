@@ -514,7 +514,7 @@ function chunkRefs(uploadId: string, total: number) {
   return Array.from({ length: total }, (_, i) => db.doc(`fileChunks/${chunkId(uploadId, i)}`));
 }
 
-async function deleteChunks(uploadId: string, total: number) {
+export async function deleteChunks(uploadId: string, total: number) {
   const batch = db.batch();
   for (const ref of chunkRefs(uploadId, total)) batch.delete(ref);
   await batch.commit();
