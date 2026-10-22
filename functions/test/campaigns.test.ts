@@ -145,6 +145,15 @@ describe("registro de vendas", () => {
     expect(await statsOf(c.id)).toEqual({ reserved: 0, pending: 1, paid: 0, cancelled: 0 });
   });
 
+  it("contato do comprador é opcional (vendas antigas), mas precisa ser válido quando informado", async () => {
+    const c = await newCampaign();
+    const semContato = await register("ass", c.id, [8], { buyerContact: "" });
+    expect(semContato.buyer).toEqual({ name: BUYER_NAME, contact: "" });
+    const omitido = await api<Sale>("registerSale", "ass", { campaignId: c.id, numbers: [9], buyerName: BUYER_NAME, sellerId: "evt", status: "pending" });
+    expect(omitido.buyer?.contact).toBe("");
+    await expectCode(register("ass", c.id, [11], { buyerContact: "123" }), "invalid");
+  });
+
   it("vários números na mesma venda (repetidos são ignorados, ordem crescente)", async () => {
     const c = await newCampaign();
     const sale = await register("ass", c.id, [10, 3, 1, 2, 2], { status: "reserved" });

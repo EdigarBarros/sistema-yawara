@@ -1,11 +1,10 @@
 "use client";
 
-import { CalendarPlus, ClipboardPlus, FilePlus2, GraduationCap, KeyRound, Megaphone, MinusCircle, PlusCircle, ScrollText, Settings, Ticket, UserX, Users } from "lucide-react";
+import { CalendarPlus, ClipboardPlus, FilePlus2, GraduationCap, KeyRound, Megaphone, MinusCircle, PlusCircle, Ticket, UserX } from "lucide-react";
 import type { HomePreset } from "@/types";
 import { useAccess } from "@/hooks/use-access";
 import { firstName, formatLongDate, greeting } from "@/lib/format";
-import { PageHeader, Panel } from "@/components/shared/page";
-import { ListRow } from "@/components/shared/list-row";
+import { PageHeader } from "@/components/shared/page";
 import { EmptyState } from "@/components/shared/states";
 import {
   ActiveCampaignsPanel,
@@ -32,39 +31,12 @@ import {
 import { HeroCards } from "@/features/home/hero-cards";
 import { Calendar3D } from "@/features/agenda/calendar-3d";
 import { WeekStrip } from "@/features/agenda/week-strip";
+import { PresidencyMobileHome } from "@/features/home/presidency-mobile";
+import { PresidencyDesktopHome } from "@/features/home/presidency-desktop";
+import { useIsDesktop } from "@/hooks/use-media";
 
 function Grid({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [&>*]:[animation:rise_.5s_cubic-bezier(.2,1.2,.4,1)_.15s_both]">{children}</div>;
-}
-
-function AdminShortcuts() {
-  const access = useAccess();
-  return (
-    <Panel title="Ferramentas administrativas" description="Disponíveis para o seu cargo" bodyClassName="py-1.5">
-      <ul className="divide-y divide-line">
-        {access.can("organization.view") && (
-          <li>
-            <ListRow href="/diretoria" leading={<Users className="size-4 text-fg-muted" />} title="Integrantes e cargos" subtitle="Quem faz parte da Atlética e em qual departamento" />
-          </li>
-        )}
-        {access.can("organization.admin") && (
-          <li>
-            <ListRow href="/diretoria?aba=permissoes" leading={<KeyRound className="size-4 text-fg-muted" />} title="Permissões por cargo" subtitle="Defina o que cada cargo pode ver e fazer" />
-          </li>
-        )}
-        {access.canModule("settings") && (
-          <li>
-            <ListRow href="/configuracoes" leading={<Settings className="size-4 text-fg-muted" />} title="Configurações" subtitle="Dados institucionais, módulos e categorias" />
-          </li>
-        )}
-        {access.canModule("audit") && (
-          <li>
-            <ListRow href="/auditoria" leading={<ScrollText className="size-4 text-fg-muted" />} title="Auditoria" subtitle="Registro oficial das operações importantes" />
-          </li>
-        )}
-      </ul>
-    </Panel>
-  );
 }
 
 /** Conteúdo da página inicial para cada perfil. */
@@ -74,24 +46,6 @@ function HomeContent({ preset }: { preset: HomePreset }) {
   const has = access.canModule;
 
   switch (preset) {
-    case "presidency":
-      return (
-        <div className="space-y-4">
-          <StatsRow>
-            {has("campaigns") && <CampaignStats />}
-            {has("events") && <EventStats />}
-            {has("finance") ? <FinanceStats compact /> : has("meetings") && <MeetingStats kinds={["pending"]} />}
-          </StatsRow>
-          <Grid>
-            {has("campaigns") && <ActiveCampaignsPanel />}
-            {has("events") && <UpcomingEventsPanel />}
-            {has("documents") && <RecentDocumentsPanel sharedOnly />}
-            <NoticesPanel />
-            {has("meetings") && <MeetingsPanel mode="pending" />}
-            <AdminShortcuts />
-          </Grid>
-        </div>
-      );
     case "secretary":
       return (
         <div className="space-y-4">
@@ -219,6 +173,7 @@ function QuickActions({ preset }: { preset: HomePreset }) {
 
 export default function HomePage() {
   const access = useAccess();
+  const isDesktop = useIsDesktop();
   if (!access.user) return null;
   if (!access.role) {
     return (
@@ -230,6 +185,8 @@ export default function HomePage() {
     );
   }
   const preset = access.role.homePreset;
+  // Celular da presidência: tela própria, simples e direta (o computador mantém o painel completo).
+  if (preset === "presidency") return isDesktop ? <PresidencyDesktopHome actions={<QuickActions preset={preset} />} /> : <PresidencyMobileHome />;
   return (
     <>
       <PageHeader

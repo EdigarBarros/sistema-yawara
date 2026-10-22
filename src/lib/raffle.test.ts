@@ -62,6 +62,9 @@ describe("parseNumberList", () => {
   it("aceita números, intervalos e separadores variados", () => {
     expect(parseNumberList("7, 12-15 30;2")).toEqual({ numbers: [2, 7, 12, 13, 14, 15, 30], invalid: [] });
   });
+  it("aceita intervalos por extenso e a palavra \"e\"", () => {
+    expect(parseNumberList("1, 5 e 7, 12 a 14, 20 até 21, 30 - 31")).toEqual({ numbers: [1, 5, 7, 12, 13, 14, 20, 21, 30, 31], invalid: [] });
+  });
   it("aponta trechos inválidos", () => {
     expect(parseNumberList("3, abc, 9-2").invalid).toEqual(["abc", "9-2"]);
   });

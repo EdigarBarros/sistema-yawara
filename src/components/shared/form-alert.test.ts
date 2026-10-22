@@ -79,7 +79,8 @@ const FORMS = [
   "src/features/events/event-form-dialog.tsx",
   "src/features/extension/project-form-dialog.tsx",
   "src/features/marketing/content-form-dialog.tsx",
-  "src/features/campaigns/sale-dialogs.tsx",
+  "src/features/campaigns/mobile/sale-wizard.tsx",
+  "src/features/campaigns/mobile/batch-sheet.tsx",
   "src/features/documents/document-form-dialog.tsx",
   "src/app/(app)/configuracoes/page.tsx",
 ];

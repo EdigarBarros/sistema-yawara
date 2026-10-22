@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Path } from "react-hook-form";
-import { audienceSchema, contactField, integerField, moneyField, optionalDate, requiredText } from "@/lib/validation";
+import { audienceSchema, optionalContactField, integerField, moneyField, optionalDate, requiredText } from "@/lib/validation";
 
 export const campaignSchema = z
   .object({
@@ -33,33 +33,19 @@ export const campaignSchema = z
 export type CampaignFormValues = z.infer<typeof campaignSchema>;
 
 /** Campos validados em cada etapa do formulário de nova rifa. */
+/** Campos guardados em "Opções avançadas" (já vêm com um padrão sensato). */
+export const CAMPAIGN_ADVANCED_FIELDS: Path<CampaignFormValues>[] = ["description", "notes", "eventId", "startDate", "endDate", "access.view", "access.sell", "access.buyerData"];
+
+/** Criar rifa em 2 passos: o essencial e a conferência. */
 export const CAMPAIGN_STEPS: { key: string; title: string; description: string; fields: Path<CampaignFormValues>[] }[] = [
-  { key: "dados", title: "Campanha", description: "Nome, prêmio e descrição", fields: ["name", "prize", "description", "notes", "eventId"] },
-  { key: "numeros", title: "Números e datas", description: "Quantidade, valor e prazos", fields: ["quantity", "unitPrice", "startDate", "endDate", "drawDate"] },
-  { key: "acesso", title: "Acesso e permissões", description: "Quem vê, vende e consulta dados", fields: ["access.view", "access.sell", "access.buyerData"] },
-  { key: "revisao", title: "Revisão", description: "Confira antes de criar", fields: [] },
+  { key: "rifa", title: "Como é a rifa?", description: "Nome, prêmio, números e valor", fields: ["name", "prize", "quantity", "unitPrice", "drawDate", ...CAMPAIGN_ADVANCED_FIELDS] },
+  { key: "revisao", title: "Confere?", description: "Revise antes de criar", fields: [] },
 ];
-
-export const saleSchema = z
-  .object({
-    buyerName: requiredText("o nome do comprador", 2),
-    buyerContact: contactField,
-    sellerId: z.string().min(1, "Escolha o responsável pela venda."),
-    status: z.enum(["reserved", "pending", "paid"]),
-    paymentMethod: z.enum(["pix", "cash", "card", "transfer", "other", ""]).optional(),
-    notes: z.string().trim().max(300, "Use no máximo 300 caracteres.").optional(),
-  })
-  .superRefine((v, ctx) => {
-    if (v.status === "paid" && !v.paymentMethod) {
-      ctx.addIssue({ code: "custom", path: ["paymentMethod"], message: "Informe a forma de pagamento recebida." });
-    }
-  });
-
-export type SaleFormValues = z.infer<typeof saleSchema>;
 
 export const editSaleSchema = z.object({
   buyerName: requiredText("o nome do comprador", 2).optional(),
-  buyerContact: contactField.optional(),
+  // Vendas antigas podem estar sem contato: editar não obriga a preencher.
+  buyerContact: optionalContactField.optional(),
   sellerId: z.string().min(1, "Escolha o responsável pela venda."),
   paymentMethod: z.enum(["pix", "cash", "card", "transfer", "other", ""]).optional(),
   notes: z.string().trim().max(300, "Use no máximo 300 caracteres.").optional(),

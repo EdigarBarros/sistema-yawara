@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Coins, Download, Gift, Lock, LockOpen, MoreHorizontal, Pencil, ShieldCheck, ShoppingCart, UserRound } from "lucide-react";
+import { BookOpen, CalendarDays, Coins, Download, Gift, Hourglass, ListOrdered, Lock, LockOpen, MessageCircle, MoreHorizontal, Pencil, ShieldCheck, ShoppingCart, UserRound } from "lucide-react";
 import { services } from "@/services";
 import { useAccess } from "@/hooks/use-access";
 import { useAction } from "@/hooks/use-action";
@@ -26,16 +26,24 @@ import { HistoryTimeline } from "@/components/shared/history";
 import { confirmAction } from "@/components/shared/confirm";
 import { RaffleBoard } from "@/features/campaigns/raffle-grid";
 import { NumberSheet } from "@/features/campaigns/number-sheet";
-import { RegisterSaleDialog } from "@/features/campaigns/sale-dialogs";
 import { ExportDialog } from "@/features/campaigns/export-dialog";
 import { CampaignEditDialog } from "@/features/campaigns/campaign-edit-dialog";
 import { SalesTable } from "@/features/campaigns/sales-table";
 import { CampaignAccessSummary } from "@/features/campaigns/access-config";
 import { RelatedEventLabel } from "@/features/campaigns/event-field";
 import { CampaignNotice } from "@/features/campaigns/notice";
+import { ActionTile, RaffleMobile, type ActionTileProps, type RaffleMobileView } from "@/features/campaigns/mobile/raffle-mobile";
+import { ShareSheet } from "@/features/campaigns/mobile/share-sheet";
+import { UnpaidSheet, type UnpaidView } from "@/features/campaigns/mobile/unpaid-sheet";
+import { BatchSheet } from "@/features/campaigns/mobile/batch-sheet";
+import { SaleWizard } from "@/features/campaigns/mobile/sale-wizard";
+import { useIsDesktop } from "@/hooks/use-media";
 
 export default function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const ver = useSearchParams().get("ver");
+  const initialView: RaffleMobileView = ver === "pendentes" || ver === "reservados" || ver === "divulgar" ? ver : null;
+  const isDesktop = useIsDesktop();
   const access = useAccess();
   const dir = useDirectory();
   const { data: campaign, isLoading, isError, error, refetch } = useCampaign(id);
@@ -63,6 +71,12 @@ export default function CampaignDetailPage() {
   const [exportOpen, setExportOpen] = useState(false);
   const [editTab, setEditTab] = useState<"dados" | "acesso" | null>(null);
   const [tab, setTab] = useState("numeros");
+  // Computador: as mesmas ações rápidas do celular. Vindo do "Precisa de você" (?ver=...), a lista certa já abre.
+  const [shareOpen, setShareOpen] = useState(isDesktop && initialView === "divulgar");
+  const [unpaidView, setUnpaidView] = useState<UnpaidView>(initialView === "reservados" ? "reservados" : "pendentes");
+  const [unpaidOpen, setUnpaidOpen] = useState(isDesktop && (initialView === "pendentes" || initialView === "reservados"));
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [board, setBoard] = useState<{ key: number; filter: "all" | "available" }>({ key: 0, filter: "all" });
 
   const slots = useMemo(() => (campaign ? buildSlots(campaign, sales ?? []) : []), [campaign, sales]);
   const summary = useMemo(() => (campaign ? summarize(campaign, sales ?? []) : null), [campaign, sales]);
@@ -88,6 +102,96 @@ export default function CampaignDetailPage() {
     setOpenNumber(null);
     setSaleNumbers(numbers);
   };
+
+  const askClose = async () => {
+    const ok = await confirmAction({
+      title: "Encerrar esta campanha?",
+      description: `Novas vendas serão bloqueadas. ${summary.reserved} número(s) reservado(s) e ${summary.pending} com pagamento pendente continuam podendo ser convertidos, confirmados, desfeitos ou cancelados. A Central não realiza o sorteio.`,
+      confirmLabel: "Encerrar campanha",
+      tone: "danger",
+    });
+    if (ok) close.runSafe();
+  };
+
+  const askReopen = async () => {
+    const ok = await confirmAction({ title: "Reabrir campanha?", description: "Novas vendas voltarão a ser permitidas.", confirmLabel: "Reabrir" });
+    if (ok) reopen.runSafe();
+  };
+
+  const refreshAfterConflict = () => {
+    void refetchSales();
+    void refetch();
+  };
+
+  const pendingSales = (sales ?? []).filter((x) => x.status === "pending").length;
+  const quickActions: Omit<ActionTileProps, "index">[] = [
+    {
+      icon: ListOrdered,
+      color: "#94b6d0",
+      title: "Números livres",
+      info: summary.available === 0 ? "Todos vendidos 🎉" : `${summary.available} para vender`,
+      onClick: () => {
+        setTab("numeros");
+        setBoard((b) => ({ key: b.key + 1, filter: "available" }));
+        requestAnimationFrame(() => document.getElementById("grade")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+      },
+    },
+    { icon: MessageCircle, color: "#3fcf8e", title: "Mandar no WhatsApp", info: "Imagem da tabela ou lista de livres", onClick: () => setShareOpen(true) },
+    {
+      icon: Hourglass,
+      color: "#f2a93b",
+      title: "Quem não pagou",
+      info: pendingSales === 0 ? "Ninguém devendo" : `${formatMoneyCompact(summary.receivableCents)} para receber`,
+      onClick: () => {
+        setUnpaidView("pendentes");
+        setUnpaidOpen(true);
+      },
+      badge: pendingSales,
+    },
+  ];
+  if (canSell && canManage) quickActions.push({ icon: BookOpen, color: "#e88ab5", title: "Passar vendas antigas", info: "Do caderno para o sistema", onClick: () => setBatchOpen(true) });
+
+  const sharedDialogs = (
+    <>
+      <NumberSheet campaign={campaign} slot={slot} onOpenChange={(o) => !o && setOpenNumber(null)} onSell={(n) => startSale([n])} />
+      <ExportDialog open={exportOpen} onOpenChange={setExportOpen} campaign={campaign} slots={slots} />
+      <CampaignEditDialog open={editTab !== null} onOpenChange={(o) => !o && setEditTab(null)} campaign={campaign} initialTab={editTab ?? "dados"} />
+    </>
+  );
+
+  if (!isDesktop) {
+    return (
+      <>
+        {salesFailed ? (
+          <section className="rounded-[22px] border border-line bg-surface">
+            <ErrorState message={errorMessage(salesError, "Não foi possível carregar as vendas desta rifa.")} onRetry={() => refetchSales()} />
+          </section>
+        ) : (
+          <RaffleMobile
+            campaign={campaign}
+            sales={sales ?? []}
+            slots={slots}
+            summary={summary}
+            canSell={canSell}
+            canManage={canManage}
+            canClose={canClose}
+            initialView={initialView}
+            onOpenNumber={setOpenNumber}
+            onStartSale={startSale}
+            onExport={() => setExportOpen(true)}
+            onEdit={setEditTab}
+            onClose={askClose}
+            onReopen={askReopen}
+            onConflict={refreshAfterConflict}
+          />
+        )}
+        {saleNumbers !== null && (
+          <SaleWizard open onOpenChange={(o) => !o && setSaleNumbers(null)} campaign={campaign} slots={slots} initialNumbers={saleNumbers} onConflict={refreshAfterConflict} />
+        )}
+        {sharedDialogs}
+      </>
+    );
+  }
 
   return (
     <>
@@ -151,25 +255,14 @@ export default function CampaignDetailPage() {
                         icon={<Lock />}
                         tone="danger"
                         hint="Bloqueia novas vendas; reservas e pagamentos pendentes continuam gerenciáveis"
-                        onSelect={async () => {
-                          const ok = await confirmAction({
-                            title: "Encerrar esta campanha?",
-                            description: `Novas vendas serão bloqueadas. ${summary.reserved} número(s) reservado(s) e ${summary.pending} com pagamento pendente continuam podendo ser convertidos, confirmados, desfeitos ou cancelados. A Central não realiza o sorteio.`,
-                            confirmLabel: "Encerrar campanha",
-                            tone: "danger",
-                          });
-                          if (ok) close.runSafe();
-                        }}
+                        onSelect={askClose}
                       >
                         Encerrar campanha
                       </DropdownMenuItem>
                     ) : (
                       <DropdownMenuItem
                         icon={<LockOpen />}
-                        onSelect={async () => {
-                          const ok = await confirmAction({ title: "Reabrir campanha?", description: "Novas vendas voltarão a ser permitidas.", confirmLabel: "Reabrir" });
-                          if (ok) reopen.runSafe();
-                        }}
+                        onSelect={askReopen}
                       >
                         Reabrir campanha
                       </DropdownMenuItem>
@@ -243,6 +336,12 @@ export default function CampaignDetailPage() {
             />
           </div>
 
+          <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
+            {quickActions.map((t, i) => (
+              <ActionTile key={t.title} {...t} index={i} />
+            ))}
+          </div>
+
           <Tabs value={tab} onValueChange={setTab} className="mt-6">
             <TabsList>
               <TabsTrigger value="numeros">Números</TabsTrigger>
@@ -253,8 +352,10 @@ export default function CampaignDetailPage() {
               <TabsTrigger value="historico">Histórico</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="numeros" className="mt-5">
+            <TabsContent value="numeros" className="mt-5" id="grade">
               <RaffleBoard
+                key={board.key}
+                initialFilter={board.filter}
                 slots={slots}
                 total={campaign.quantity}
                 selecting={selecting}
@@ -337,24 +438,36 @@ export default function CampaignDetailPage() {
         </>
       )}
 
-      <NumberSheet campaign={campaign} slot={slot} onOpenChange={(o) => !o && setOpenNumber(null)} onSell={(n) => startSale([n])} />
-      <RegisterSaleDialog
-        open={saleNumbers !== null}
-        onOpenChange={(o) => !o && setSaleNumbers(null)}
+      {saleNumbers !== null && (
+        <SaleWizard
+          open
+          onOpenChange={(o) => {
+            if (o) return;
+            setSaleNumbers(null);
+            setSelected(new Set());
+            setSelecting(false);
+          }}
+          campaign={campaign}
+          slots={slots}
+          initialNumbers={saleNumbers}
+          onConflict={refreshAfterConflict}
+        />
+      )}
+      <ShareSheet open={shareOpen} onOpenChange={setShareOpen} campaign={campaign} slots={slots} />
+      <UnpaidSheet
+        open={unpaidOpen}
+        onOpenChange={setUnpaidOpen}
         campaign={campaign}
-        slots={slots}
-        initialNumbers={saleNumbers ?? []}
-        onRegistered={() => {
-          setSelected(new Set());
-          setSelecting(false);
-        }}
-        onConflict={() => {
-          void refetchSales();
-          void refetch();
+        sales={sales ?? []}
+        view={unpaidView}
+        onViewChange={setUnpaidView}
+        onOpenNumber={(n) => {
+          setUnpaidOpen(false);
+          setOpenNumber(n);
         }}
       />
-      <ExportDialog open={exportOpen} onOpenChange={setExportOpen} campaign={campaign} slots={slots} />
-      <CampaignEditDialog open={editTab !== null} onOpenChange={(o) => !o && setEditTab(null)} campaign={campaign} initialTab={editTab ?? "dados"} />
+      <BatchSheet open={batchOpen} onOpenChange={setBatchOpen} campaign={campaign} slots={slots} onConflict={refreshAfterConflict} />
+      {sharedDialogs}
     </>
   );
 }
