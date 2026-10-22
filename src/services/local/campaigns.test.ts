@@ -74,6 +74,13 @@ describe("registro de vendas", () => {
     ).rejects.toThrow(/já como paga/);
   });
 
+  it("aceita venda sem contato (vendas antigas), mas recusa contato inválido", async () => {
+    const [a, b] = firstAvailable(CMP.kit, 2);
+    const sale = await campaigns.registerSale(CMP.kit, { numbers: [a], buyerName: "Comprador antigo", buyerContact: "", sellerId: USR.pedro, status: "pending" });
+    expect(sale.buyer).toEqual({ name: "Comprador antigo", contact: "" });
+    await expect(campaigns.registerSale(CMP.kit, { numbers: [b], buyerName: "Outro", buyerContact: "12", sellerId: USR.pedro, status: "pending" })).rejects.toThrow(/contato válido/);
+  });
+
   it("falha sem gravar nada quando a validação falha", async () => {
     const before = JSON.stringify(getDB().sales);
     const [n] = firstAvailable(CMP.kit);

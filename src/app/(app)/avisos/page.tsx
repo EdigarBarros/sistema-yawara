@@ -2,65 +2,19 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, CheckCheck, ClipboardCheck, ListChecks } from "lucide-react";
+import { ArrowRight, CheckCheck } from "lucide-react";
 import { services } from "@/services";
-import { useAccess } from "@/hooks/use-access";
 import { useAction } from "@/hooks/use-action";
-import { useEvents, useMeetings, useNotifications } from "@/hooks/use-data";
+import { useNotifications } from "@/hooks/use-data";
 import { useSession } from "@/stores/session";
-import { daysBetween, formatDate, formatRelative, todayDateOnly } from "@/lib/format";
+import { formatRelative } from "@/lib/format";
 import { errorMessage } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/shared/page";
 import { EmptyState, ErrorState, InlineLoader } from "@/components/shared/states";
 import { Button } from "@/components/ui/button";
 import { NOTIFICATION_ICONS } from "@/components/layout/notifications";
-
-interface Pending {
-  id: string;
-  href: string;
-  icon: React.ReactNode;
-  label: string;
-  title: string;
-  detail: string;
-  urgent?: boolean;
-}
-
-/** O que está esperando uma ação sua: atas para aprovar e tarefas com prazo próximo. */
-function usePending() {
-  const access = useAccess();
-  const userId = access.user?.id;
-  const canApprove = access.canModule("meetings") && access.can("meetings.approve");
-  const hasEvents = access.canModule("events");
-  const meetings = useMeetings(canApprove);
-  const events = useEvents(hasEvents);
-  const today = todayDateOnly();
-
-  const items: Pending[] = [];
-  if (canApprove) {
-    for (const m of meetings.data ?? []) {
-      if (m.status !== "pending_approval") continue;
-      items.push({ id: `m:${m.id}`, href: `/secretaria/${m.id}`, icon: <ClipboardCheck />, label: "Ata para aprovar", title: m.title, detail: `Reunião de ${formatDate(m.date)}` });
-    }
-  }
-  if (hasEvents) {
-    for (const e of events.data ?? []) {
-      if (e.status === "done" || e.status === "cancelled") continue;
-      for (const t of e.tasks) {
-        if (t.status === "done" || t.responsibleId !== userId || !t.dueDate || daysBetween(today, t.dueDate) > 7) continue;
-        const late = t.dueDate < today;
-        items.push({ id: `t:${t.id}`, href: `/eventos/${e.id}?aba=tarefas`, icon: <ListChecks />, label: late ? "Tarefa atrasada" : "Tarefa sua", title: t.title, detail: `${e.name} · prazo ${formatDate(t.dueDate)}`, urgent: late });
-      }
-    }
-  }
-  const failed = [canApprove && meetings, hasEvents && events].find((q) => q && q.isError);
-  return {
-    items,
-    loading: (canApprove && meetings.isLoading) || (hasEvents && events.isLoading),
-    error: failed ? failed.error : null,
-    retry: () => [meetings, events].forEach((q) => q.isError && void q.refetch()),
-  };
-}
+import { PENDING_ICONS, usePending } from "@/features/home/pending";
 
 export default function AvisosPage() {
   const router = useRouter();
@@ -107,12 +61,13 @@ export default function AvisosPage() {
                     p.urgent ? "border-danger/40 bg-danger/10" : "border-gold/30 bg-gradient-to-br from-gold/10 to-transparent",
                   )}
                 >
-                  <span className={cn("grid size-11 shrink-0 place-items-center rounded-xl [&_svg]:size-5", p.urgent ? "bg-danger text-white" : "bg-gold text-gold-ink")}>{p.icon}</span>
+                  <span className={cn("grid size-11 shrink-0 place-items-center rounded-xl [&_svg]:size-5", p.urgent ? "bg-danger text-white" : "bg-gold text-gold-ink")}>{PENDING_ICONS[p.kind]}</span>
                   <span className="min-w-0 flex-1">
                     <span className={cn("block text-[11px] font-bold tracking-[0.08em] uppercase", p.urgent ? "text-danger" : "text-gold-fg")}>{p.label}</span>
                     <span className="block truncate text-[15px] font-semibold">{p.title}</span>
                     <span className="block truncate text-[12.5px] text-fg-muted">{p.detail}</span>
                   </span>
+                  <span className={cn("hidden shrink-0 text-[12.5px] font-semibold sm:inline", p.urgent ? "text-danger" : "text-gold-fg")}>{p.action}</span>
                   <ArrowRight className="size-4 shrink-0 text-fg-subtle transition-transform group-active:translate-x-1" aria-hidden />
                 </Link>
               </li>

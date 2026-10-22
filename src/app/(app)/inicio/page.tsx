@@ -32,6 +32,8 @@ import {
 import { HeroCards } from "@/features/home/hero-cards";
 import { Calendar3D } from "@/features/agenda/calendar-3d";
 import { WeekStrip } from "@/features/agenda/week-strip";
+import { PresidencyMobileHome } from "@/features/home/presidency-mobile";
+import { useIsDesktop } from "@/hooks/use-media";
 
 function Grid({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [&>*]:[animation:rise_.5s_cubic-bezier(.2,1.2,.4,1)_.15s_both]">{children}</div>;
@@ -219,6 +221,7 @@ function QuickActions({ preset }: { preset: HomePreset }) {
 
 export default function HomePage() {
   const access = useAccess();
+  const isDesktop = useIsDesktop();
   if (!access.user) return null;
   if (!access.role) {
     return (
@@ -230,6 +233,8 @@ export default function HomePage() {
     );
   }
   const preset = access.role.homePreset;
+  // Celular da presidência: tela própria, simples e direta (o computador mantém o painel completo).
+  if (preset === "presidency" && !isDesktop) return <PresidencyMobileHome />;
   return (
     <>
       <PageHeader

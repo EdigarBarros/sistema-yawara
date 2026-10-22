@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, Coins, Download, Gift, Lock, LockOpen, MoreHorizontal, Pencil, ShieldCheck, ShoppingCart, UserRound } from "lucide-react";
 import { services } from "@/services";
@@ -33,9 +33,15 @@ import { SalesTable } from "@/features/campaigns/sales-table";
 import { CampaignAccessSummary } from "@/features/campaigns/access-config";
 import { RelatedEventLabel } from "@/features/campaigns/event-field";
 import { CampaignNotice } from "@/features/campaigns/notice";
+import { RaffleMobile, type RaffleMobileView } from "@/features/campaigns/mobile/raffle-mobile";
+import { SaleWizard } from "@/features/campaigns/mobile/sale-wizard";
+import { useIsDesktop } from "@/hooks/use-media";
 
 export default function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const ver = useSearchParams().get("ver");
+  const initialView: RaffleMobileView = ver === "pendentes" || ver === "reservados" || ver === "divulgar" ? ver : null;
+  const isDesktop = useIsDesktop();
   const access = useAccess();
   const dir = useDirectory();
   const { data: campaign, isLoading, isError, error, refetch } = useCampaign(id);
@@ -60,9 +66,11 @@ export default function CampaignDetailPage() {
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [saleNumbers, setSaleNumbers] = useState<number[] | null>(null);
-  const [exportOpen, setExportOpen] = useState(false);
+  // Vindo do "Precisa de você": no computador abre direto a aba de vendas ou a imagem para divulgar.
+  const [exportOpen, setExportOpen] = useState(isDesktop && initialView === "divulgar");
+  const [exportFormat, setExportFormat] = useState<"pdf" | "png">(initialView === "divulgar" ? "png" : "pdf");
   const [editTab, setEditTab] = useState<"dados" | "acesso" | null>(null);
-  const [tab, setTab] = useState("numeros");
+  const [tab, setTab] = useState(initialView === "pendentes" || initialView === "reservados" ? "vendas" : "numeros");
 
   const slots = useMemo(() => (campaign ? buildSlots(campaign, sales ?? []) : []), [campaign, sales]);
   const summary = useMemo(() => (campaign ? summarize(campaign, sales ?? []) : null), [campaign, sales]);
@@ -88,6 +96,71 @@ export default function CampaignDetailPage() {
     setOpenNumber(null);
     setSaleNumbers(numbers);
   };
+
+  const askClose = async () => {
+    const ok = await confirmAction({
+      title: "Encerrar esta campanha?",
+      description: `Novas vendas serão bloqueadas. ${summary.reserved} número(s) reservado(s) e ${summary.pending} com pagamento pendente continuam podendo ser convertidos, confirmados, desfeitos ou cancelados. A Central não realiza o sorteio.`,
+      confirmLabel: "Encerrar campanha",
+      tone: "danger",
+    });
+    if (ok) close.runSafe();
+  };
+
+  const askReopen = async () => {
+    const ok = await confirmAction({ title: "Reabrir campanha?", description: "Novas vendas voltarão a ser permitidas.", confirmLabel: "Reabrir" });
+    if (ok) reopen.runSafe();
+  };
+
+  const refreshAfterConflict = () => {
+    void refetchSales();
+    void refetch();
+  };
+
+  const sharedDialogs = (
+    <>
+      <NumberSheet campaign={campaign} slot={slot} onOpenChange={(o) => !o && setOpenNumber(null)} onSell={(n) => startSale([n])} />
+      <ExportDialog open={exportOpen} onOpenChange={setExportOpen} campaign={campaign} slots={slots} initialFormat={exportFormat} />
+      <CampaignEditDialog open={editTab !== null} onOpenChange={(o) => !o && setEditTab(null)} campaign={campaign} initialTab={editTab ?? "dados"} />
+    </>
+  );
+
+  if (!isDesktop) {
+    return (
+      <>
+        {salesFailed ? (
+          <section className="rounded-[22px] border border-line bg-surface">
+            <ErrorState message={errorMessage(salesError, "Não foi possível carregar as vendas desta rifa.")} onRetry={() => refetchSales()} />
+          </section>
+        ) : (
+          <RaffleMobile
+            campaign={campaign}
+            sales={sales ?? []}
+            slots={slots}
+            summary={summary}
+            canSell={canSell}
+            canManage={canManage}
+            canClose={canClose}
+            initialView={initialView}
+            onOpenNumber={setOpenNumber}
+            onStartSale={startSale}
+            onExport={() => {
+              setExportFormat("pdf");
+              setExportOpen(true);
+            }}
+            onEdit={setEditTab}
+            onClose={askClose}
+            onReopen={askReopen}
+            onConflict={refreshAfterConflict}
+          />
+        )}
+        {saleNumbers !== null && (
+          <SaleWizard open onOpenChange={(o) => !o && setSaleNumbers(null)} campaign={campaign} slots={slots} initialNumbers={saleNumbers} onConflict={refreshAfterConflict} />
+        )}
+        {sharedDialogs}
+      </>
+    );
+  }
 
   return (
     <>
@@ -119,7 +192,13 @@ export default function CampaignDetailPage() {
         }
         actions={
           <>
-            <Button onClick={() => setExportOpen(true)} disabled={salesFailed}>
+            <Button
+              onClick={() => {
+                setExportFormat("pdf");
+                setExportOpen(true);
+              }}
+              disabled={salesFailed}
+            >
               <Download /> Exportar
             </Button>
             {canSell && (
@@ -151,25 +230,14 @@ export default function CampaignDetailPage() {
                         icon={<Lock />}
                         tone="danger"
                         hint="Bloqueia novas vendas; reservas e pagamentos pendentes continuam gerenciáveis"
-                        onSelect={async () => {
-                          const ok = await confirmAction({
-                            title: "Encerrar esta campanha?",
-                            description: `Novas vendas serão bloqueadas. ${summary.reserved} número(s) reservado(s) e ${summary.pending} com pagamento pendente continuam podendo ser convertidos, confirmados, desfeitos ou cancelados. A Central não realiza o sorteio.`,
-                            confirmLabel: "Encerrar campanha",
-                            tone: "danger",
-                          });
-                          if (ok) close.runSafe();
-                        }}
+                        onSelect={askClose}
                       >
                         Encerrar campanha
                       </DropdownMenuItem>
                     ) : (
                       <DropdownMenuItem
                         icon={<LockOpen />}
-                        onSelect={async () => {
-                          const ok = await confirmAction({ title: "Reabrir campanha?", description: "Novas vendas voltarão a ser permitidas.", confirmLabel: "Reabrir" });
-                          if (ok) reopen.runSafe();
-                        }}
+                        onSelect={askReopen}
                       >
                         Reabrir campanha
                       </DropdownMenuItem>
@@ -337,7 +405,6 @@ export default function CampaignDetailPage() {
         </>
       )}
 
-      <NumberSheet campaign={campaign} slot={slot} onOpenChange={(o) => !o && setOpenNumber(null)} onSell={(n) => startSale([n])} />
       <RegisterSaleDialog
         open={saleNumbers !== null}
         onOpenChange={(o) => !o && setSaleNumbers(null)}
@@ -348,13 +415,9 @@ export default function CampaignDetailPage() {
           setSelected(new Set());
           setSelecting(false);
         }}
-        onConflict={() => {
-          void refetchSales();
-          void refetch();
-        }}
+        onConflict={refreshAfterConflict}
       />
-      <ExportDialog open={exportOpen} onOpenChange={setExportOpen} campaign={campaign} slots={slots} />
-      <CampaignEditDialog open={editTab !== null} onOpenChange={(o) => !o && setEditTab(null)} campaign={campaign} initialTab={editTab ?? "dados"} />
+      {sharedDialogs}
     </>
   );
 }
