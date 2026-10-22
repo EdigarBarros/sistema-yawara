@@ -9,7 +9,7 @@
  * - verde ("Tudo certo"): nada pendente;
  * - cinza ("Parado"): a área não tem nada acontecendo agora.
  */
-import type { AtleticaEvent, Campaign, ContentItem, DateOnly, ExtensionProject, FinanceEntry, Meeting, Sale } from "@/types";
+import type { AtleticaEvent, Campaign, ContentItem, DateOnly, ExtensionProject, FinanceEntry, Meeting, Sale, SportTeam } from "@/types";
 import { daysBetween, formatDayMonth, formatMoneyCompact, toDateOnly } from "@/lib/format";
 import { summarize } from "@/lib/raffle";
 import { summarizeFinance } from "@/features/finance/utils";
@@ -17,7 +17,7 @@ import { STALE_SALE_DAYS } from "./pending-rules";
 
 export type Health = "ok" | "warn" | "alert" | "idle";
 
-export type AreaKey = "campaigns" | "finance" | "events" | "marketing" | "meetings" | "extension";
+export type AreaKey = "campaigns" | "finance" | "events" | "marketing" | "meetings" | "extension" | "sports";
 
 export interface AreaStatus {
   key: AreaKey;
@@ -148,4 +148,17 @@ export function extensionArea(today: DateOnly, projects: ExtensionProject[]): Ar
   if (certificates > 0) return { ...base, health: "warn", headline, caption, reason: `${plural(certificates, "atividade", "atividades")} já feita(s) sem certificado emitido.` };
   if (running.length === 0) return { ...base, health: "idle", headline, caption, reason: "Nenhuma atividade acadêmica agora." };
   return { ...base, health: "ok", headline, caption, reason: "Atividades em dia." };
+}
+
+export function sportsArea(today: DateOnly, teams: SportTeam[]): AreaStatus {
+  const base = { key: "sports" as const, title: "Esportes", href: "/esportes" };
+  const active = teams.filter((t) => t.status === "active");
+  const scheduled = active.flatMap((t) => t.matches.filter((m) => m.status === "scheduled").map((m) => ({ t, m })));
+  const noResult = scheduled.filter(({ m }) => m.date < today).length;
+  const next = scheduled.filter(({ m }) => m.date >= today).sort((a, b) => a.m.date.localeCompare(b.m.date))[0];
+  const headline = next ? formatDayMonth(next.m.date) : "—";
+  const caption = next ? `próximo jogo: ${next.t.name} × ${next.m.opponent}` : `${plural(active.length, "modalidade ativa", "modalidades ativas")}`;
+  if (active.length === 0) return { ...base, health: "idle", headline, caption, reason: "Nenhuma modalidade em atividade." };
+  if (noResult > 0) return { ...base, health: "warn", headline, caption, reason: `${plural(noResult, "jogo já passou", "jogos já passaram")} sem o resultado registrado.` };
+  return { ...base, health: "ok", headline, caption, reason: next ? "Jogos e resultados em dia." : "Nenhum jogo marcado por enquanto." };
 }

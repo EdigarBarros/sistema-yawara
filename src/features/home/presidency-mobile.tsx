@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { ArrowRight, CalendarDays, ChevronRight, ClipboardList, FolderOpen, LayoutGrid, Ticket, Wallet, type LucideIcon } from "lucide-react";
+import { ArrowRight, CalendarDays, ChevronRight, ClipboardList, FolderOpen, LayoutGrid, Ticket, Trophy, Wallet, type LucideIcon } from "lucide-react";
 import { useAccess } from "@/hooks/use-access";
-import { useAllSales, useCampaigns, useDocuments, useFinanceEntries, useMeetings } from "@/hooks/use-data";
+import { useAllSales, useCampaigns, useDocuments, useFinanceEntries, useMeetings, useSportsTeams } from "@/hooks/use-data";
 import { useCountUp } from "@/hooks/use-count-up";
 import { summarize } from "@/lib/raffle";
 import { summarizeFinance } from "@/features/finance/utils";
@@ -210,7 +210,24 @@ export function useActionTiles() {
   tiles.push({ href: "/agenda", icon: CalendarDays, color: "#9b8cf2", title: "Agenda", info: <AgendaInfo /> });
   if (has("documents")) tiles.push({ href: "/documentos", icon: FolderOpen, color: "#3fcf8e", title: "Documentos", info: <DocumentsInfo /> });
   if (has("meetings")) tiles.push({ href: "/secretaria", icon: ClipboardList, color: "#8fb0ec", title: "Reuniões e atas", info: <MeetingsInfo toApprove={toApprove} />, badge: toApprove });
+  if (has("sports")) tiles.push({ href: "/esportes", icon: Trophy, color: "#f07a5a", title: "Esportes", info: <SportsInfo /> });
   return tiles;
+}
+
+function SportsInfo() {
+  const { data, isError } = useSportsTeams();
+  const today = todayDateOnly();
+  if (isError || !data) return <>Jogos e treinos</>;
+  const next = data
+    .filter((t) => t.status === "active")
+    .flatMap((t) => t.matches.filter((m) => m.status === "scheduled" && m.date >= today).map((m) => ({ t, m })))
+    .sort((a, b) => a.m.date.localeCompare(b.m.date))[0];
+  if (!next) return <>Nenhum jogo marcado</>;
+  return (
+    <>
+      <b className="font-semibold text-fg">{next.m.date === today ? "hoje" : WEEKDAY[parseDateOnly(next.m.date).getUTCDay()]}</b> · {next.t.name} × {next.m.opponent}
+    </>
+  );
 }
 
 function ActionGrid() {
