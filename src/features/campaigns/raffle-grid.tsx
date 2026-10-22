@@ -77,6 +77,8 @@ interface RaffleBoardProps {
   onOpen: (n: number) => void;
   canSelect: boolean;
   onSellSelected?: () => void;
+  /** Filtro ao abrir (ex.: "Números livres" já mostra só os disponíveis). */
+  initialFilter?: Filter;
 }
 
 /** Grade interativa com filtros, busca direta e seleção múltipla. */
@@ -91,8 +93,9 @@ export function RaffleBoard({
   onOpen,
   canSelect,
   onSellSelected,
+  initialFilter = "all",
 }: RaffleBoardProps) {
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<Filter>(initialFilter);
   const [jump, setJump] = useState("");
   const [jumpError, setJumpError] = useState<string>();
   const [block, setBlock] = useState(0);

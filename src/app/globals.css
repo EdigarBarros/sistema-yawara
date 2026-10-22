@@ -261,6 +261,31 @@
   from { stroke-dashoffset: 60; }
   to { stroke-dashoffset: 0; }
 }
+@keyframes check-draw {
+  from { stroke-dashoffset: 24; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes success-pop {
+  0% { opacity: 0; transform: scale(0.4); }
+  60% { opacity: 1; transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+@keyframes ring-out {
+  from { opacity: 0.55; transform: scale(0.8); }
+  to { opacity: 0; transform: scale(1.9); }
+}
+@keyframes sheet-up {
+  from { opacity: 0; transform: translateY(32px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes step-in {
+  from { opacity: 0; transform: translateX(28px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes step-back {
+  from { opacity: 0; transform: translateX(-28px); }
+  to { opacity: 1; transform: none; }
+}
 
 @layer base {
   html {
@@ -371,6 +396,11 @@
   .anim-pop { animation: pop 0.4s cubic-bezier(0.2, 1.2, 0.4, 1) both; }
   .anim-row { animation: slide-row 0.45s cubic-bezier(0.2, 1.2, 0.4, 1) both; }
   .anim-grow { transform-origin: left; animation: grow-x 1s ease 0.3s both; }
+  .anim-check { stroke-dasharray: 24; animation: check-draw 0.5s ease-out 0.45s both; }
+  .anim-success { animation: success-pop 0.55s cubic-bezier(0.2, 1.3, 0.4, 1) both; }
+  .anim-ring { animation: ring-out 1.1s ease-out 0.25s both; }
+  .anim-step { animation: step-in 0.32s cubic-bezier(0.2, 1, 0.3, 1) both; }
+  .anim-step[data-back] { animation-name: step-back; }
 
   /* Troca de tela: no celular desliza na direção da aba; no computador sobe de leve */
   .page-in { animation: page-rise 0.38s cubic-bezier(0.2, 1, 0.3, 1) both; }

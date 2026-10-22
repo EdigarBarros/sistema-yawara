@@ -14,7 +14,7 @@ export default function NewCampaignPage() {
         back={{ href: "/campanhas", label: "Campanhas e vendas" }}
         eyebrow="Nova campanha"
         title="Nova rifa"
-        description="Preencha em etapas. Criador, identificador e datas de registro são preenchidos automaticamente."
+        description="São só 2 passos: dizer como é a rifa e conferir. O resto o sistema preenche sozinho."
       />
       {access.can("campaigns.create") && access.canModule("campaigns") ? (
         <CampaignWizard />

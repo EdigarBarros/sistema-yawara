@@ -224,7 +224,7 @@ export function NumberSheet({ campaign, slot, onOpenChange, onSell }: NumberShee
                   <DetailList
                     items={[
                       { label: "Comprador", value: buyerAllowed && sale.buyer ? sale.buyer.name : <Restricted /> },
-                      { label: "Contato", value: buyerAllowed && sale.buyer ? <span className="font-mono">{sale.buyer.contact}</span> : <Restricted /> },
+                      { label: "Contato", value: buyerAllowed && sale.buyer ? (sale.buyer.contact ? <span className="font-mono">{sale.buyer.contact}</span> : <span className="text-fg-subtle">Não informado</span>) : <Restricted /> },
                       { label: "Responsável pela venda", value: dir.memberName(sale.sellerId) },
                       { label: "Registrado por", value: dir.memberName(sale.registeredById) },
                       { label: "Data da venda", value: formatDateTime(sale.createdAt) },

@@ -120,7 +120,8 @@ function validateSaleInput(db: DemoDB, campaign: Campaign, input: SaleInput, sal
     );
   }
   if (!input.buyerName || input.buyerName.trim().length < 2) throw new ServiceError("invalid", "Informe o nome do comprador.");
-  if (!input.buyerContact || input.buyerContact.trim().length < 5) throw new ServiceError("invalid", "Informe um contato do comprador (telefone ou e-mail).");
+  // Contato opcional (vendas antigas podem não ter telefone); quando preenchido, precisa ser válido.
+  if (input.buyerContact?.trim() && input.buyerContact.trim().length < 5) throw new ServiceError("invalid", "Informe um contato válido (telefone ou e-mail).");
   requireEligibleSeller(db, campaign, input.sellerId);
   if (input.status === "paid" && !input.paymentMethod) throw new ServiceError("invalid", "Informe a forma de pagamento.");
 }
@@ -288,7 +289,7 @@ export const localCampaigns: CampaignService = {
         id: newId("sale"),
         campaignId,
         numbers,
-        buyer: { name: input.buyerName.trim(), contact: input.buyerContact.trim() },
+        buyer: { name: input.buyerName.trim(), contact: input.buyerContact?.trim() ?? "" },
         sellerId: input.sellerId,
         registeredById: ctx.user.id,
         createdAt: at,
@@ -332,7 +333,7 @@ export const localCampaigns: CampaignService = {
         changes.push("nome do comprador");
       }
       if (input.buyerContact !== undefined && input.buyerContact.trim() !== sale.buyer?.contact) {
-        if (input.buyerContact.trim().length < 5) throw new ServiceError("invalid", "Informe um contato válido.");
+        if (input.buyerContact.trim() && input.buyerContact.trim().length < 5) throw new ServiceError("invalid", "Informe um contato válido.");
         sale.buyer = { name: sale.buyer?.name ?? "", contact: input.buyerContact.trim() };
         changes.push("contato");
       }
