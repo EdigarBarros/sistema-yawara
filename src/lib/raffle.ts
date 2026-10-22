@@ -68,12 +68,16 @@ export function unavailableNumbers(campaign: Pick<RaffleCampaign, "quantity">, s
 
 /**
  * Interpreta a digitação de números: "7, 12-15 30" → [7,12,13,14,15,30].
+ * Aceita também intervalos escritos por extenso ("12 a 15", "12 até 15") e com espaços ("12 - 15").
  * Retorna também os trechos inválidos para exibir mensagem clara.
  */
 export function parseNumberList(input: string) {
   const numbers: number[] = [];
   const invalid: string[] = [];
-  for (const token of input.split(/[\s,;]+/).filter(Boolean)) {
+  const normalized = input
+    .replace(/(\d+)(?:\s*[-–]\s*|\s+(?:a|até|ate)\s+)(\d+)/gi, "$1-$2")
+    .replace(/(\d)\s+e\s+(?=\d)/gi, "$1 ");
+  for (const token of normalized.split(/[\s,;]+/).filter(Boolean)) {
     const range = token.match(/^(\d+)[-–](\d+)$/);
     if (range) {
       const a = Number(range[1]);

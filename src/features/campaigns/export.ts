@@ -192,8 +192,15 @@ const PNG_COLORS: Record<NumberStatus, { fill: string; stroke: string; text: str
   cancelled: { fill: "#0a1236", stroke: "#2a3566", text: "#5f6b95" },
 };
 
-/** Imagem da grade para divulgação (sempre sem dados pessoais). */
+/** Imagem da grade para divulgação (sempre sem dados pessoais), baixada como arquivo. */
 export async function exportPng(ctx: ExportContext) {
+  const { blob, fileName, count } = await renderPng(ctx);
+  downloadBlob(blob, fileName);
+  return count;
+}
+
+/** Desenha a imagem da grade (sempre sem dados pessoais) e devolve o arquivo, sem baixar. */
+export async function renderPng(ctx: Omit<ExportContext, "audience" | "memberName" | "generatedBy">) {
   const { campaign } = ctx;
   const rows = filterSlots(ctx.slots, ctx.scope);
   const cols = rows.length > 400 ? 20 : rows.length > 150 ? 15 : 10;
@@ -288,6 +295,5 @@ export async function exportPng(ctx: ExportContext) {
 
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
   if (!blob) throw new Error(isDemoMode ? "Não foi possível gerar a imagem neste navegador." : "Não foi possível gerar a imagem.");
-  downloadBlob(blob, `${baseName({ ...ctx, audience: "public" })}.png`);
-  return rows.length;
+  return { blob, fileName: `${slugify(campaign.name)}-divulgacao-${ctx.scope}.png`, count: rows.length };
 }

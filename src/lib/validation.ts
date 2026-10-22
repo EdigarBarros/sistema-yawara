@@ -75,6 +75,12 @@ export const contactField = z
     "Informe um telefone com DDD ou um e-mail válido.",
   );
 
+/** Contato que pode ficar em branco; quando preenchido, segue a mesma regra de `contactField`. */
+export const optionalContactField = z
+  .string()
+  .trim()
+  .refine((v) => v === "" || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) || v.replace(/\D/g, "").length >= 8, "Informe um telefone com DDD ou um e-mail válido.");
+
 export const audienceSchema = z
   .object({
     scope: z.enum(["department", "board", "directors", "directors_advisors", "all", "roles", "people"]),

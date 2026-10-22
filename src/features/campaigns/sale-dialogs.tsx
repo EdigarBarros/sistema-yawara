@@ -373,7 +373,7 @@ function EditSaleBody({ onOpenChange, campaign, sale }: SaleDialogProps) {
               <Field label="Nome do comprador" required error={formState.errors.buyerName?.message}>
                 <Input {...register("buyerName")} />
               </Field>
-              <Field label="Contato" required error={formState.errors.buyerContact?.message}>
+              <Field label="Contato" optional error={formState.errors.buyerContact?.message}>
                 <Input {...register("buyerContact")} />
               </Field>
             </>

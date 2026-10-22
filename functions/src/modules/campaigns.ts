@@ -150,12 +150,12 @@ const updateInput = z.strictObject(
 const PAYMENT_METHODS = ["pix", "cash", "card", "transfer", "other"] as const;
 const paymentMethod = z.enum(PAYMENT_METHODS, "Escolha uma forma de pagamento válida.");
 const buyerName = z.string("Informe o nome do comprador.").trim().min(2, "Informe o nome do comprador.").max(120, "O nome do comprador pode ter no máximo 120 caracteres.");
+/** Opcional (vendas antigas passadas do caderno podem não ter telefone); quando preenchido, precisa ser válido. */
 const buyerContact = z
   .string("Informe um contato do comprador (telefone ou e-mail).")
   .trim()
-  .min(5, "Informe um contato do comprador (telefone ou e-mail).")
   .max(120, "O contato pode ter no máximo 120 caracteres.")
-  .refine((v) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) || v.replace(/\D/g, "").length >= 8, "Informe um telefone com DDD ou um e-mail válido.");
+  .refine((v) => v === "" || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) || v.replace(/\D/g, "").length >= 8, "Informe um telefone com DDD ou um e-mail válido.");
 const saleNotes = z.string().trim().max(300, "As observações podem ter no máximo 300 caracteres.");
 
 const registerSaleInput = z.strictObject(
@@ -166,7 +166,7 @@ const registerSaleInput = z.strictObject(
       .min(1, "Selecione pelo menos um número.")
       .max(10_000, `Uma venda pode ter no máximo ${MAX_NUMBERS_PER_SALE} números. Divida a seleção em vendas menores.`),
     buyerName,
-    buyerContact,
+    buyerContact: buyerContact.optional(),
     sellerId: docId,
     status: z.enum(["reserved", "pending", "paid"], "Escolha a situação da venda."),
     paymentMethod: paymentMethod.optional(),
@@ -839,7 +839,7 @@ export const campaignsActions = {
         id: saleRef.id,
         campaignId: campaign.id,
         numbers,
-        buyer: { name: input.buyerName, contact: input.buyerContact },
+        buyer: { name: input.buyerName, contact: input.buyerContact ?? "" },
         sellerId: input.sellerId,
         registeredById: actor.uid,
         createdAt: ctx.now,

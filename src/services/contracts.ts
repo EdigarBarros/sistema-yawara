@@ -203,6 +203,7 @@ export type CampaignUpdateInput = Partial<Omit<CampaignInput, "quantity" | "unit
 export interface SaleInput {
   numbers: number[];
   buyerName: string;
+  /** Telefone ou e-mail; pode ficar vazio (vendas antigas passadas para a Central sem contato). */
   buyerContact: string;
   sellerId: ID;
   status: Exclude<SaleStatus, "cancelled">;

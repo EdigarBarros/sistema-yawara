@@ -4,28 +4,29 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Controller, get, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeft, ArrowRight, Check, Clock, Dices, Fingerprint, Ticket, UserRound } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Clock, Fingerprint, SlidersHorizontal, UserRound } from "lucide-react";
 import { services } from "@/services";
 import { useAccess } from "@/hooks/use-access";
 import { useAction } from "@/hooks/use-action";
 import { formatDate, formatMoney, parseMoney } from "@/lib/format";
 import { padNumber } from "@/lib/raffle";
+import { cn } from "@/lib/utils";
 import { emptyAudience } from "@/lib/permissions";
 import { audienceError } from "@/lib/validation";
 import { liveRegister } from "@/lib/forms";
 import { Button } from "@/components/ui/button";
-import { ChoiceCards, Field, Input, Textarea } from "@/components/ui/form";
+import { Field, Input, Textarea } from "@/components/ui/form";
 import { Panel, DetailList } from "@/components/shared/page";
 import { Stepper } from "@/components/shared/stepper";
-import { CAMPAIGN_STEPS, campaignSchema, type CampaignFormValues } from "./schemas";
+import { CAMPAIGN_ADVANCED_FIELDS, CAMPAIGN_STEPS, campaignSchema, type CampaignFormValues } from "./schemas";
 import { CampaignAccessConfig, CampaignAccessSummary } from "./access-config";
 import { RelatedEventField, useRelatedEventName } from "./event-field";
-import { CampaignNotice } from "./notice";
 
 export function CampaignWizard() {
   const router = useRouter();
   const access = useAccess();
   const [step, setStep] = useState(0);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const create = useAction((v: CampaignFormValues) =>
     services.campaigns.create({
       name: v.name,
@@ -71,18 +72,21 @@ export function CampaignWizard() {
 
   const next = async () => {
     const ok = await trigger(CAMPAIGN_STEPS[step].fields, { shouldFocus: true });
-    if (!ok) return;
-    if (step === 1) {
-      // Regras entre datas validadas já nesta etapa (o esquema só as verifica no envio final).
-      const { startDate, endDate, drawDate } = form.getValues();
-      if (startDate && endDate && endDate < startDate) {
-        form.setError("endDate", { type: "custom", message: "O encerramento não pode ser antes do início." }, { shouldFocus: true });
-        return;
-      }
-      if (drawDate && ((startDate && drawDate < startDate) || (endDate && drawDate < endDate))) {
-        form.setError("drawDate", { type: "custom", message: "O sorteio deve ser no dia do encerramento ou depois." }, { shouldFocus: true });
-        return;
-      }
+    if (!ok) {
+      // Erro escondido em "Opções avançadas": abre a seção para a pessoa ver o que corrigir.
+      if (CAMPAIGN_ADVANCED_FIELDS.some((f) => get(form.formState.errors, f))) setAdvancedOpen(true);
+      return;
+    }
+    // Regras entre datas validadas já nesta etapa (o esquema só as verifica no envio final).
+    const { startDate, endDate, drawDate } = form.getValues();
+    if (startDate && endDate && endDate < startDate) {
+      setAdvancedOpen(true);
+      form.setError("endDate", { type: "custom", message: "O encerramento não pode ser antes do início." }, { shouldFocus: true });
+      return;
+    }
+    if (drawDate && ((startDate && drawDate < startDate) || (endDate && drawDate < endDate))) {
+      form.setError("drawDate", { type: "custom", message: "O sorteio deve ser no dia do encerramento ou depois." }, { shouldFocus: true });
+      return;
     }
     setStep((s) => Math.min(s + 1, CAMPAIGN_STEPS.length - 1));
   };
@@ -100,6 +104,7 @@ export function CampaignWizard() {
     // Algum campo inválido em etapa anterior: volta para ela.
     const firstStep = CAMPAIGN_STEPS.findIndex((s) => s.fields.some((f) => get(errors, f)));
     if (firstStep >= 0) setStep(firstStep);
+    if (CAMPAIGN_ADVANCED_FIELDS.some((f) => get(errors, f))) setAdvancedOpen(true);
   });
 
   return (
@@ -110,119 +115,111 @@ export function CampaignWizard() {
 
       <div className="min-w-0 space-y-5">
         {step === 0 && (
-          <Panel title="Sobre a campanha" description="Informações que aparecem na página da rifa.">
+          <Panel title="Como é a rifa?" description="Só o essencial. O resto já vem preenchido e pode ser mudado em “Opções avançadas”.">
             <div className="space-y-5">
-              <div>
-                <p className="mb-2 text-[13px] font-medium">Modalidade</p>
-                <ChoiceCards
-                  name="kind"
-                  value="raffle"
-                  onChange={() => undefined}
-                  options={[
-                    { value: "raffle", label: "Rifa", description: "Números numerados com prêmio sorteado.", icon: <Ticket className="size-3.5 text-fg-subtle" /> },
-                    { value: "bingo", label: "Bingo", description: "Disponível em uma próxima etapa.", icon: <Dices className="size-3.5 text-fg-subtle" />, disabled: true },
-                  ]}
-                />
+              <Field label="Nome da rifa" required error={errors.name?.message}>
+                <Input className="h-12 text-[16px]" placeholder="Ex.: Rifa do Kit Interatlética" {...register("name")} />
+              </Field>
+              <Field label="Qual é o prêmio?" required error={errors.prize?.message}>
+                <Input className="h-12 text-[16px]" placeholder="Ex.: Kit com camisa, short e caneca" {...register("prize")} />
+              </Field>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Quantos números?" required hint="De 2 a 10.000." error={errors.quantity?.message}>
+                  <Input className="h-12 text-[16px]" inputMode="numeric" placeholder="300" {...register("quantity")} />
+                </Field>
+                <Field label="Valor de cada (R$)" required hint="Ex.: 10,00" error={errors.unitPrice?.message}>
+                  <Input className="h-12 text-[16px]" inputMode="decimal" placeholder="10,00" {...register("unitPrice")} />
+                </Field>
               </div>
-              <Field label="Nome da campanha" required error={errors.name?.message}>
-                <Input placeholder="Ex.: Rifa do Kit Interatlética" {...register("name")} />
+              {quantity >= 2 && (
+                <div className="anim-rise flex flex-wrap gap-x-6 gap-y-1 rounded-xl border border-gold/30 bg-gold/[0.07] px-4 py-3 text-[14px] text-fg-muted">
+                  <span>
+                    Números de <b className="tnum font-mono text-fg">{padNumber(1, quantity)}</b> a <b className="tnum font-mono text-fg">{padNumber(quantity, quantity)}</b>
+                  </span>
+                  {price > 0 && (
+                    <span>
+                      Se vender tudo: <b className="tnum font-mono text-fg">{formatMoney(quantity * price)}</b>
+                    </span>
+                  )}
+                </div>
+              )}
+              <Field label="Data do sorteio" optional hint="A Central não faz o sorteio; a data serve para organizar e divulgar." error={errors.drawDate?.message}>
+                <Input className="h-12 text-[16px]" type="date" {...register("drawDate")} />
               </Field>
-              <Field label="Prêmio ou item oferecido" required error={errors.prize?.message}>
-                <Input placeholder="Ex.: Kit com camisa, short e caneca" {...register("prize")} />
-              </Field>
-              <Field label="Descrição" optional hint="Para que serve a arrecadação." error={errors.description?.message}>
-                <Textarea rows={3} {...register("description")} />
-              </Field>
-              <Field label="Observações" optional error={errors.notes?.message}>
-                <Textarea rows={2} placeholder="Regras internas, combinações com o fornecedor do prêmio…" {...register("notes")} />
-              </Field>
-              <Controller
-                control={control}
-                name="eventId"
-                render={({ field }) => <RelatedEventField value={field.value ?? ""} onChange={field.onChange} />}
-              />
+
+              <div className="rounded-xl border border-line">
+                <button
+                  type="button"
+                  onClick={() => setAdvancedOpen((o) => !o)}
+                  aria-expanded={advancedOpen}
+                  className="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left"
+                >
+                  <SlidersHorizontal className="size-5 shrink-0 text-fg-subtle" aria-hidden />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[15px] font-semibold">Opções avançadas</span>
+                    <span className="block text-[12.5px] text-fg-muted">Descrição, datas de venda, evento e quem pode ver e vender</span>
+                  </span>
+                  <ChevronDown className={cn("size-5 shrink-0 text-fg-subtle transition-transform duration-300", advancedOpen && "rotate-180")} aria-hidden />
+                </button>
+                {advancedOpen && (
+                  <div className="anim-rise space-y-5 border-t border-line px-4 py-5">
+                    <Field label="Descrição" optional hint="Para que serve a arrecadação." error={errors.description?.message}>
+                      <Textarea rows={3} {...register("description")} />
+                    </Field>
+                    <Field label="Observações" optional error={errors.notes?.message}>
+                      <Textarea rows={2} placeholder="Regras internas, combinações com o fornecedor do prêmio…" {...register("notes")} />
+                    </Field>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field label="Início das vendas" optional error={errors.startDate?.message}>
+                        <Input type="date" {...register("startDate")} />
+                      </Field>
+                      <Field label="Fim das vendas" optional error={errors.endDate?.message}>
+                        <Input type="date" {...register("endDate")} />
+                      </Field>
+                    </div>
+                    <Controller
+                      control={control}
+                      name="eventId"
+                      render={({ field }) => <RelatedEventField value={field.value ?? ""} onChange={field.onChange} />}
+                    />
+                    <div>
+                      <p className="mb-1 text-[14px] font-semibold">Quem pode ver e vender</p>
+                      <p className="mb-3 text-[12.5px] text-fg-muted">
+                        Padrão: todos veem a rifa, diretores e assessores vendem e só a diretoria vê nome e telefone de quem comprou.
+                      </p>
+                      <Controller
+                        control={control}
+                        name="access"
+                        render={({ field }) => (
+                          <CampaignAccessConfig
+                            value={field.value}
+                            onChange={field.onChange}
+                            errors={{
+                              view: audienceError(errors.access?.view),
+                              sell: audienceError(errors.access?.sell),
+                              buyerData: audienceError(errors.access?.buyerData),
+                            }}
+                          />
+                        )}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </Panel>
         )}
 
         {step === 1 && (
-          <Panel title="Números e datas" description="A grade é gerada automaticamente a partir da quantidade.">
-            <div className="space-y-5">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Quantidade de números" required hint="Número inteiro entre 2 e 10.000." error={errors.quantity?.message}>
-                  <Input inputMode="numeric" placeholder="300" {...register("quantity")} />
-                </Field>
-                <Field label="Valor de cada número (R$)" required hint="Ex.: 10,00" error={errors.unitPrice?.message}>
-                  <Input inputMode="decimal" placeholder="10,00" {...register("unitPrice")} />
-                </Field>
-              </div>
-              {quantity >= 2 && (
-                <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-lg border border-line bg-sunken px-4 py-3 text-[13px] text-fg-muted">
-                  <span>
-                    Numeração: <b className="tnum font-mono text-fg">{padNumber(1, quantity)}</b> a <b className="tnum font-mono text-fg">{padNumber(quantity, quantity)}</b>
-                  </span>
-                  {price > 0 && (
-                    <span>
-                      Arrecadação máxima: <b className="tnum font-mono text-fg">{formatMoney(quantity * price)}</b>
-                    </span>
-                  )}
-                </div>
-              )}
-              <div className="grid gap-4 sm:grid-cols-3">
-                <Field label="Início das vendas" optional error={errors.startDate?.message}>
-                  <Input type="date" {...register("startDate")} />
-                </Field>
-                <Field label="Encerramento" optional error={errors.endDate?.message}>
-                  <Input type="date" {...register("endDate")} />
-                </Field>
-                <Field label="Data do sorteio" optional error={errors.drawDate?.message}>
-                  <Input type="date" {...register("drawDate")} />
-                </Field>
-              </div>
-              <CampaignNotice
-                demo="A Central não realiza sorteios. A data serve apenas para organização e divulgação."
-                live="A Central não realiza sorteios. A data serve apenas para organização e divulgação."
-              />
-            </div>
-          </Panel>
-        )}
-
-        {step === 2 && (
-          <Panel title="Acesso e permissões" description="Defina, uma pergunta por vez, quem vê a campanha, quem registra vendas e quem consulta dados pessoais.">
-            <Controller
-              control={control}
-              name="access"
-              render={({ field }) => (
-                <CampaignAccessConfig
-                  value={field.value}
-                  onChange={field.onChange}
-                  errors={{
-                    view: audienceError(errors.access?.view),
-                    sell: audienceError(errors.access?.sell),
-                    buyerData: audienceError(errors.access?.buyerData),
-                  }}
-                />
-              )}
-            />
-            <CampaignNotice
-              className="mt-4"
-              demo="Nesta etapa as permissões são simuladas no navegador para demonstrar a experiência. O controle real será aplicado pelo backend."
-              live="O servidor aplica estas regras em cada operação: cada pessoa só vê a campanha, registra vendas ou consulta compradores se a configuração e o cargo dela permitirem."
-            />
-          </Panel>
-        )}
-
-        {step === 3 && (
           <>
-            <Panel title="Resumo da campanha">
+            <Panel title="Confere?" description="Se algo estiver errado, toque em Voltar.">
               <DetailList
                 items={[
-                  { label: "Modalidade", value: "Rifa" },
                   { label: "Nome", value: values.name },
                   { label: "Prêmio", value: values.prize },
                   { label: "Quantidade", value: quantity ? `${quantity} números (${padNumber(1, quantity)} a ${padNumber(quantity, quantity)})` : "—" },
-                  { label: "Valor unitário", value: price ? formatMoney(price) : "—" },
-                  { label: "Arrecadação máxima", value: quantity && price ? formatMoney(quantity * price) : "—" },
+                  { label: "Valor de cada número", value: price ? formatMoney(price) : "—" },
+                  { label: "Se vender tudo", value: quantity && price ? formatMoney(quantity * price) : "—" },
                   { label: "Início", value: values.startDate ? formatDate(values.startDate) : "Não definido" },
                   { label: "Encerramento", value: values.endDate ? formatDate(values.endDate) : "Não definido" },
                   { label: "Sorteio", value: values.drawDate ? formatDate(values.drawDate) : "Não definido" },
@@ -230,7 +227,7 @@ export function CampaignWizard() {
                 ]}
               />
             </Panel>
-            <Panel title="Acesso e permissões" description="Confira quem terá acesso antes de salvar.">
+            <Panel title="Quem pode ver e vender" description="Pode mudar depois, em “Mais opções” da rifa.">
               <CampaignAccessSummary access={values.access} creatorId={access.user?.id} />
             </Panel>
             <Panel title="Preenchido automaticamente" description="Você não precisa informar estes dados.">
