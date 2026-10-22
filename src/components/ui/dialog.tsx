@@ -132,11 +132,13 @@ export function BigSheetContent({ title, description, children, footer, onBack, 
         onInteractOutside={modal ? (e) => e.preventDefault() : undefined}
         className={cn(
           "fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[94dvh] w-full max-w-[560px] flex-col rounded-t-[28px] border border-line-strong bg-surface pb-[env(safe-area-inset-bottom)] shadow-pop outline-none [animation:sheet-up_.34s_cubic-bezier(.2,1,.3,1)_both]",
+          // Computador: janela centralizada, com a mesma aparência.
+          "lg:inset-x-auto lg:bottom-auto lg:top-1/2 lg:left-1/2 lg:max-h-[88dvh] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-[28px] lg:pb-0",
           className,
         )}
       >
-        <span aria-hidden className="mx-auto mt-2.5 h-1.5 w-11 shrink-0 rounded-full bg-line-strong" />
-        <div className="flex items-start gap-3 px-5 pt-3 pb-4">
+        <span aria-hidden className="mx-auto mt-2.5 h-1.5 w-11 shrink-0 rounded-full bg-line-strong lg:hidden" />
+        <div className="flex items-start gap-3 px-5 pt-3 pb-4 lg:px-6 lg:pt-6">
           {onBack && (
             <button type="button" onClick={onBack} className="press -ml-1.5 grid size-11 shrink-0 place-items-center rounded-full bg-surface-2 text-fg" aria-label="Voltar">
               <ArrowLeft className="size-5" />
