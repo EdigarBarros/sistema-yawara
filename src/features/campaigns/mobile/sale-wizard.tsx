@@ -228,7 +228,7 @@ function SaleWizardBody({ onOpenChange, campaign, slots, initialNumbers, onConfl
           <div className="space-y-4">
             <div className="min-h-[52px] rounded-2xl border border-line bg-sunken p-3">
               {list.length === 0 ? (
-                <p className="py-1.5 text-[14px] text-fg-muted">Toque nos números livres abaixo.</p>
+                <p className="py-1.5 text-[14px] text-fg-muted">Escolha os números livres abaixo.</p>
               ) : (
                 <>
                   <ul className="flex flex-wrap gap-1.5" aria-label="Números escolhidos">

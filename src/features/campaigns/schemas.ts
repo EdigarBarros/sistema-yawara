@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Path } from "react-hook-form";
-import { audienceSchema, contactField, optionalContactField, integerField, moneyField, optionalDate, requiredText } from "@/lib/validation";
+import { audienceSchema, optionalContactField, integerField, moneyField, optionalDate, requiredText } from "@/lib/validation";
 
 export const campaignSchema = z
   .object({
@@ -41,23 +41,6 @@ export const CAMPAIGN_STEPS: { key: string; title: string; description: string; 
   { key: "rifa", title: "Como é a rifa?", description: "Nome, prêmio, números e valor", fields: ["name", "prize", "quantity", "unitPrice", "drawDate", ...CAMPAIGN_ADVANCED_FIELDS] },
   { key: "revisao", title: "Confere?", description: "Revise antes de criar", fields: [] },
 ];
-
-export const saleSchema = z
-  .object({
-    buyerName: requiredText("o nome do comprador", 2),
-    buyerContact: contactField,
-    sellerId: z.string().min(1, "Escolha o responsável pela venda."),
-    status: z.enum(["reserved", "pending", "paid"]),
-    paymentMethod: z.enum(["pix", "cash", "card", "transfer", "other", ""]).optional(),
-    notes: z.string().trim().max(300, "Use no máximo 300 caracteres.").optional(),
-  })
-  .superRefine((v, ctx) => {
-    if (v.status === "paid" && !v.paymentMethod) {
-      ctx.addIssue({ code: "custom", path: ["paymentMethod"], message: "Informe a forma de pagamento recebida." });
-    }
-  });
-
-export type SaleFormValues = z.infer<typeof saleSchema>;
 
 export const editSaleSchema = z.object({
   buyerName: requiredText("o nome do comprador", 2).optional(),

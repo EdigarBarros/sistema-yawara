@@ -117,7 +117,7 @@ function SummaryCard({ campaign, summary }: { campaign: Campaign; summary: Campa
 
 /* ------------------------------- Botões grandes ------------------------------- */
 
-interface ActionTileProps {
+export interface ActionTileProps {
   icon: LucideIcon;
   color: string;
   title: string;
@@ -127,7 +127,7 @@ interface ActionTileProps {
   index: number;
 }
 
-function ActionTile({ icon: Icon, color, title, info, onClick, badge, index }: ActionTileProps) {
+export function ActionTile({ icon: Icon, color, title, info, onClick, badge, index }: ActionTileProps) {
   return (
     <button
       type="button"

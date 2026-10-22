@@ -25,7 +25,7 @@ function delay(ms: number) {
 /* --------------------------------- Rifa --------------------------------- */
 
 /** Botão principal: a rifa em andamento, com quanto já foi vendido. */
-function RaffleTile() {
+export function RaffleTile({ className }: { className?: string }) {
   const access = useAccess();
   const campaignsQuery = useCampaigns();
   const salesQuery = useAllSales();
@@ -45,7 +45,10 @@ function RaffleTile() {
   return (
     <Link
       href={href}
-      className="press anim-rise relative isolate flex min-h-[164px] flex-col justify-between overflow-hidden rounded-[26px] bg-gradient-to-br from-[#f3cd66] via-[#e1af37] to-[#c08a1a] p-5 text-gold-ink shadow-[0_14px_34px_-10px_rgba(225,175,55,0.55)]"
+      className={cn(
+        "press anim-rise relative isolate flex min-h-[164px] flex-col justify-between overflow-hidden rounded-[26px] bg-gradient-to-br from-[#f3cd66] via-[#e1af37] to-[#c08a1a] p-5 text-gold-ink shadow-[0_14px_34px_-10px_rgba(225,175,55,0.55)]",
+        className,
+      )}
       style={delay(60)}
     >
       <span
@@ -109,7 +112,7 @@ function RaffleTile() {
 
 /* ------------------------------ Botões grandes ------------------------------ */
 
-interface TileProps {
+export interface TileProps {
   href: string;
   icon: LucideIcon;
   color: string;
@@ -119,7 +122,7 @@ interface TileProps {
   index: number;
 }
 
-function Tile({ href, icon: Icon, color, title, info, badge, index }: TileProps) {
+export function Tile({ href, icon: Icon, color, title, info, badge, index }: TileProps) {
   return (
     <Link
       href={href}
@@ -196,7 +199,8 @@ function MeetingsInfo({ toApprove }: { toApprove: number }) {
   return <>{next ? `Próxima: ${next.date === today ? "hoje" : WEEKDAY[parseDateOnly(next.date).getUTCDay()]}` : "Nenhuma marcada"}</>;
 }
 
-function ActionGrid() {
+/** Os botões grandes do "O que você quer fazer?", conforme os módulos do cargo. */
+export function useActionTiles() {
   const access = useAccess();
   const has = access.canModule;
   const toApprove = useMeetingsToApprove(has("meetings") && access.can("meetings.approve"));
@@ -206,7 +210,11 @@ function ActionGrid() {
   tiles.push({ href: "/agenda", icon: CalendarDays, color: "#9b8cf2", title: "Agenda", info: <AgendaInfo /> });
   if (has("documents")) tiles.push({ href: "/documentos", icon: FolderOpen, color: "#3fcf8e", title: "Documentos", info: <DocumentsInfo /> });
   if (has("meetings")) tiles.push({ href: "/secretaria", icon: ClipboardList, color: "#8fb0ec", title: "Reuniões e atas", info: <MeetingsInfo toApprove={toApprove} />, badge: toApprove });
+  return tiles;
+}
 
+function ActionGrid() {
+  const tiles = useActionTiles();
   return (
     <div className="grid grid-cols-2 gap-3">
       {tiles.map((t, i) => (
@@ -284,13 +292,13 @@ function AllClear() {
   );
 }
 
-function PendingSection() {
+export function PendingSection({ limit = PENDING_LIMIT, className }: { limit?: number; className?: string }) {
   const { items, loading, error, retry } = usePending();
-  const shown = items.slice(0, PENDING_LIMIT);
+  const shown = items.slice(0, limit);
   const urgent = items.filter((i) => i.urgent).length;
 
   return (
-    <section aria-labelledby="precisa-de-voce">
+    <section aria-labelledby="precisa-de-voce" className={className}>
       <div className="anim-rise mb-3 flex items-end justify-between gap-3" style={delay(280)}>
         <h2 id="precisa-de-voce" className="font-display text-[22px] leading-none font-bold">
           Precisa de você
@@ -300,7 +308,7 @@ function PendingSection() {
             </span>
           )}
         </h2>
-        {items.length > PENDING_LIMIT && (
+        {items.length > limit && (
           <Link href="/avisos" className="inline-flex shrink-0 items-center gap-1 text-[13.5px] font-semibold text-gold-fg">
             Ver todos <ArrowRight className="size-4" aria-hidden />
           </Link>
