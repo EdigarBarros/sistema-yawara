@@ -6,6 +6,7 @@ import { Toaster } from "sonner";
 import { ConfirmHost } from "@/components/shared/confirm";
 import { SceneOverlay } from "@/components/layout/scene-overlay";
 import { FirebaseSessionBridge } from "@/components/auth/firebase-session";
+import { UpdateNotice } from "@/components/layout/update-notice";
 import { isFirebaseMode } from "@/lib/mode";
 import { useUI } from "@/stores/ui";
 
@@ -41,6 +42,7 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={client}>
       {isFirebaseMode && <FirebaseSessionBridge />}
+      <UpdateNotice />
       {children}
       <ConfirmHost />
       <SceneOverlay />

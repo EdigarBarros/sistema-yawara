@@ -126,7 +126,7 @@ async function main() {
     expireAt: Timestamp.fromMillis(Date.now() + AUDIT_RETENTION_DAYS * 86_400_000),
   });
   await batch.commit();
-  console.log("\nPronto. Quem estava logado precisa sair e entrar de novo para ver a área de Esportes.");
+  console.log("\nPronto. As permissões chegam sozinhas para quem está logado; quem está com a Central aberta desde antes da atualização do site só precisa recarregar a página.");
 }
 
 main().catch((e) => {
