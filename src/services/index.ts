@@ -21,6 +21,7 @@ import { localMeetings } from "./local/meetings";
 import { localFinance } from "./local/finance";
 import { localMarketing } from "./local/marketing";
 import { localExtension } from "./local/extension";
+import { localSports } from "./local/sports";
 import { localNotifications, localSearch, localSettings } from "./local/system";
 import { getObjectUrl, isAvailable, loadObjectUrl, openFile } from "./local/blob-store";
 import { firebaseServices } from "./firebase";
@@ -35,6 +36,7 @@ const localServices: Services = {
   finance: localFinance,
   marketing: localMarketing,
   extension: localExtension,
+  sports: localSports,
   settings: localSettings,
   notifications: localNotifications,
   search: localSearch,

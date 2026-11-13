@@ -14,7 +14,7 @@ export function UploadTray() {
         <div key={item.id} className="rounded-lg border border-line-strong bg-surface px-3.5 py-3 shadow-pop">
           <div className="flex items-center gap-2.5">
             <span className="text-fg-muted [&_svg]:size-4">
-              {item.state === "uploading" ? <Loader2 className="animate-spin" /> : item.state === "done" ? <CheckCircle2 className="text-ok" /> : item.state === "error" ? <XCircle className="text-danger" /> : <UploadCloud />}
+              {item.state === "uploading" || item.state === "verifying" ? <Loader2 className="animate-spin" /> : item.state === "done" ? <CheckCircle2 className="text-ok" /> : item.state === "error" ? <XCircle className="text-danger" /> : <UploadCloud />}
             </span>
             <p className="min-w-0 flex-1 truncate text-[13px] font-medium">{item.name}</p>
             {item.state === "uploading" && item.cancel && (
@@ -26,7 +26,7 @@ export function UploadTray() {
           <div className="mt-2 flex items-center gap-2.5">
             <Progress value={Math.round(item.progress * 100)} className="flex-1" label={`Envio de ${item.name}`} />
             <span className="w-[86px] text-right font-mono text-[11px] text-fg-subtle">
-              {item.state === "uploading" ? `${Math.round(item.progress * 100)}%` : item.state === "done" ? "enviado" : item.state === "cancelled" ? "cancelado" : "falhou"}
+              {item.state === "uploading" ? `${Math.round(item.progress * 100)}%` : item.state === "verifying" ? "conferindo…" : item.state === "done" ? "enviado" : item.state === "cancelled" ? "cancelado" : "falhou"}
             </span>
           </div>
         </div>

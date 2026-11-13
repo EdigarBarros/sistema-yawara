@@ -85,6 +85,20 @@
       ]
     },
     {
+      "collectionGroup": "sportsTeams",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "readers",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "notifications",
       "queryScope": "COLLECTION",
       "fields": [
@@ -434,6 +448,41 @@
     },
     {
       "collectionGroup": "projects",
+      "fieldPath": "access",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "sportsTeams",
+      "fieldPath": "history",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "sportsTeams",
+      "fieldPath": "trainings",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "sportsTeams",
+      "fieldPath": "athletes",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "sportsTeams",
+      "fieldPath": "matches",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "sportsTeams",
+      "fieldPath": "competitions",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "sportsTeams",
+      "fieldPath": "description",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "sportsTeams",
       "fieldPath": "access",
       "indexes": []
     },

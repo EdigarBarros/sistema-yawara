@@ -2,6 +2,7 @@ import type { OrganizationService } from "../contracts";
 import { commit, getDB } from "./db";
 import { accessContext, clone, findOrThrow, latency, now, requirePermission, ServiceError } from "./context";
 import { newId } from "@/lib/utils";
+import { isSupportRole } from "@/lib/support";
 
 function assertName(value: string | undefined, label: string) {
   if (value !== undefined && value.trim().length < 2) throw new ServiceError("invalid", `${label} precisa ter pelo menos 2 caracteres.`);
@@ -151,6 +152,30 @@ export const localOrganization: OrganizationService = {
   },
 
   async revokeInvitation() {
+    throw new ServiceError("unavailable", "Convites dependem do Firebase.");
+  },
+
+  async supportUpdateAccount(id, input) {
+    await latency();
+    return commit((db) => {
+      const ctx = accessContext(db);
+      if (!isSupportRole(ctx.role.id)) throw new ServiceError("forbidden", "Somente o Suporte do sistema pode fazer isso.");
+      const member = findOrThrow(db.members, id, "Integrante");
+      assertName(input.name, "O nome");
+      const email = input.email?.trim().toLowerCase();
+      if (email && db.members.some((m) => m.id !== id && m.email.toLowerCase() === email)) {
+        throw new ServiceError("conflict", "Já existe um integrante com esse e-mail.");
+      }
+      // Demonstração: não há senhas; o campo é ignorado.
+      if (input.name !== undefined) member.name = input.name.trim();
+      if (email) member.email = email;
+      if (input.photo === null) delete member.photo;
+      else if (input.photo !== undefined) member.photo = input.photo;
+      return clone(member);
+    });
+  },
+
+  async invitationLink() {
     throw new ServiceError("unavailable", "Convites dependem do Firebase.");
   },
 };

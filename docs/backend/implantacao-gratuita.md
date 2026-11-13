@@ -140,6 +140,72 @@ Como funciona e limites:
 - Envios abandonados (a pessoa desistiu no meio) são apagados quando a mesma
   pessoa faz um novo envio.
 
+## 3.2 Arquivos no Google Drive da Atlética (até 15 GB, sem cartão)
+
+Envio pela Central, sem link: o arquivo fica numa pasta privada do
+Google Drive de uma **conta Google própria da Atlética**, e não no banco. O
+Firestore guarda só os dados; o espaço é o do Drive da conta (15 GB grátis,
+divididos com o Gmail dela). Ninguém recebe link do Drive: a Central confere
+quem pode ver o registro e entrega o arquivo.
+
+**Uma vez só, com a conta Google da Atlética** (ex.: uma conta criada só para a
+Central — não use a conta pessoal de ninguém):
+
+1. Entre em <https://console.cloud.google.com> com essa conta e crie um projeto
+   (ex.: "Central Yawara Arquivos"). Não precisa de cartão.
+2. **APIs e serviços → Biblioteca**: procure **Google Drive API** e ative.
+3. **Google Auth Platform → Branding**: nome "Central Yawara", e-mail de
+   suporte da Atlética, página inicial `https://<endereço da Central>/sobre`,
+   política de privacidade `https://<endereço da Central>/privacidade` e, em
+   domínios autorizados, o domínio da Central (ex.: `sistema-yawara.vercel.app`).
+4. **Público**: tipo **Externo**; clique em **Publicar app** (status
+   **Em produção**). Em "Teste", a autorização expira em 7 dias e só entra quem
+   estiver em **Usuários de teste**.
+5. **Acesso a dados**: adicione só o escopo `.../auth/drive.file`.
+6. **Clientes → Criar cliente**, tipo **Aplicativo da Web**. Em
+   **URIs de redirecionamento autorizados**, coloque
+   `https://<endereço da Central>/api/drive/callback` (o mesmo endereço de
+   `APP_BASE_URL`). Copie o ID do cliente e a chave secreta.
+7. Na Vercel, **Settings → Environment Variables**: `NEXT_PUBLIC_FILE_STORAGE`
+   e `FILE_STORAGE` = `drive`, `GOOGLE_DRIVE_CLIENT_ID`,
+   `GOOGLE_DRIVE_CLIENT_SECRET` e `APP_BASE_URL` (endereço da Central, sem
+   barra no fim). Faça um novo deploy (Deployments → ⋯ → Redeploy).
+8. Na Central, com um cargo que tenha "Configurações: administrar"
+   (Presidência ou Suporte): **Configurações → Ambiente → Conectar Google
+   Drive**. Entre com a **conta da Atlética** e autorize. Se o Google avisar
+   que o app não foi verificado, é esperado (o app é da própria Atlética e só
+   pede acesso aos arquivos que ele criar): **Avançado → Acessar Central
+   Yawara**. A Central cria a pasta "Central Yawara — arquivos" e guarda o
+   acesso no servidor (coleção `serverSecrets`, que nenhum navegador lê).
+
+Alternativa sem a tela (ex.: para testes locais): com um cliente do tipo
+**App para computador**, rode
+`GOOGLE_DRIVE_CLIENT_ID=<id> GOOGLE_DRIVE_CLIENT_SECRET=<chave> npm run drive:autorizar`
+e coloque `GOOGLE_DRIVE_REFRESH_TOKEN` e `GOOGLE_DRIVE_FOLDER_ID` nas variáveis
+da hospedagem; elas têm prioridade sobre a conexão feita pela tela.
+
+Cuidados:
+
+- A chave secreta do cliente fica só no painel da hospedagem; nunca em chat,
+  e-mail ou no repositório. O acesso ao Drive fica no servidor e não aparece
+  na tela.
+- Não apague nem mova a pasta "Central Yawara — arquivos". Arquivos apagados
+  no Drive deixam de abrir na Central.
+- Se aparecer "A autorização do Google Drive da Central expirou ou foi
+  revogada" (ex.: o acesso foi removido em myaccount.google.com → Segurança,
+  ou a Central ficou 6 meses sem usar o Drive), clique em **Conectar de novo**
+  em Configurações → Ambiente (ou repita o script, na alternativa sem tela).
+- Até **500 MB por arquivo** (PDF, imagens, Word/Excel/PowerPoint/ODF,
+  TXT/CSV; sem vídeo). O espaço total é o da conta da Atlética (15 GB,
+  dividido com o Gmail dela).
+- O arquivo vai em partes de 3 MB pelo servidor, que confere cada parte e a
+  repassa na hora ao Drive; nada fica no banco. A primeira parte já tem o tipo
+  real conferido; ao salvar, o servidor confere tamanho e SHA-256 no próprio
+  Drive. A barra de progresso só avança quando o Drive confirma cada parte.
+- Envios abandonados no meio são apagados do Drive quando a mesma pessoa faz
+  um novo envio.
+- Arquivos enviados antes no modo `database` continuam abrindo normalmente.
+
 ## 4. Estrutura inicial e primeiro administrador
 
 Uma única vez, no computador, com o JSON da conta de serviço:
@@ -198,6 +264,43 @@ export GOOGLE_CLOUD_QUOTA_PROJECT=<id-do-projeto>
 npm run suporte -- --project <id-do-projeto> --email <email-do-suporte> --remover <email-a-apagar>            # ensaio
 npm run suporte -- --project <id-do-projeto> --email <email-do-suporte> --remover <email-a-apagar> --aplicar  # de verdade
 ```
+
+Além das permissões normais, só quem está no cargo de suporte pode, pela
+própria Central:
+
+- **Conta de qualquer integrante** (Diretoria → perfil → *Conta (suporte)*):
+  trocar foto, nome, e-mail de acesso e senha. Trocar e-mail ou senha encerra
+  as sessões abertas da pessoa. A senha nunca é gravada nem registrada.
+- **Links de convite** (Diretoria → Convites → *Copiar link*): recupera o link
+  de um convite pendente. Por isso o token dos convites pendentes fica guardado
+  em `invitationLinks/{id}`, coleção que só o servidor lê; ele some quando o
+  convite é aceito ou revogado. Convites criados antes desta função não têm o
+  link guardado: use *Renovar*.
+- **Auditoria:** apagar registros (um a um ou a lista carregada). Fica um
+  registro dizendo quantos foram apagados e por quem.
+- **Documentos:** excluir de vez (documento, versões e arquivos), na página do
+  documento. Não tem volta.
+
+Tudo isso é conferido no servidor (`requireSupport`), não só na tela.
+
+## 4.3 Atualização: área de Esportes (instalações já em uso)
+
+O módulo **Esportes** (modalidades, treinos, elenco, jogos e competições) usa
+uma coleção nova (`sportsTeams`). Numa Central que já estava funcionando, faça
+uma vez, no Cloud Shell, dentro da pasta do projeto atualizada (`git pull`):
+
+```bash
+export GOOGLE_CLOUD_QUOTA_PROJECT=<id-do-projeto>
+npx firebase deploy --only firestore:rules,firestore:indexes --project <id-do-projeto>   # regras e índices novos
+npm run esportes -- --project <id-do-projeto>            # ensaio: mostra o que vai mudar
+npm run esportes -- --project <id-do-projeto> --aplicar  # de verdade
+```
+
+O script só cria o que falta e só soma permissões (nunca apaga nem retira):
+liga o módulo, cria o departamento Esportes e os cargos Diretor(a) e
+Assessor(a) de Esportes, dá as permissões de Esportes ao Suporte do sistema e
+à presidência, e recalcula o acesso de quem está nesses cargos. Depois, quem
+estava logado sai e entra de novo.
 
 ## 5. Cotas gratuitas e cuidados
 

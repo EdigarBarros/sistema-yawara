@@ -6,6 +6,7 @@ import { Check, FileUp, Link2, Paperclip, Search, X } from "lucide-react";
 import type { ID } from "@/types";
 import { useDirectory } from "@/hooks/use-data";
 import { Select } from "@/components/ui/form";
+import { FileTypeIcon } from "./file-type-icon";
 import { cn, matchesQuery } from "@/lib/utils";
 import { fileExtension, formatBytes } from "@/lib/format";
 import { isLinkFile } from "@/lib/file-links";
@@ -197,7 +198,7 @@ export function FilePicker({ file, onChange, accept, hint, label = "Escolher arq
   if (file) {
     return (
       <div className="flex items-center gap-3 rounded-lg border border-line-strong bg-sunken px-3 py-2.5">
-        <div className="grid size-9 shrink-0 place-items-center rounded-md bg-surface-3 font-mono text-[10px] font-semibold text-gold-fg">{fileExtension(file.name).slice(0, 4)}</div>
+        <FileTypeIcon name={file.name} size={36} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-medium">{file.name}</p>
           <p className="text-[11.5px] text-fg-subtle">

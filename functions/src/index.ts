@@ -21,5 +21,6 @@ export const meetingsApi = createApi("meetings", API_ACTIONS.meetings);
 export const financeApi = createApi("finance", API_ACTIONS.finance);
 export const marketingApi = createApi("marketing", API_ACTIONS.marketing);
 export const extensionApi = createApi("extension", API_ACTIONS.extension);
+export const sportsApi = createApi("sports", API_ACTIONS.sports);
 
 export { cleanupUploads } from "./modules/maintenance";

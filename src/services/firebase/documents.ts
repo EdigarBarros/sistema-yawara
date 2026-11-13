@@ -260,4 +260,10 @@ export const firebaseDocuments: DocumentService = {
     safeId(id);
     return normalize(await callApi<InstitutionalDocument>("documents", "restore", { id }, rid));
   },
+
+  async remove(id) {
+    const rid = takeRequestId();
+    safeId(id);
+    await callApi("documents", "remove", { id }, rid);
+  },
 };

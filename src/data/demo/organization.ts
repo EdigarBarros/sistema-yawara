@@ -145,9 +145,10 @@ export function buildRoles(clock: Clock): Role[] {
       ],
     }),
     role(clock, {
-      id: ROLE.esportes, name: "Diretor(a) de Esportes", departmentId: DEP.esportes, level: "director", isBoard: true, homePreset: "events",
+      id: ROLE.esportes, name: "Diretor(a) de Esportes", departmentId: DEP.esportes, level: "director", isBoard: true, homePreset: "sports",
       description: "Coordena as modalidades esportivas e a participação em competições.",
       permissions: [
+        ...p("sports", ["view", "create", "edit", "archive", "export"]),
         ...p("events", ["view", "create", "edit"]),
         ...p("campaigns", ["view", "create", "register"]),
         ...p("documents", ["view", "create"]),
@@ -178,7 +179,7 @@ export function buildRoles(clock: Clock): Role[] {
     role(clock, {
       id: ROLE.assEsportes, name: "Assessor(a) de Esportes", departmentId: DEP.esportes, level: "advisor", isBoard: false, homePreset: "advisor", active: true,
       description: "Apoia a organização dos treinos e das competições.",
-      permissions: [...p("events", ["view"]), ...p("campaigns", ["view", "register"])],
+      permissions: [...p("sports", ["view", "edit"]), ...p("events", ["view"]), ...p("campaigns", ["view", "register"])],
     }),
   ];
 }
@@ -217,9 +218,11 @@ export function buildMembers(clock: Clock): Member[] {
     member(clock, USR.marina, "Marina Saraiva", ROLE.extensao, 270, {
       demoProfile: { label: "Ensino e Extensão", description: "Projetos, palestrantes, presença e certificados.", order: 6 },
     }),
-    member(clock, USR.gabriel, "Gabriel Souto", ROLE.esportes, 260),
+    member(clock, USR.gabriel, "Gabriel Souto", ROLE.esportes, 260, {
+      demoProfile: { label: "Direção de Esportes", description: "Modalidades, treinos, elenco, jogos e competições.", order: 7 },
+    }),
     member(clock, USR.pedro, "Pedro Lins", ROLE.assEventos, 200, {
-      demoProfile: { label: "Assessor", description: "Acesso restrito: tarefas de eventos e registro de vendas.", order: 7 },
+      demoProfile: { label: "Assessor", description: "Acesso restrito: tarefas de eventos e registro de vendas.", order: 8 },
     }),
     member(clock, USR.lucas, "Lucas Farias", ROLE.assEventos, 150),
     member(clock, USR.julia, "Júlia Rocha", ROLE.assMarketing, 190),

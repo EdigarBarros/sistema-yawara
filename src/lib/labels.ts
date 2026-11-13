@@ -9,6 +9,7 @@ import type {
   AudienceScope,
   CampaignStatus,
   CertificateStatus,
+  CompetitionStatus,
   Channel,
   ContentStatus,
   ContentType,
@@ -19,6 +20,7 @@ import type {
   EventType,
   HistoryAction,
   MeetingMode,
+  MatchStatus,
   MeetingStatus,
   ModuleKey,
   NumberStatus,
@@ -27,7 +29,9 @@ import type {
   ProjectStatus,
   RoleLevel,
   SaleStatus,
+  SportCategory,
   TaskStatus,
+  TeamStatus,
 } from "@/types";
 
 export type Tone = "neutral" | "gold" | "ok" | "warn" | "danger" | "info" | "ice";
@@ -45,6 +49,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   finance: "Financeiro",
   marketing: "Marketing",
   extension: "Ensino e Extensão",
+  sports: "Esportes",
   organization: "Diretoria e organização",
   settings: "Configurações",
   audit: "Auditoria",
@@ -246,3 +251,32 @@ export const HISTORY_ACTION_LABELS: Record<HistoryAction, string> = {
   duplicated: "Duplicação",
   attachment: "Anexo",
 };
+
+/* -------------------------------- Esportes ------------------------------- */
+
+export const SPORT_CATEGORY_LABELS: Record<SportCategory, string> = {
+  feminino: "Feminino",
+  masculino: "Masculino",
+  misto: "Misto",
+};
+
+export const TEAM_STATUS: Record<TeamStatus, StatusMeta> = {
+  active: { label: "Em atividade", tone: "ok" },
+  paused: { label: "Pausada", tone: "warn" },
+  archived: { label: "Arquivada", tone: "neutral" },
+};
+
+export const MATCH_STATUS: Record<MatchStatus, StatusMeta> = {
+  scheduled: { label: "Agendado", tone: "info" },
+  played: { label: "Realizado", tone: "ok" },
+  cancelled: { label: "Cancelado", tone: "danger" },
+};
+
+export const COMPETITION_STATUS: Record<CompetitionStatus, StatusMeta> = {
+  upcoming: { label: "Em breve", tone: "info" },
+  ongoing: { label: "Em andamento", tone: "gold" },
+  finished: { label: "Encerrada", tone: "ok" },
+};
+
+/** 0 = domingo … 6 = sábado (igual a Date.getDay()). */
+export const WEEKDAY_LABELS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"] as const;

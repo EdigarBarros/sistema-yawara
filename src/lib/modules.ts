@@ -104,6 +104,19 @@ export const MODULES: ModuleDefinition[] = [
     },
   },
   {
+    key: "sports",
+    label: "Esportes",
+    description: "Modalidades, treinos, elencos, jogos e competições.",
+    actions: {
+      view: "Ver modalidades",
+      create: "Criar modalidades",
+      edit: "Editar modalidades, treinos, elenco, jogos e competições",
+      archive: "Pausar e arquivar modalidades",
+      export: "Exportar elencos e resultados",
+      admin: "Gerenciar acesso de qualquer modalidade",
+    },
+  },
+  {
     key: "organization",
     label: "Diretoria e organização",
     description: "Integrantes, cargos, departamentos e permissões.",

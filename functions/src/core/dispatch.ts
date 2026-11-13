@@ -117,6 +117,8 @@ const IDEMPOTENCY_TTL_DAYS = 2;
 function canonical(value: unknown, key?: string): unknown {
   // O navegador reenvia o arquivo (novo tíquete) ao repetir a requisição: conta só se há arquivo.
   if (key === "uploadId") return value == null ? null : "arquivo";
+  // Senhas nunca entram no resumo guardado (só se havia uma).
+  if (key === "password") return value == null ? null : "senha";
   if (key === "uploadIds") return Array.isArray(value) ? value.map(() => "arquivo") : (value ?? null);
   if (Array.isArray(value)) return value.map((item) => canonical(item));
   if (value && typeof value === "object") {

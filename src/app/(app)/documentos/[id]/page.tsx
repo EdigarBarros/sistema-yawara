@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { Archive, ArchiveRestore, CalendarDays, ClipboardList, Download, ExternalLink, FileText, FileUp, GraduationCap, Loader2, Pencil, Share2, Tag } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import { Archive, ArchiveRestore, CalendarDays, ClipboardList, Download, ExternalLink, FileText, FileUp, GraduationCap, Loader2, Pencil, Share2, Tag, Trash2 } from "lucide-react";
 import type { FileRef } from "@/types";
 import { services } from "@/services";
 import { downloadName } from "@/services/firebase/files";
@@ -17,6 +17,7 @@ import { DOCUMENT_STATUS } from "@/lib/labels";
 import { fileExtension, formatBytes, formatDateTime, formatDateTimeShort } from "@/lib/format";
 import { notifyError } from "@/lib/notify";
 import { isDemoMode } from "@/lib/mode";
+import { isSupportRole } from "@/lib/support";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/misc";
 import { DetailList, MetaItem, PageHeader, Panel } from "@/components/shared/page";
@@ -142,6 +143,8 @@ export default function DocumentDetailPage() {
   const [dialog, setDialog] = useState<"edit" | "share" | "version" | null>(null);
   const archive = useAction(() => services.documents.archive(id), { success: "Documento arquivado", successDescription: "Continua disponível para consulta em “Arquivados”." });
   const restore = useAction(() => services.documents.restore(id), { success: "Documento restaurado" });
+  const router = useRouter();
+  const remove = useAction(() => services.documents.remove(id), { success: "Documento excluído", onSuccess: () => router.replace("/documentos") });
   // Firebase: só baixa automaticamente o que a página consegue mostrar; o restante é baixado no clique.
   const currentFile = doc?.versions.at(-1)?.file ?? null;
   const preview = useFileObjectUrl(isDemoMode || isPreviewable(currentFile) ? currentFile : null);
@@ -315,6 +318,28 @@ export default function DocumentDetailPage() {
                   <Archive /> Arquivar documento
                 </Button>
               )}
+            </Panel>
+          )}
+          {isSupportRole(access.role?.id) && (
+            <Panel title="Excluir de vez (suporte)">
+              <p className="mb-3 text-[13px] text-fg-muted">Apaga o documento e os arquivos de todas as versões. Não tem volta.</p>
+              <Button
+                variant="danger"
+                loading={remove.pending}
+                onClick={async () => {
+                  if (
+                    await confirmAction({
+                      title: `Excluir “${doc.name}” de vez?`,
+                      description: "O documento, todas as versões e os arquivos são apagados. Não dá para desfazer.",
+                      confirmLabel: "Excluir de vez",
+                      tone: "danger",
+                    })
+                  )
+                    remove.runSafe();
+                }}
+              >
+                <Trash2 /> Excluir documento
+              </Button>
             </Panel>
           )}
           <Panel title="Histórico">

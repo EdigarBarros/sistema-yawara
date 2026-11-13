@@ -44,6 +44,7 @@ const KIND_MODULE: Record<SearchResultKind, ModuleKey> = {
   finance: "finance",
   project: "extension",
   content: "marketing",
+  team: "sports",
 };
 
 interface StoredEntry {
