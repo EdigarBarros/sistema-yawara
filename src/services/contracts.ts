@@ -463,6 +463,8 @@ export interface SportsService {
   setStatus(id: ID, status: TeamStatus): Promise<SportTeam>;
   saveTraining(id: ID, item: ItemInput<TrainingSlot>): Promise<SportTeam>;
   saveAthlete(id: ID, item: ItemInput<Athlete>): Promise<SportTeam>;
+  /** Vários atletas de uma vez (lista colada): repetidos ficam de fora, camisa já usada entra sem número. */
+  addAthletes(id: ID, items: { name: string; number?: string }[]): Promise<SportTeam>;
   saveMatch(id: ID, item: ItemInput<Match>): Promise<SportTeam>;
   saveCompetition(id: ID, item: ItemInput<Competition>): Promise<SportTeam>;
   removeItem(id: ID, list: TeamList, itemId: ID): Promise<SportTeam>;

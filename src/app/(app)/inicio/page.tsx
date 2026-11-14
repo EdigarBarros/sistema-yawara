@@ -35,6 +35,7 @@ import { Calendar3D } from "@/features/agenda/calendar-3d";
 import { WeekStrip } from "@/features/agenda/week-strip";
 import { PresidencyMobileHome } from "@/features/home/presidency-mobile";
 import { PresidencyDesktopHome } from "@/features/home/presidency-desktop";
+import { SportsHome } from "@/features/home/sports-home";
 import { useIsDesktop } from "@/hooks/use-media";
 
 function Grid({ children }: { children: React.ReactNode }) {
@@ -206,6 +207,8 @@ export default function HomePage() {
   const preset = access.role.homePreset;
   // Celular da presidência: tela própria, simples e direta (o computador mantém o painel completo).
   if (preset === "presidency") return isDesktop ? <PresidencyDesktopHome actions={<QuickActions preset={preset} />} /> : <PresidencyMobileHome />;
+  // Diretor(a) de Esportes: próximo jogo em destaque, botões grandes e "Precisa de você".
+  if (preset === "sports" && access.canModule("sports")) return <SportsHome />;
   return (
     <>
       <PageHeader

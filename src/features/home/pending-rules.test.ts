@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AtleticaEvent, Campaign, Meeting, Sale } from "@/types";
+import type { AtleticaEvent, Campaign, Meeting, Sale, SportTeam } from "@/types";
 import { buildPending, type PendingInput } from "./pending-rules";
 
 const TODAY = "2026-10-20";
@@ -76,5 +76,36 @@ describe("Precisa de você", () => {
     const items = buildPending(base({ events, meetings }));
     expect(items.map((i) => i.label)).toEqual(["Evento hoje", "Reunião chegando"]);
     expect(items[1].detail).toBe("amanhã · 18:00");
+  });
+
+  it("esportes: placar pendente, jogo chegando, competição e elenco vazio", () => {
+    const team = {
+      id: "t1",
+      name: "Futsal Feminino",
+      status: "active",
+      athletes: [],
+      matches: [
+        { id: "j1", date: "2026-10-18", opponent: "Direito", location: "Quadra", status: "scheduled" },
+        { id: "j2", date: "2026-10-20", time: "19:30", opponent: "Medicina", location: "Ginásio", status: "scheduled" },
+        { id: "j3", date: "2026-10-22", opponent: "Odonto", location: "Quadra", status: "scheduled" },
+        { id: "j4", date: "2026-10-30", opponent: "Nutrição", location: "Quadra", status: "scheduled" },
+        { id: "j5", date: "2026-10-10", opponent: "Engenharia", location: "Quadra", status: "played", scoreFor: 1, scoreAgainst: 0 },
+      ],
+      competitions: [
+        { id: "c1", name: "Intercursos", startDate: "2026-10-25", location: "Ginásio", status: "upcoming" },
+        { id: "c2", name: "Copa longe", startDate: "2026-12-01", location: "Ginásio", status: "upcoming" },
+      ],
+    } as unknown as SportTeam;
+    const items = buildPending(base({ teams: [team] }));
+    expect(items.map((i) => [i.kind, i.id])).toEqual([
+      ["match-soon", "mj:j2"],
+      ["match-result", "mr:j1"],
+      ["match-soon", "mj:j3"],
+      ["competition-soon", "cs:c1"],
+      ["empty-roster", "er:t1"],
+    ]);
+    expect(items[0]).toMatchObject({ label: "Jogo hoje", detail: "hoje às 19h30 · Ginásio", href: "/esportes/t1?aba=jogos" });
+    expect(items[1]).toMatchObject({ action: "Marcar placar", title: "Futsal Feminino × Direito" });
+    expect(buildPending(base({ teams: [{ ...team, status: "archived" }] }))).toHaveLength(0);
   });
 });

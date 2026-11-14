@@ -18,6 +18,8 @@ import { EmptyState, ErrorState, InlineLoader, RestrictedState } from "@/compone
 import { StatusBadge } from "@/components/shared/badges";
 import { DateChip, ListRow } from "@/components/shared/list-row";
 import { TeamFormDialog } from "@/features/sports/team-form-dialog";
+import { SportGlyph } from "@/features/sports/sport-glyph";
+import { findSport } from "@/lib/sports-catalog";
 import { nextTraining, SPORTS_COLOR, teamRecord, teamSubtitle, upcomingMatches, whenLabel } from "@/features/sports/utils";
 
 type Filter = TeamStatus | "all";
@@ -137,7 +139,7 @@ function TeamCard({ team, today, index }: { team: SportTeam; today: string; inde
       >
         <div className="flex items-start gap-3 px-4 pt-4 pb-3" style={{ background: `linear-gradient(180deg, ${SPORTS_COLOR}26, transparent)` }}>
           <span className="grid size-11 shrink-0 place-items-center rounded-xl text-[#06102e]" style={{ background: `linear-gradient(145deg, ${SPORTS_COLOR}, ${SPORTS_COLOR}aa)` }}>
-            <Trophy className="size-5" strokeWidth={2.2} aria-hidden />
+            <SportGlyph sport={findSport(team.sport)?.key ?? null} className="size-7" />
           </span>
           <div className="min-w-0 flex-1">
             <p className="truncate font-display text-[18px] leading-tight font-bold">{team.name}</p>

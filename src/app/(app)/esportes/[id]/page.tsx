@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Archive, ArchiveRestore, CalendarDays, Crown, Dumbbell, FileSpreadsheet, MapPin, MoreHorizontal, PauseCircle, Pencil, Plus, Shirt, Swords, Trash2, Trophy, UserRound } from "lucide-react";
+import { Archive, ArchiveRestore, CalendarDays, Dumbbell, FileSpreadsheet, ListPlus, MapPin, MoreHorizontal, PauseCircle, Pencil, Plus, Shirt, Swords, Trash2, Trophy, UserRound } from "lucide-react";
 import type { Athlete, Competition, Match, TeamStatus, TrainingSlot } from "@/types";
 import { services, type TeamList } from "@/services";
 import { useAccess } from "@/hooks/use-access";
@@ -12,6 +12,8 @@ import { useBreadcrumbTitle } from "@/stores/breadcrumb";
 import { canArchiveTeam, canEditTeam } from "@/lib/policies";
 import { COMPETITION_STATUS, MATCH_STATUS, SPORT_CATEGORY_LABELS, TEAM_STATUS, WEEKDAY_LABELS } from "@/lib/labels";
 import { formatDate, formatTime, todayDateOnly } from "@/lib/format";
+import { findSport, sportSummary } from "@/lib/sports-catalog";
+import { shortName } from "@/lib/sports-roster";
 import { downloadCsv, slugify } from "@/lib/export/common";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { cn } from "@/lib/utils";
@@ -25,7 +27,7 @@ import { HistoryTimeline } from "@/components/shared/history";
 import { DateChip } from "@/components/shared/list-row";
 import { confirmAction } from "@/components/shared/confirm";
 import { TeamFormDialog } from "@/features/sports/team-form-dialog";
-import { AthleteDialog, CompetitionDialog, MatchDialog, TrainingDialog } from "@/features/sports/item-dialogs";
+import { AthleteDialog, BulkAthletesDialog, CompetitionDialog, MatchDialog, TrainingDialog } from "@/features/sports/item-dialogs";
 import { matchOutcome, nextTraining, OUTCOME_META, SPORTS_COLOR, teamRecord, trainingLabel, upcomingMatches, whenLabel } from "@/features/sports/utils";
 
 const TABS = ["visao", "treinos", "elenco", "jogos", "competicoes", "historico"] as const;
@@ -49,6 +51,7 @@ export default function SportTeamPage() {
   useBreadcrumbTitle(`/esportes/${id}`, t?.name);
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<Editing>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const requested = params.get("aba") as Tab | null;
   const tab: Tab = requested && TABS.includes(requested) ? requested : "visao";
@@ -67,6 +70,7 @@ export default function SportTeamPage() {
   const record = teamRecord(t.matches);
   const upcoming = upcomingMatches(t, today);
   const training = t.status === "active" ? nextTraining(t.trainings, today) : null;
+  const sport = findSport(t.sport);
   const competitionName = (cid?: string) => (cid ? (t.competitions.find((c) => c.id === cid)?.name ?? "Competição removida") : "Amistoso");
 
   const askRemove = async (list: TeamList, itemId: string, label: string) => {
@@ -76,7 +80,7 @@ export default function SportTeamPage() {
   const exportRoster = async () => {
     setExporting(true);
     try {
-      const rows: (string | number | undefined)[][] = [["Número", "Nome", "Posição", "Capitão(ã)"], ...t.athletes.map((a) => [a.number ?? "", a.name, a.position ?? "", a.captain ? "Sim" : ""])];
+      const rows: (string | number | undefined)[][] = [["Número", "Nome", "Apelido", "Posição", "Capitão(ã)"], ...t.athletes.map((a) => [a.number ?? "", a.name, a.nickname ?? "", a.position ?? "", a.captain ? "Sim" : ""])];
       // Registro na auditoria antes de entregar o arquivo (o resumo não traz nomes).
       await services.audit.recordExport({ module: "sports", resourceType: "team", resourceId: t.id, summary: `Elenco em CSV (${t.athletes.length} atletas)`, personalData: true }).catch(() => undefined);
       downloadCsv(rows, `elenco-${slugify(t.name)}.csv`);
@@ -280,12 +284,17 @@ export default function SportTeamPage() {
         <TabsContent value="elenco" className="mt-5">
           <Panel
             title="Elenco"
-            description="Só nome e dados de jogo"
+            description={sport ? `${sport.label}: ${sportSummary(sport)}` : "Só nome e dados de jogo"}
             actions={
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {access.can("sports.export") && t.athletes.length > 0 && (
                   <Button size="sm" variant="ghost" loading={exporting} onClick={exportRoster}>
                     <FileSpreadsheet /> Exportar CSV
+                  </Button>
+                )}
+                {editable && t.athletes.length > 0 && (
+                  <Button size="sm" variant="ghost" onClick={() => setBulkOpen(true)}>
+                    <ListPlus /> Adicionar vários
                   </Button>
                 )}
                 {addButton("Adicionar atleta", "athlete")}
@@ -293,24 +302,45 @@ export default function SportTeamPage() {
             }
           >
             {t.athletes.length === 0 ? (
-              <EmptyState compact icon={<Shirt />} title="Elenco vazio" description={editable ? "Adicione as pessoas que treinam e jogam na modalidade." : undefined} />
+              <EmptyState
+                compact
+                icon={<Shirt />}
+                title="Elenco vazio"
+                description={editable ? "Cole a lista do grupo do time de uma vez, ou adicione um por um." : undefined}
+                action={
+                  editable ? (
+                    <Button variant="primary" onClick={() => setBulkOpen(true)}>
+                      <ListPlus /> Colar lista de atletas
+                    </Button>
+                  ) : undefined
+                }
+              />
             ) : (
-              <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {t.athletes.map((a) => (
-                  <li key={a.id} className="flex items-center gap-3 rounded-xl border border-line bg-sunken px-3 py-2.5">
-                    <span className="grid size-10 shrink-0 place-items-center rounded-full font-mono text-[15px] font-bold tnum" style={{ background: `${SPORTS_COLOR}22`, color: SPORTS_COLOR }}>
-                      {a.number ?? "—"}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="flex items-center gap-1.5 truncate text-[13.5px] font-semibold">
-                        {a.name}
-                        {a.captain && <Crown className="size-3.5 shrink-0 text-gold" aria-label="Capitão(ã)" />}
-                      </p>
-                      <p className="truncate text-[12px] text-fg-subtle">{a.position ?? "Posição não informada"}</p>
-                    </div>
-                    {rowActions(() => setEditing({ kind: "athlete", item: a }), () => askRemove("athletes", a.id, `${a.name} do elenco`), a.name)}
-                  </li>
-                ))}
+              <ul className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                {t.athletes.map((a, i) => {
+                  const special = sport?.positions.find((p) => p.name === a.position)?.special;
+                  return (
+                    <li key={a.id} className="anim-rise flex items-center gap-3 rounded-2xl border border-line bg-sunken px-3 py-2.5" style={{ animationDelay: `${Math.min(i * 30, 360)}ms` }}>
+                      <span
+                        className="relative grid size-12 shrink-0 place-items-center rounded-full font-display text-[18px] font-extrabold text-[#06102e] tnum"
+                        style={{ background: special ? "linear-gradient(145deg, #f3cd66, #c08a1a)" : `linear-gradient(145deg, ${SPORTS_COLOR}, ${SPORTS_COLOR}b8)` }}
+                      >
+                        {a.number ?? <Shirt className="size-5" aria-hidden />}
+                        {a.captain && (
+                          <span className="absolute -right-1 -bottom-1 grid size-5 place-items-center rounded-full border-2 border-sunken bg-gold text-[10px] font-black text-gold-ink" title="Capitão(ã)">
+                            C
+                          </span>
+                        )}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[14.5px] leading-tight font-semibold">{shortName(a)}</p>
+                        {shortName(a) !== a.name && <p className="truncate text-[12px] text-fg-muted">{a.name}</p>}
+                        <p className="truncate text-[11.5px] text-fg-subtle">{a.position ?? "Posição não informada"}</p>
+                      </div>
+                      {rowActions(() => setEditing({ kind: "athlete", item: a }), () => askRemove("athletes", a.id, `${a.name} do elenco`), a.name)}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </Panel>
@@ -412,6 +442,7 @@ export default function SportTeamPage() {
 
       <TeamFormDialog open={editOpen} onOpenChange={setEditOpen} team={t} />
       <TrainingDialog team={t} open={editing?.kind === "training"} item={editing?.kind === "training" ? editing.item : undefined} onOpenChange={(o) => !o && setEditing(null)} />
+      <BulkAthletesDialog team={t} open={bulkOpen} onOpenChange={setBulkOpen} />
       <AthleteDialog team={t} open={editing?.kind === "athlete"} item={editing?.kind === "athlete" ? editing.item : undefined} onOpenChange={(o) => !o && setEditing(null)} />
       <MatchDialog team={t} open={editing?.kind === "match"} item={editing?.kind === "match" ? editing.item : undefined} onOpenChange={(o) => !o && setEditing(null)} />
       <CompetitionDialog team={t} open={editing?.kind === "competition"} item={editing?.kind === "competition" ? editing.item : undefined} onOpenChange={(o) => !o && setEditing(null)} />

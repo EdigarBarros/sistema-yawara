@@ -3,8 +3,8 @@
  * curtos, cada um com UMA ação que resolve a situação. Funções puras (sem
  * React) para poderem ser testadas e reaproveitadas na tela inicial e em Avisos.
  */
-import type { AtleticaEvent, Campaign, DateOnly, Meeting, Sale } from "@/types";
-import { daysBetween, formatDate, toDateOnly } from "@/lib/format";
+import type { AtleticaEvent, Campaign, DateOnly, Meeting, Sale, SportTeam } from "@/types";
+import { daysBetween, formatDate, formatTime, toDateOnly } from "@/lib/format";
 import { summarize } from "@/lib/raffle";
 
 /** Venda sem pagamento (ou reserva) parada há este tanto de dias já pede atenção. */
@@ -15,8 +15,12 @@ const DRAW_ALERT_DAYS = 7;
 const DRAW_ALERT_FREE_RATIO = 0.25;
 /** Compromissos (eventos e reuniões) nos próximos dias. */
 const SOON_DAYS = 2;
+/** Jogos a esta distância (em dias) já aparecem: dá tempo de avisar o time. */
+const MATCH_SOON_DAYS = 3;
+/** Competição começando nesta janela (em dias). */
+const COMPETITION_SOON_DAYS = 7;
 
-export type PendingKind = "meeting" | "unpaid" | "reserved" | "draw" | "task" | "event" | "meeting-soon";
+export type PendingKind = "meeting" | "unpaid" | "reserved" | "draw" | "task" | "event" | "meeting-soon" | "match-result" | "match-soon" | "competition-soon" | "empty-roster";
 
 export interface PendingItem {
   id: string;
@@ -45,6 +49,8 @@ export interface PendingInput {
   sales?: Sale[];
   /** Quem confirma recebimentos acompanha as cobranças e reservas paradas. */
   followsPayments: boolean;
+  /** Modalidades que a pessoa acompanha (é responsável ou dirige Esportes). */
+  teams?: SportTeam[];
 }
 
 function when(today: DateOnly, date: DateOnly) {
@@ -174,6 +180,66 @@ export function buildPending(input: PendingInput): PendingItem[] {
       action: "Ver detalhes",
       rank: d === 0 ? 13 : 36,
     });
+  }
+
+  for (const team of input.teams ?? []) {
+    if (team.status === "archived") continue;
+    const href = (tab: string) => `/esportes/${team.id}?aba=${tab}`;
+    for (const m of team.matches) {
+      if (m.status !== "scheduled") continue;
+      const d = daysBetween(today, m.date);
+      const title = `${team.name} × ${m.opponent}`;
+      if (d < 0) {
+        items.push({
+          id: `mr:${m.id}`,
+          kind: "match-result",
+          href: href("jogos"),
+          label: "Placar pendente",
+          title,
+          detail: `Jogo de ${formatDate(m.date)} · conte como foi`,
+          action: "Marcar placar",
+          rank: 18,
+        });
+      } else if (d <= MATCH_SOON_DAYS) {
+        items.push({
+          id: `mj:${m.id}`,
+          kind: "match-soon",
+          href: href("jogos"),
+          label: d === 0 ? "Jogo hoje" : "Jogo chegando",
+          title,
+          detail: `${when(today, m.date)}${m.time ? ` às ${formatTime(m.time)}` : ""} · ${m.location}`,
+          action: "Ver jogo",
+          rank: d === 0 ? 11 : 33,
+        });
+      }
+    }
+    for (const c of team.competitions) {
+      if (c.status !== "upcoming") continue;
+      const d = daysBetween(today, c.startDate);
+      if (d < 0 || d > COMPETITION_SOON_DAYS) continue;
+      items.push({
+        id: `cs:${c.id}`,
+        kind: "competition-soon",
+        href: href("competicoes"),
+        label: "Competição chegando",
+        title: c.name,
+        detail: `${team.name} · começa ${when(today, c.startDate)}`,
+        action: "Ver competição",
+        rank: 37,
+      });
+    }
+    if (team.status === "active" && team.athletes.length === 0) {
+      items.push({
+        id: `er:${team.id}`,
+        kind: "empty-roster",
+        href: href("elenco"),
+        label: "Elenco vazio",
+        title: team.name,
+        detail: "Ninguém no elenco ainda",
+        action: "Montar elenco",
+        rank: 45,
+      });
+    }
   }
 
   return items.sort((a, b) => a.rank - b.rank || a.title.localeCompare(b.title));

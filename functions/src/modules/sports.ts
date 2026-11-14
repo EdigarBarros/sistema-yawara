@@ -13,7 +13,7 @@
  *  - Pausar, arquivar e reativar: `canArchiveTeam` (criador ou sports.archive).
  *  - Responsável precisa ser integrante ativo da Central.
  *
- * O elenco guarda só nome e dados de jogo (número, posição, capitão). Nomes de
+ * O elenco guarda só nome e dados de jogo (apelido, número, posição, capitão). Nomes de
  * atletas não entram no histórico, na auditoria nem no índice de busca.
  */
 import { randomUUID } from "node:crypto";
@@ -21,6 +21,7 @@ import type { DocumentReference, DocumentSnapshot, Transaction } from "firebase-
 import { z } from "zod";
 import { teamDoc } from "@/lib/firestore-model";
 import { canArchiveTeam, canEditTeam, canSeeTeam } from "@/lib/policies";
+import { byShirt, MAX_ROSTER_BATCH, planRosterAdd } from "@/lib/sports-roster";
 import type { Athlete, Audience, AudienceScope, Competition, CompetitionStatus, HistoryAction, HistoryEntry, Match, MatchStatus, SportCategory, SportTeam, TeamStatus, TrainingSlot } from "@/types";
 import { db } from "../core/admin";
 import { requireModuleEnabled, requirePermission, type Actor } from "../core/actor";
@@ -128,10 +129,21 @@ const athleteSchema = strict({
   item: strict({
     id: docId.nullish(),
     name: requiredText(2, 120, "o nome do(a) atleta"),
+    nickname: optionalText(24, "O apelido"),
     number: z.string().trim().max(4, "O número da camisa pode ter no máximo 4 caracteres.").regex(/^\d*$/, "O número da camisa deve ter só algarismos.").nullish(),
     position: optionalText(40, "A posição"),
     captain: z.boolean().nullish(),
   }),
+});
+
+const shirtNumber = z.string().trim().max(4, "O número da camisa pode ter no máximo 4 caracteres.").regex(/^\d*$/, "O número da camisa deve ter só algarismos.").nullish();
+
+const addAthletesSchema = strict({
+  id: docId,
+  items: z
+    .array(strict({ name: requiredText(2, 120, "o nome do(a) atleta"), number: shirtNumber }), { error: "Cole pelo menos um nome." })
+    .min(1, "Cole pelo menos um nome.")
+    .max(MAX_ROSTER_BATCH, `Dá para adicionar até ${MAX_ROSTER_BATCH} atletas de uma vez.`),
 });
 
 const matchSchema = strict({
@@ -434,11 +446,38 @@ export const sportsActions = {
           const key = item.name.toLocaleLowerCase("pt-BR");
           if (team.athletes.some((a) => a.id !== id && a.name.toLocaleLowerCase("pt-BR") === key)) fail("conflict", "Este nome já está no elenco.");
           if (item.number && team.athletes.some((a) => a.id !== id && a.number === item.number)) fail("conflict", `A camisa ${item.number} já é de outra pessoa do elenco.`);
-          return { id, name: item.name, number: item.number || undefined, position: item.position || undefined, captain: item.captain || undefined };
+          return { id, name: item.name, nickname: item.nickname || undefined, number: item.number || undefined, position: item.position || undefined, captain: item.captain || undefined };
         },
         item.id,
-        (a, b) => (Number(a.number ?? 9999) - Number(b.number ?? 9999)) || a.name.localeCompare(b.name, "pt-BR"),
+        byShirt,
       );
+    },
+    present: presentResult,
+  }),
+
+  /** Lista colada: entra quem ainda não está no elenco; camisa já usada entra sem número. */
+  addAthletes: mutation({
+    module: "sports",
+    schema: addAthletesSchema,
+    async run(tx, actor, { id: teamId, items }, ctx): Promise<TeamRef> {
+      actor = actor!;
+      await requireModuleEnabled(tx, "sports");
+      const { ref, team } = await loadTeam(tx, teamId);
+      requireEditable(actor, team);
+      const plan = planRosterAdd(team.athletes, items.map((i) => ({ name: i.name, number: i.number ? String(Number(i.number)) : undefined })));
+      if (plan.add.length === 0) fail("conflict", "Todos esses nomes já estão no elenco.");
+      if (team.athletes.length + plan.add.length > MAX_ATHLETES) fail("conflict", `O elenco passaria de ${MAX_ATHLETES} atletas, o limite. Remova atletas antigos antes.`);
+      const added: Athlete[] = plan.add.map((a) => ({ id: itemId("ath"), name: a.name, ...(a.number ? { number: a.number } : {}) }));
+      const summary = added.length === 1 ? "1 atleta adicionado(a)" : `${added.length} atletas adicionados(as)`;
+      const updated: SportTeam = {
+        ...team,
+        athletes: [...team.athletes, ...added].sort(byShirt),
+        updatedAt: ctx.now,
+        history: addHistory(team, actor, ctx, ["updated", summary]),
+      };
+      writeTeam(tx, ref, updated);
+      audit(tx, actor, ctx, "addItems", teamId, `${summary} na modalidade ${team.code}`, { list: "athletes", count: added.length, skipped: plan.duplicates.length });
+      return { id: teamId };
     },
     present: presentResult,
   }),

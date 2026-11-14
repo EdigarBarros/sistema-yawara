@@ -1,11 +1,15 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { Athlete, Competition, CompetitionStatus, Match, MatchStatus, SportTeam, TrainingSlot } from "@/types";
 import { services } from "@/services";
 import { useAction } from "@/hooks/use-action";
 import { COMPETITION_STATUS, MATCH_STATUS, WEEKDAY_LABELS } from "@/lib/labels";
 import { errorMessage } from "@/lib/notify";
+import { findSport } from "@/lib/sports-catalog";
+import { MAX_ROSTER_BATCH, parseRosterText, planRosterAdd } from "@/lib/sports-roster";
+import { cn } from "@/lib/utils";
+import { SPORTS_COLOR } from "./utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Checkbox, Field, Input, Select, Textarea } from "@/components/ui/form";
@@ -114,29 +118,126 @@ export function AthleteDialog(props: ItemProps<Athlete>) {
 }
 
 function AthleteBody({ team, item, onOpenChange }: ItemProps<Athlete>) {
-  const [v, setV] = useState({ name: item?.name ?? "", number: item?.number ?? "", position: item?.position ?? "", captain: !!item?.captain });
+  const sport = findSport(team.sport);
+  const [v, setV] = useState({ name: item?.name ?? "", nickname: item?.nickname ?? "", number: item?.number ?? "", position: item?.position ?? "", captain: !!item?.captain });
   const save = useSave((input: Omit<Athlete, "id"> & { id?: string }) => services.sports.saveAthlete(team.id, input), item ? "Atleta atualizado(a)" : "Atleta adicionado(a) ao elenco", () => onOpenChange(false));
   const submit = () => {
     if (v.name.trim().length < 2) return save.run("Informe o nome do(a) atleta.");
     if (v.number && !/^\d{1,4}$/.test(v.number)) return save.run("O número da camisa deve ter só algarismos.");
-    save.run({ id: item?.id, name: v.name.trim(), number: v.number || undefined, position: v.position.trim() || undefined, captain: v.captain || undefined });
+    save.run({ id: item?.id, name: v.name.trim(), nickname: v.nickname.trim() || undefined, number: v.number || undefined, position: v.position.trim() || undefined, captain: v.captain || undefined });
   };
+  // Posição fora da lista do esporte (dado antigo ou digitado) continua aparecendo como opção.
+  const positions = sport ? sport.positions.map((p) => p.name) : [];
+  if (v.position && sport && !positions.includes(v.position)) positions.push(v.position);
   return (
     <ItemShell title={item ? "Editar atleta" : "Adicionar ao elenco"} description="Só nome e dados de jogo. Não cadastre telefone, documento ou endereço aqui." onSave={submit} saving={save.pending} error={save.error} onCancel={() => onOpenChange(false)}>
       <Field label="Nome" required className="sm:col-span-2">
         <Input value={v.name} onChange={(e) => setV((s) => ({ ...s, name: e.target.value }))} autoFocus />
       </Field>
+      <Field label="Apelido" optional hint="É o que aparece na escalação. Sem apelido, vai o primeiro nome.">
+        <Input maxLength={24} value={v.nickname} onChange={(e) => setV((s) => ({ ...s, nickname: e.target.value }))} placeholder={v.name.trim().split(" ")[0] || "Ex.: Aninha"} />
+      </Field>
       <Field label="Número da camisa" optional>
         <Input inputMode="numeric" maxLength={4} value={v.number} onChange={(e) => setV((s) => ({ ...s, number: e.target.value.replace(/\D/g, "") }))} />
       </Field>
-      <Field label="Posição" optional>
-        <Input value={v.position} onChange={(e) => setV((s) => ({ ...s, position: e.target.value }))} placeholder="Ex.: Goleira, Ala, Levantador" />
+      <Field label="Posição" optional className="sm:col-span-2">
+        {sport ? (
+          <div role="radiogroup" aria-label="Posição" className="flex flex-wrap gap-2">
+            {["", ...positions].map((p) => {
+              const selected = v.position === p;
+              return (
+                <button
+                  key={p || "nenhuma"}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setV((s) => ({ ...s, position: p }))}
+                  className={cn("press h-9 rounded-full border px-3.5 text-[13px] font-medium transition-colors", selected ? "border-transparent text-[#06102e]" : "border-line text-fg-muted hover:text-fg")}
+                  style={selected ? { background: SPORTS_COLOR } : undefined}
+                >
+                  {p || "Sem posição"}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <Input value={v.position} onChange={(e) => setV((s) => ({ ...s, position: e.target.value }))} placeholder="Ex.: Goleira, Ala, Levantador" />
+        )}
       </Field>
       <label className="flex items-center gap-2.5 text-[13.5px] sm:col-span-2">
         <Checkbox checked={v.captain} onChange={(e) => setV((s) => ({ ...s, captain: e.target.checked }))} />
         Capitão / capitã do time
       </label>
     </ItemShell>
+  );
+}
+
+/* ---------------------------- vários atletas ---------------------------- */
+
+const ROSTER_EXAMPLE = "10 Ana Souza\n7 Bia Lima\nCarla Dias (9)\nDuda";
+
+/** "Adicionar vários": cola a lista do grupo do time e confere antes de salvar. */
+export function BulkAthletesDialog({ team, open, onOpenChange }: { team: SportTeam; open: boolean; onOpenChange: (o: boolean) => void }) {
+  return <Dialog open={open} onOpenChange={onOpenChange}>{open && <BulkAthletesBody team={team} onOpenChange={onOpenChange} />}</Dialog>;
+}
+
+function BulkAthletesBody({ team, onOpenChange }: { team: SportTeam; onOpenChange: (o: boolean) => void }) {
+  const [text, setText] = useState("");
+  const lines = useMemo(() => parseRosterText(text), [text]);
+  const plan = useMemo(() => planRosterAdd(team.athletes, lines), [team.athletes, lines]);
+  const tooMany = plan.add.length > MAX_ROSTER_BATCH;
+  const n = plan.add.length;
+  const save = useSave(
+    (items: { name: string; number?: string }[]) => services.sports.addAthletes(team.id, items),
+    n === 1 ? "1 atleta adicionado(a) ao elenco" : `${n} atletas adicionados(as) ao elenco`,
+    () => onOpenChange(false),
+  );
+  const submit = () => {
+    if (lines.length === 0) return save.run("Cole pelo menos um nome, um por linha.");
+    if (n === 0) return save.run("Todos esses nomes já estão no elenco.");
+    if (tooMany) return save.run(`Dá para adicionar até ${MAX_ROSTER_BATCH} atletas de uma vez.`);
+    save.run(plan.add);
+  };
+  return (
+    <DialogContent
+      title="Adicionar vários atletas"
+      description="Cole a lista do grupo do time, um nome por linha. Se tiver o número da camisa, pode vir antes ou depois do nome."
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+          <Button variant="primary" loading={save.pending} onClick={submit} disabled={n === 0 || tooMany}>
+            {n === 0 ? "Adicionar" : n === 1 ? "Adicionar 1 atleta" : `Adicionar ${n} atletas`}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <Textarea rows={7} autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={ROSTER_EXAMPLE} aria-label="Lista de atletas" className="font-mono text-[13.5px]" />
+        {lines.length > 0 && (
+          <div className="rounded-xl border border-line bg-sunken p-3">
+            <p className="mb-2 text-[12px] font-semibold tracking-wide text-fg-subtle uppercase">{n === 1 ? "Vai entrar 1 atleta" : `Vão entrar ${n} atletas`}</p>
+            {n > 0 && (
+              <ul className="flex flex-wrap gap-1.5">
+                {plan.add.map((a) => (
+                  <li key={a.name} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface py-1 pr-3 pl-1 text-[13px]">
+                    <span className="grid h-6 min-w-6 place-items-center rounded-full px-1 font-mono text-[11.5px] font-bold tnum" style={{ background: `${SPORTS_COLOR}26`, color: SPORTS_COLOR }}>
+                      {a.number ?? "–"}
+                    </span>
+                    {a.name}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {plan.duplicates.length > 0 && <p className="mt-2.5 text-[12.5px] text-fg-muted">Já estão no elenco (ficam de fora): {plan.duplicates.join(", ")}.</p>}
+            {plan.numberTaken.length > 0 && <p className="mt-1.5 text-[12.5px] text-warn">Entram sem número porque a camisa já tem dono: {plan.numberTaken.join(", ")}.</p>}
+            {tooMany && <p className="mt-1.5 text-[12.5px] text-danger">Dá para adicionar até {MAX_ROSTER_BATCH} de uma vez. Divida a lista.</p>}
+          </div>
+        )}
+        <FormAlert message={save.error} />
+      </div>
+    </DialogContent>
   );
 }
 

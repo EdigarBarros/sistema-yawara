@@ -5,6 +5,7 @@ import type { AccessContext } from "@/lib/permissions";
 import { TEAM_STATUS } from "@/lib/labels";
 import { newId } from "@/lib/utils";
 import { canArchiveTeam, canEditTeam, canSeeTeam } from "@/lib/policies";
+import { byShirt, MAX_ROSTER_BATCH, planRosterAdd } from "@/lib/sports-roster";
 import { commit, getDB } from "./db";
 import { accessContext, clone, findOrThrow, historyEntry, latency, nextCode, now, requireModuleEnabled, requirePermission, sanitizeAudience, ServiceError, validateAudience } from "./context";
 
@@ -143,13 +144,29 @@ export const localSports: SportsService = {
     return save<Athlete>(
       id,
       "athletes",
-      { ...item, name, number: item.number || undefined, position: item.position?.trim() || undefined, captain: item.captain || undefined },
+      { ...item, name, nickname: item.nickname?.replace(/\s+/g, " ").trim() || undefined, number: item.number || undefined, position: item.position?.trim() || undefined, captain: item.captain || undefined },
       (t, itemId) => {
         if (t.athletes.some((a) => a.id !== itemId && a.name.toLowerCase() === name.toLowerCase())) throw new ServiceError("conflict", "Este nome já está no elenco.");
         if (item.number && t.athletes.some((a) => a.id !== itemId && a.number === item.number)) throw new ServiceError("conflict", `A camisa ${item.number} já é de outra pessoa do elenco.`);
       },
-      (a, b) => Number(a.number ?? 9999) - Number(b.number ?? 9999) || a.name.localeCompare(b.name, "pt-BR"),
+      byShirt,
     );
+  },
+
+  async addAthletes(id, items) {
+    await latency();
+    if (items.length === 0) throw new ServiceError("invalid", "Cole pelo menos um nome.");
+    if (items.length > MAX_ROSTER_BATCH) throw new ServiceError("invalid", `Dá para adicionar até ${MAX_ROSTER_BATCH} atletas de uma vez.`);
+    return commit((db) => {
+      const ctx = accessContext(db);
+      const t = editable(db, ctx, id);
+      const plan = planRosterAdd(t.athletes, items.map((i) => ({ name: i.name.replace(/\s+/g, " ").trim(), number: i.number || undefined })).filter((i) => i.name.length >= 2));
+      if (plan.add.length === 0) throw new ServiceError("conflict", "Todos esses nomes já estão no elenco.");
+      if (t.athletes.length + plan.add.length > 200) throw new ServiceError("conflict", "O elenco passaria de 200 atletas, o limite.");
+      t.athletes = [...t.athletes, ...plan.add.map((a) => ({ id: newId("ath"), ...a }))].sort(byShirt);
+      touch(t, ctx.user.id, plan.add.length === 1 ? "1 atleta adicionado(a)" : `${plan.add.length} atletas adicionados(as)`);
+      return clone(t);
+    });
   },
 
   async saveMatch(id, item) {
