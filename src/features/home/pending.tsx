@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import { BellRing, CalendarClock, ClipboardCheck, Hourglass, ListChecks, Lock, Megaphone, Users } from "lucide-react";
+import { BellRing, CalendarClock, ClipboardCheck, Hourglass, ListChecks, Lock, Medal, Megaphone, Shirt, Swords, Trophy, Users } from "lucide-react";
 import { useAccess } from "@/hooks/use-access";
-import { useAllSales, useCampaigns, useEvents, useMeetings } from "@/hooks/use-data";
+import { useAllSales, useCampaigns, useEvents, useMeetings, useSportsTeams } from "@/hooks/use-data";
 import { todayDateOnly } from "@/lib/format";
 import { buildPending, type PendingItem, type PendingKind } from "./pending-rules";
 
@@ -17,6 +17,10 @@ export const PENDING_ICONS: Record<PendingKind, React.ReactNode> = {
   task: <ListChecks />,
   event: <CalendarClock />,
   "meeting-soon": <Users />,
+  "match-result": <Trophy />,
+  "match-soon": <Swords />,
+  "competition-soon": <Medal />,
+  "empty-roster": <Shirt />,
 };
 
 export const PENDING_FALLBACK_ICON = <BellRing />;
@@ -30,14 +34,19 @@ export function usePending() {
   const hasCampaigns = access.canModule("campaigns");
   const followsPayments = hasCampaigns && access.can("campaigns.approve");
   const oversight = access.role?.level === "presidency";
+  const hasSports = access.canModule("sports");
+  // Quem dirige Esportes acompanha todas as modalidades que vê; os demais, só as que coordenam.
+  const followsAllSports = access.role?.homePreset === "sports";
 
   const meetings = useMeetings(hasMeetings);
   const events = useEvents(hasEvents);
   const campaigns = useCampaigns(hasCampaigns);
   const sales = useAllSales(hasCampaigns);
+  const sports = useSportsTeams(hasSports);
 
-  const queries = [hasMeetings && meetings, hasEvents && events, hasCampaigns && campaigns, hasCampaigns && sales].filter((q) => !!q);
+  const queries = [hasMeetings && meetings, hasEvents && events, hasCampaigns && campaigns, hasCampaigns && sales, hasSports && sports].filter((q) => !!q);
   const userId = access.user?.id;
+  const teams = useMemo(() => (sports.data ?? []).filter((t) => followsAllSports || t.responsibleId === userId), [sports.data, followsAllSports, userId]);
   const items: PendingItem[] = useMemo(
     () =>
       buildPending({
@@ -50,8 +59,9 @@ export function usePending() {
         campaigns: campaigns.data,
         sales: sales.data,
         followsPayments,
+        teams: hasSports ? teams : undefined,
       }),
-    [userId, oversight, meetings.data, canApproveMeetings, events.data, campaigns.data, sales.data, followsPayments],
+    [userId, oversight, meetings.data, canApproveMeetings, events.data, campaigns.data, sales.data, followsPayments, hasSports, teams],
   );
   const failed = queries.find((q) => q.isError);
   return {

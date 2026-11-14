@@ -23,7 +23,7 @@ type TeamData = SportTeam & { readers?: string[] };
 const TEAM_KEYS = ["name", "sport", "category", "description", "coach", "responsibleId", "access"] as const;
 const AUDIENCE_KEYS = ["scope", "departmentId", "roleIds", "userIds"] as const;
 const TRAINING_KEYS = ["id", "weekday", "start", "end", "location"] as const;
-const ATHLETE_KEYS = ["id", "name", "number", "position", "captain"] as const;
+const ATHLETE_KEYS = ["id", "name", "nickname", "number", "position", "captain"] as const;
 const MATCH_KEYS = ["id", "date", "time", "opponent", "location", "competitionId", "scoreFor", "scoreAgainst", "status", "notes"] as const;
 const COMPETITION_KEYS = ["id", "name", "startDate", "endDate", "location", "placement", "status", "notes"] as const;
 
@@ -104,6 +104,11 @@ export const firebaseSports: SportsService = {
   async saveAthlete(id, item) {
     const rid = takeRequestId();
     return team("saveAthlete", { id, item: pick(item, ATHLETE_KEYS) }, rid);
+  },
+
+  async addAthletes(id, items) {
+    const rid = takeRequestId();
+    return team("addAthletes", { id, items: items.map((i) => pick(i, ["name", "number"])) }, rid);
   },
 
   async saveMatch(id, item) {

@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import type { SportTeam } from "@/types";
+import type { SportCategory, SportTeam } from "@/types";
 import { services } from "@/services";
 import { useAccess } from "@/hooks/use-access";
 import { useAction } from "@/hooks/use-action";
@@ -20,9 +20,13 @@ import { Field, Input, Select, Textarea } from "@/components/ui/form";
 import { MemberSelect } from "@/components/shared/pickers";
 import { AudiencePicker } from "@/components/shared/audience";
 import { FormAlert } from "@/components/shared/form-alert";
+import { SportPicker } from "./sport-picker";
 
-/** Sugestões do campo "Esporte" (pode digitar outro). */
-const SPORT_SUGGESTIONS = ["Futsal", "Futebol society", "Vôlei", "Vôlei de praia", "Basquete", "Handebol", "Natação", "Atletismo", "Tênis de mesa", "Xadrez", "Queimada", "E-sports", "Bateria"];
+/** Nome sugerido quando a pessoa ainda não escreveu um (ex.: "Futsal Feminino"). */
+function suggestedName(sport: string, category: SportCategory) {
+  const s = sport.trim();
+  return s ? `${s} ${SPORT_CATEGORY_LABELS[category]}` : "";
+}
 
 const schema = z.object({
   name: requiredText("o nome da modalidade", 3),
@@ -60,7 +64,18 @@ function TeamFormBody({ onOpenChange, team }: Props) {
       : { name: "", sport: "", category: "feminino", description: "", coach: "", responsibleId: access.user?.id ?? "", access: emptyAudience("all") },
   });
   const register = liveRegister(form);
-  const { control, handleSubmit, formState } = form;
+  const { control, handleSubmit, formState, setValue, getValues } = form;
+
+  // Preenche o nome com "Esporte Naipe" enquanto ele for o sugerido (ou estiver vazio).
+  const sport = useWatch({ control, name: "sport" });
+  const category = useWatch({ control, name: "category" });
+  const lastSuggestion = useRef(team ? suggestedName(team.sport, team.category) : "");
+  useEffect(() => {
+    const current = getValues("name").trim();
+    const next = suggestedName(sport, category);
+    if (current === "" || current === lastSuggestion.current) setValue("name", next, { shouldValidate: formState.isSubmitted });
+    lastSuggestion.current = next;
+  }, [sport, category, getValues, setValue, formState.isSubmitted]);
 
   const save = useAction(
     (v: Values) => {
@@ -86,7 +101,7 @@ function TeamFormBody({ onOpenChange, team }: Props) {
       size="lg"
       modal
       title={team ? "Editar modalidade" : "Nova modalidade"}
-      description="Treinos, elenco, jogos e competições são cadastrados na página da modalidade."
+      description="Escolha o esporte e o naipe. Treinos, elenco e jogos ficam na página da modalidade."
       footer={
         <>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
@@ -100,16 +115,8 @@ function TeamFormBody({ onOpenChange, team }: Props) {
     >
       <form onSubmit={onSubmit} noValidate className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Nome da modalidade" required className="sm:col-span-2" hint="Ex.: Futsal Feminino" error={formState.errors.name?.message}>
-            <Input {...register("name")} />
-          </Field>
-          <Field label="Esporte" required error={formState.errors.sport?.message}>
-            <Input list="sport-suggestions" {...register("sport")} />
-            <datalist id="sport-suggestions">
-              {SPORT_SUGGESTIONS.map((s) => (
-                <option key={s} value={s} />
-              ))}
-            </datalist>
+          <Field label="Esporte" required className="sm:col-span-2" error={formState.errors.sport?.message}>
+            <Controller control={control} name="sport" render={({ field }) => <SportPicker value={field.value} onChange={field.onChange} invalid={!!formState.errors.sport} />} />
           </Field>
           <Field label="Naipe" required>
             <Select {...register("category")}>
@@ -119,6 +126,9 @@ function TeamFormBody({ onOpenChange, team }: Props) {
                 </option>
               ))}
             </Select>
+          </Field>
+          <Field label="Nome da modalidade" required hint="Ex.: Futsal Feminino" error={formState.errors.name?.message}>
+            <Input {...register("name")} />
           </Field>
           <Field label="Responsável na Central" required error={formState.errors.responsibleId?.message}>
             <Controller control={control} name="responsibleId" render={({ field }) => <MemberSelect value={field.value} onChange={field.onChange} />} />

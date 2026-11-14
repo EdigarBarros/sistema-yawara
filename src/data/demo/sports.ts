@@ -2,11 +2,15 @@ import type { Athlete, SportTeam } from "@/types";
 import { audience, h, type Clock } from "./helpers";
 import { USR } from "./organization";
 
-/** Elenco fictício: "Atleta Demo 01"… (nenhum nome real). */
+/** Apelidos fictícios para a demonstração (nenhum nome real). */
+const NICKNAMES = ["Muralha", "Faísca", "Pimenta", "Foguete", "Tampinha", "Raio", "Zica", "Bolinha", "Trovão", "Pipoca"];
+
+/** Elenco fictício: "Atleta Demo 01"… (nenhum nome real); alguns com apelido. */
 function roster(prefix: string, positions: string[], captainIndex = 0): Athlete[] {
   return positions.map((position, i) => ({
     id: `${prefix}-ath-${i + 1}`,
     name: `Atleta Demo ${String(i + 1).padStart(2, "0")}`,
+    nickname: i % 3 === 2 ? undefined : NICKNAMES[i % NICKNAMES.length],
     number: String(i + 1 === 1 ? 1 : i * 2 + 3),
     position,
     captain: i === captainIndex || undefined,
@@ -29,7 +33,7 @@ export function buildSportsTeams(clock: Clock): SportTeam[] {
         { id: "trn-ff-1", weekday: 2, start: "19:00", end: "20:30", location: "Quadra do campus (local de demonstração)" },
         { id: "trn-ff-2", weekday: 4, start: "19:00", end: "20:30", location: "Quadra do campus (local de demonstração)" },
       ],
-      athletes: roster("ff", ["Goleira", "Fixo", "Ala", "Ala", "Pivô", "Ala", "Fixo", "Goleira"], 2),
+      athletes: roster("ff", ["Goleiro(a)", "Fixo", "Ala", "Ala", "Pivô", "Ala", "Fixo", "Goleiro(a)"], 2),
       competitions: [
         { id: "cmp-ff-1", name: "Jogos Universitários da Saúde (exemplo)", startDate: clock.date(-60), endDate: clock.date(-57), location: "Ginásio municipal (exemplo)", placement: "3º lugar", status: "finished" },
         { id: "cmp-ff-2", name: "Copa Intercursos 2026.2 (exemplo)", startDate: clock.date(9), endDate: clock.date(30), location: "Ginásio do campus (exemplo)", status: "upcoming" },
@@ -62,10 +66,11 @@ export function buildSportsTeams(clock: Clock): SportTeam[] {
       responsibleId: USR.gabriel,
       status: "active",
       trainings: [{ id: "trn-vm-1", weekday: 6, start: "09:00", end: "11:00", location: "Ginásio do campus (local de demonstração)" }],
-      athletes: roster("vm", ["Levantador(a)", "Oposto(a)", "Ponteiro(a)", "Ponteiro(a)", "Central", "Central", "Líbero"], 0),
+      athletes: roster("vm", ["Levantador(a)", "Oposto(a)", "Ponteiro(a)", "Ponteiro(a)", "Central", "Central", "Líbero", "Ponteiro(a)"], 0),
       competitions: [{ id: "cmp-vm-1", name: "Copa Intercursos 2026.2 (exemplo)", startDate: clock.date(9), endDate: clock.date(30), location: "Ginásio do campus (exemplo)", status: "upcoming" }],
       matches: [
         { id: "mch-vm-1", date: clock.date(-12), time: "10:00", opponent: "Atlética de Engenharia (exemplo)", location: "Ginásio do campus (exemplo)", scoreFor: 3, scoreAgainst: 1, status: "played", notes: "Placar em sets." },
+        { id: "mch-vm-3", date: clock.date(-2), time: "10:00", opponent: "Atlética de Nutrição (exemplo)", location: "Ginásio do campus (exemplo)", status: "scheduled", notes: "Amistoso; resultado ainda não lançado (exemplo)." },
         { id: "mch-vm-2", date: clock.date(12), time: "10:00", opponent: "Atlética de Arquitetura (exemplo)", location: "Ginásio do campus (exemplo)", competitionId: "cmp-vm-1", status: "scheduled" },
       ],
       access: audience.all(),
@@ -84,7 +89,7 @@ export function buildSportsTeams(clock: Clock): SportTeam[] {
       responsibleId: USR.gabriel,
       status: "paused",
       trainings: [],
-      athletes: roster("hm", ["Goleiro", "Armador", "Ponta"], 1),
+      athletes: roster("hm", ["Goleiro(a)", "Armador(a)", "Ponta"], 1),
       competitions: [],
       matches: [],
       access: audience.board(),

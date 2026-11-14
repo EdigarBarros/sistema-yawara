@@ -18,6 +18,8 @@ export interface TrainingSlot {
 export interface Athlete {
   id: ID;
   name: string;
+  /** Como aparece na prancheta e nos cartões (ex.: "Aninha"). Sem apelido, vale o primeiro nome. */
+  nickname?: string;
   /** Número da camisa. */
   number?: string;
   position?: string;

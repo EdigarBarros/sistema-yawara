@@ -104,6 +104,28 @@ describe("treinos, elenco, jogos e competições", () => {
     expect(JSON.stringify((await stored(t.id)).history)).not.toContain("Atleta Um");
   });
 
+  it("apelido no atleta e vários atletas de uma vez (lista colada)", async () => {
+    const t = await createTeam();
+    let team = await sports<SportTeam>("saveAthlete", "esp", { id: t.id, item: { name: "Ana Souza", nickname: "  Aninha ", number: "10" } });
+    expect(team.athletes[0]).toMatchObject({ name: "Ana Souza", nickname: "Aninha", number: "10" });
+    team = await sports<SportTeam>("addAthletes", "esp", {
+      id: t.id,
+      items: [{ name: "ana souza", number: "3" }, { name: "Bia Lima", number: "10" }, { name: "Carla", number: "07" }, { name: "Duda" }],
+    });
+    expect(team.athletes.map((a) => [a.name, a.number ?? null])).toEqual([
+      ["Carla", "7"],
+      ["Ana Souza", "10"],
+      ["Bia Lima", null],
+      ["Duda", null],
+    ]);
+    await expectCode(sports("addAthletes", "esp", { id: t.id, items: [{ name: "Duda" }] }), "conflict");
+    await expectCode(sports("addAthletes", "esp", { id: t.id, items: [] }), "invalid");
+    await expectCode(sports("addAthletes", "sec", { id: t.id, items: [{ name: "Eva" }] }), "forbidden");
+    const audit = JSON.stringify(await auditFor(t.id));
+    expect(audit).toContain("sports.addItems");
+    expect(audit).not.toContain("Bia Lima");
+  });
+
   it("a assessoria (sports.edit) edita itens, mas não arquiva; modalidade arquivada não é editada", async () => {
     const t = await createTeam();
     await sports("saveTraining", "assesp", { id: t.id, item: { weekday: 3, start: "18:00", location: "Quadra" } });
