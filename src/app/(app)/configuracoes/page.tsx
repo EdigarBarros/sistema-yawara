@@ -396,7 +396,7 @@ function ModulesSection() {
 /* ------------------------------------ Preferências ------------------------------------ */
 
 function PreferencesSection() {
-  const { theme, setTheme, sidebarCollapsed, toggleSidebar } = useUI();
+  const { theme, setTheme, sidebarCollapsed, toggleSidebar, reducedMotion, setReducedMotion } = useUI();
   return (
     <Panel title="Preferências da interface" description={isDemoMode ? "Valem apenas para este navegador." : "Ficam salvas só neste aparelho; não acompanham a sua conta."}>
       <div className="space-y-6">
@@ -420,6 +420,13 @@ function PreferencesSection() {
             <p className="text-[12.5px] text-fg-muted">Mostra só os ícones no computador.</p>
           </div>
           <Switch checked={sidebarCollapsed} onCheckedChange={toggleSidebar} label="Barra lateral recolhida" />
+        </div>
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-line px-4 py-3">
+          <div>
+            <p className="text-[13.5px] font-medium">Animações reduzidas</p>
+            <p className="text-[12.5px] text-fg-muted">As telas trocam sem movimento. Bom para quem fica enjoado com animação.</p>
+          </div>
+          <Switch checked={reducedMotion} onCheckedChange={setReducedMotion} label="Animações reduzidas" />
         </div>
       </div>
     </Panel>
