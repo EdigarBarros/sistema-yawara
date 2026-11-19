@@ -410,6 +410,19 @@
     .page-in[data-dir] { animation-name: page-rise; }
   }
 
+  /* Destaque que desliza entre abas, filtros e menu (hook useGlide) */
+  .glide {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    transition:
+      transform 0.42s cubic-bezier(0.3, 1.25, 0.4, 1),
+      width 0.42s cubic-bezier(0.3, 1.25, 0.4, 1),
+      height 0.42s cubic-bezier(0.3, 1.25, 0.4, 1),
+      opacity 0.2s ease;
+  }
+
   /* Toque: encolhe de leve ao pressionar */
   .press { transition: transform 0.18s cubic-bezier(0.2, 1.3, 0.4, 1), filter 0.18s ease, background-color 0.18s ease; }
   .press:active { transform: scale(0.96); filter: brightness(1.1); }
@@ -418,6 +431,32 @@
   .tnum {
     font-variant-numeric: tabular-nums;
   }
+}
+
+/* Troca de elementos (lib/transition.ts): itens da lista deslizam até a nova posição,
+   os que saem desbotam e os que chegam aparecem. A tela em volta só cruza rápido. */
+.vt-item {
+  view-transition-name: match-element;
+  view-transition-class: item;
+}
+::view-transition-group(*.item) {
+  animation-duration: 0.36s;
+  animation-timing-function: cubic-bezier(0.2, 1, 0.3, 1);
+}
+::view-transition-old(*.item):only-child {
+  animation: vt-out 0.2s ease both;
+}
+::view-transition-new(*.item):only-child {
+  animation: vt-in 0.32s cubic-bezier(0.2, 1, 0.3, 1) 0.06s both;
+}
+:root[data-vt="list"]::view-transition-group(root) {
+  animation-duration: 0.18s;
+}
+@keyframes vt-out {
+  to { opacity: 0; transform: scale(0.97); }
+}
+@keyframes vt-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
 }
 
 @media (prefers-reduced-motion: reduce) {
