@@ -13,6 +13,7 @@ import {
 } from "react";
 import { AlertCircle, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useGlide } from "@/hooks/use-glide";
 
 const fieldBase =
   "w-full rounded-lg border border-line-strong bg-sunken text-[14px] text-fg transition-[border-color,box-shadow] " +
@@ -236,18 +237,22 @@ export function Segmented<T extends string>({
   ariaLabel: string;
   className?: string;
 }) {
+  // A pílula desliza até a opção escolhida.
+  const [glideRef, glideStyle] = useGlide<HTMLDivElement>();
   return (
-    <div role="tablist" aria-label={ariaLabel} className={cn("inline-flex rounded-lg border border-line bg-sunken p-1", className)}>
+    <div ref={glideRef} role="tablist" aria-label={ariaLabel} className={cn("relative inline-flex rounded-lg border border-line bg-sunken p-1", className)}>
+      <span aria-hidden className="glide rounded-md bg-surface-3 shadow-[0_0_0_1px_var(--line-strong)]" style={glideStyle} />
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
           role="tab"
           aria-selected={o.value === value}
+          data-glide-active={o.value === value || undefined}
           onClick={() => onChange(o.value)}
           className={cn(
-            "inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[13px] font-medium transition-colors [&_svg]:size-4",
-            o.value === value ? "bg-surface-3 text-fg shadow-[0_0_0_1px_var(--line-strong)]" : "text-fg-muted hover:text-fg",
+            "relative inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[13px] font-medium transition-colors duration-300 [&_svg]:size-4",
+            o.value === value ? "text-fg" : "text-fg-muted hover:text-fg",
           )}
         >
           {o.icon}

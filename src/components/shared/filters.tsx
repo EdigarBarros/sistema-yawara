@@ -3,6 +3,8 @@
 import type { ReactNode } from "react";
 import { Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useGlide } from "@/hooks/use-glide";
+import { swap } from "@/lib/transition";
 
 export function SearchInput({
   value,
@@ -63,8 +65,11 @@ export function FilterChips<T extends string>({
   ariaLabel: string;
   className?: string;
 }) {
+  // A pílula desliza até o filtro escolhido e a lista se reorganiza animada (itens com `vt-item`).
+  const [glideRef, glideStyle] = useGlide<HTMLDivElement>();
   return (
-    <div role="group" aria-label={ariaLabel} className={cn("flex flex-wrap gap-1.5", className)}>
+    <div ref={glideRef} role="group" aria-label={ariaLabel} className={cn("relative flex flex-wrap gap-1.5", className)}>
+      <span aria-hidden className="glide rounded-lg border border-line-strong bg-surface-3" style={glideStyle} />
       {options.map((o) => {
         const active = o.value === value;
         return (
@@ -72,10 +77,11 @@ export function FilterChips<T extends string>({
             key={o.value}
             type="button"
             aria-pressed={active}
-            onClick={() => onChange(o.value)}
+            data-glide-active={active || undefined}
+            onClick={() => !active && swap(() => onChange(o.value))}
             className={cn(
-              "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[12.5px] font-medium transition-colors [&_svg]:size-3.5",
-              active ? "border-line-strong bg-surface-3 text-fg" : "border-line text-fg-muted hover:border-line-strong hover:text-fg",
+              "relative inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[12.5px] font-medium transition-colors duration-300 [&_svg]:size-3.5",
+              active ? "border-transparent text-fg" : "border-line text-fg-muted hover:border-line-strong hover:text-fg",
             )}
           >
             {o.icon}

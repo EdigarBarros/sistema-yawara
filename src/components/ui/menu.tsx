@@ -5,6 +5,7 @@ import * as PO from "@radix-ui/react-popover";
 import * as TB from "@radix-ui/react-tabs";
 import type { ComponentProps, ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { useGlide } from "@/hooks/use-glide";
 
 /* ------------------------------ Dropdown ------------------------------ */
 
@@ -90,10 +91,17 @@ export const TabsContent = ({ className, ...props }: ComponentProps<typeof TB.Co
   <TB.Content className={cn("outline-none data-[state=active]:[animation:rise_.35s_cubic-bezier(.2,1.2,.4,1)_both]", className)} {...props} />
 );
 
-export function TabsList({ className, ...props }: ComponentProps<typeof TB.List>) {
+export function TabsList({ className, children, ...props }: ComponentProps<typeof TB.List>) {
+  // O traço dourado desliza até a aba escolhida.
+  const [glideRef, glideStyle] = useGlide<HTMLDivElement>([], '[data-state="active"]');
   return (
     <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-      <TB.List className={cn("flex min-w-max gap-1 border-b border-line", className)} {...props} />
+      <TB.List ref={glideRef} className={cn("relative flex min-w-max gap-1 border-b border-line", className)} {...props}>
+        <span aria-hidden className="glide" style={glideStyle}>
+          <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-gold" />
+        </span>
+        {children}
+      </TB.List>
     </div>
   );
 }
@@ -103,7 +111,7 @@ export function TabsTrigger({ className, children, count, ...props }: ComponentP
     <TB.Trigger
       className={cn(
         "relative -mb-px inline-flex h-10 items-center gap-2 border-b-2 border-transparent px-3 text-[13.5px] font-medium text-fg-muted transition-[color,border-color,transform] duration-200 active:scale-95",
-        "hover:text-fg data-[state=active]:border-gold data-[state=active]:text-fg [&_svg]:size-4",
+        "hover:text-fg data-[state=active]:text-fg [&_svg]:size-4",
         className,
       )}
       {...props}

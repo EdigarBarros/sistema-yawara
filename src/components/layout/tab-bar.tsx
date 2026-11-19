@@ -7,6 +7,7 @@ import { useAccess } from "@/hooks/use-access";
 import { useNotifications } from "@/hooks/use-data";
 import { useSession } from "@/stores/session";
 import { cn } from "@/lib/utils";
+import { useGlide } from "@/hooks/use-glide";
 
 interface Tab {
   label: string;
@@ -43,13 +44,16 @@ export function TabBar() {
   ];
   const direct = tabs.slice(0, -1).find((t) => startsWith(pathname, t.href));
   const activeHref = direct?.href ?? "/mais";
+  // A pílula dourada desliza de uma aba para a outra.
+  const [glideRef, glideStyle] = useGlide<HTMLUListElement>([activeHref, tabs.length]);
 
   return (
     <nav
       aria-label="Navegação rápida"
       className="fixed inset-x-0 bottom-0 z-40 border-t border-line-strong bg-bg/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden"
     >
-      <ul className="mx-auto flex max-w-[520px] items-stretch justify-around px-1">
+      <ul ref={glideRef} className="relative mx-auto flex max-w-[520px] items-stretch justify-around px-1">
+        <span aria-hidden className="glide rounded-full bg-gold" style={glideStyle} />
         {tabs.map((t) => {
           const active = t.href === activeHref;
           const Icon = t.icon;
@@ -57,11 +61,10 @@ export function TabBar() {
             <li key={t.href} className="flex-1">
               <Link href={t.href} aria-current={active ? "page" : undefined} className="press flex h-[62px] flex-col items-center justify-center gap-1">
                 <span
-                  key={active ? "on" : "off"}
-                  className={cn("relative grid h-8 w-14 place-items-center rounded-full transition-colors", active ? "bg-gold text-gold-ink" : "text-fg-muted")}
-                  style={active ? { animation: "bump .35s ease both" } : undefined}
+                  data-glide-active={active || undefined}
+                  className={cn("relative grid h-8 w-14 place-items-center rounded-full transition-colors duration-300", active ? "text-gold-ink" : "text-fg-muted")}
                 >
-                  <Icon className="size-[20px]" aria-hidden />
+                  <Icon key={active ? "on" : "off"} className="size-[20px]" style={active ? { animation: "bump .35s ease both" } : undefined} aria-hidden />
                   {t.href === "/avisos" && unread > 0 && (
                     <span className="absolute -top-1 right-2 grid min-w-[18px] place-items-center rounded-full bg-danger px-1 text-[10px] leading-[18px] font-bold text-white ring-2 ring-bg" aria-label={`${unread} não lidas`}>
                       {unread > 9 ? "9+" : unread}

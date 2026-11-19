@@ -90,7 +90,7 @@ export function DataTable<T>({
                 onKeyDown={onRowClick ? onKey(row) : undefined}
                 tabIndex={onRowClick ? 0 : undefined}
                 className={cn(
-                  "border-b border-line last:border-b-0",
+                  "vt-item border-b border-line last:border-b-0",
                   onRowClick && "cursor-pointer transition-colors hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none",
                   rowClassName?.(row),
                 )}
@@ -118,7 +118,7 @@ export function DataTable<T>({
       {mobileCard && (
         <ul className="divide-y divide-line md:hidden">
           {visible.map((row) => (
-            <li key={getRowId(row)}>
+            <li key={getRowId(row)} className="vt-item">
               {onRowClick ? (
                 <button type="button" onClick={() => onRowClick(row)} className="block w-full px-4 py-3.5 text-left active:bg-surface-2">
                   {mobileCard(row)}
