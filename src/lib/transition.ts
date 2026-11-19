@@ -1,6 +1,7 @@
 "use client";
 
 import { flushSync } from "react-dom";
+import { motionReduced } from "@/stores/ui";
 
 type DocumentWithVT = Document & {
   startViewTransition?: (update: () => void) => { finished: Promise<void> };
@@ -10,7 +11,7 @@ function canAnimate() {
   if (typeof document === "undefined") return false;
   const doc = document as DocumentWithVT;
   if (!doc.startViewTransition) return false;
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
+  if (motionReduced()) return false;
   // Sem "match-element" cada item precisaria de um nome único escrito à mão.
   return typeof CSS !== "undefined" && CSS.supports("view-transition-name", "match-element");
 }

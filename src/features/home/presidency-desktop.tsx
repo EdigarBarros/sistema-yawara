@@ -27,6 +27,7 @@ import { AREA_COLORS } from "@/components/layout/nav";
 import { ColumnChart } from "@/components/shared/column-chart";
 import { useAgenda } from "@/features/agenda/use-agenda";
 import { AGENDA_KINDS } from "@/features/agenda/agenda";
+import { CountUp } from "@/components/shared/count-up";
 import { Calendar3D } from "@/features/agenda/calendar-3d";
 import { HEALTH_LABELS, eventsArea, extensionArea, financeArea, marketingArea, meetingsArea, rafflesArea, sportsArea, type AreaKey, type AreaStatus, type Health } from "./panorama-rules";
 import { PendingSection, RaffleTile, Tile, useActionTiles } from "./presidency-mobile";
@@ -101,7 +102,9 @@ function AreaCard({ area, index }: { area: AreaStatus; index: number }) {
         </span>
       </span>
       <span className="mt-4 block">
-        <span className="block font-display text-[32px] leading-none font-extrabold tnum">{area.headline}</span>
+        <span className="block font-display text-[32px] leading-none font-extrabold tnum">
+          <CountUp value={area.headline} />
+        </span>
         <span className="mt-1 block truncate text-[13px] text-fg-muted">{area.caption}</span>
       </span>
       <span className="mt-auto flex items-end justify-between gap-3 pt-3">
