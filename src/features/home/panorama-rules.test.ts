@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { AtleticaEvent, Campaign, ContentItem, ExtensionProject, FinanceEntry, Meeting, Sale } from "@/types";
-import { eventsArea, extensionArea, financeArea, marketingArea, meetingsArea, rafflesArea } from "./panorama-rules";
+import type { AtleticaEvent, Campaign, ContentItem, ExtensionProject, FinanceEntry, Meeting, Sale, SportTeam } from "@/types";
+import { eventsArea, extensionArea, financeArea, marketingArea, meetingsArea, rafflesArea, sportsArea } from "./panorama-rules";
 
 const TODAY = "2026-10-20";
 
@@ -75,5 +75,17 @@ describe("panorama: marketing, secretaria e extensão", () => {
     ] as ExtensionProject[];
     expect(extensionArea(TODAY, projects)).toMatchObject({ health: "warn", headline: "1" });
     expect(extensionArea(TODAY, []).health).toBe("idle");
+  });
+});
+
+describe("panorama: esportes", () => {
+  const team = (matches: Partial<SportTeam["matches"][number]>[], status: SportTeam["status"] = "active") =>
+    ({ id: "t", name: "Futsal Fem.", status, matches: matches.map((m, i) => ({ id: `m${i}`, opponent: "Medicina", location: "Ginásio", status: "scheduled", ...m })) }) as SportTeam;
+  it("parado sem modalidade ativa; amarelo com jogo passado sem resultado", () => {
+    expect(sportsArea(TODAY, [team([], "paused")]).health).toBe("idle");
+    expect(sportsArea(TODAY, [team([{ date: "2026-10-10" }])]).reason).toContain("1 jogo já passou");
+  });
+  it("mostra o próximo jogo", () => {
+    expect(sportsArea(TODAY, [team([{ date: "2026-10-25" }])])).toMatchObject({ health: "ok", caption: "próximo jogo: Futsal Fem. × Medicina" });
   });
 });

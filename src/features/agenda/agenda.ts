@@ -1,6 +1,6 @@
-import type { AtleticaEvent, Campaign, DateOnly, Meeting } from "@/types";
+import type { AtleticaEvent, Campaign, DateOnly, Meeting, SportTeam } from "@/types";
 
-export type AgendaKind = "event" | "meeting" | "raffle" | "deadline";
+export type AgendaKind = "event" | "meeting" | "raffle" | "sport" | "deadline";
 
 export interface AgendaItem {
   id: string;
@@ -17,6 +17,7 @@ export const AGENDA_KINDS: Record<AgendaKind, { label: string; color: string }> 
   event: { label: "Eventos", color: "#e1af37" },
   meeting: { label: "Reuniões", color: "#5b86d9" },
   raffle: { label: "Rifas", color: "#3fcf8e" },
+  sport: { label: "Esportes", color: "#f07a5a" },
   deadline: { label: "Prazos", color: "#e88ab5" },
 };
 
@@ -24,7 +25,17 @@ export const AGENDA_KINDS: Record<AgendaKind, { label: string; color: string }> 
  * Junta o que tem data na Central em uma agenda única. Recebe apenas os
  * registros que o usuário já pode ver (as listas vêm filtradas pelo serviço).
  */
-export function buildAgenda({ events = [], meetings = [], campaigns = [] }: { events?: AtleticaEvent[]; meetings?: Meeting[]; campaigns?: Campaign[] }): AgendaItem[] {
+export function buildAgenda({
+  events = [],
+  meetings = [],
+  campaigns = [],
+  teams = [],
+}: {
+  events?: AtleticaEvent[];
+  meetings?: Meeting[];
+  campaigns?: Campaign[];
+  teams?: SportTeam[];
+}): AgendaItem[] {
   const items: AgendaItem[] = [];
   for (const e of events) {
     if (e.status === "cancelled") continue;
@@ -41,6 +52,16 @@ export function buildAgenda({ events = [], meetings = [], campaigns = [] }: { ev
     if (c.status !== "active") continue;
     if (c.drawDate) items.push({ id: `draw:${c.id}`, date: c.drawDate, title: `Sorteio: ${c.name}`, detail: c.prize || undefined, kind: "raffle", href: `/campanhas/${c.id}` });
     if (c.endDate && c.endDate !== c.drawDate) items.push({ id: `end:${c.id}`, date: c.endDate, title: `Fim das vendas: ${c.name}`, kind: "deadline", href: `/campanhas/${c.id}` });
+  }
+  for (const t of teams) {
+    if (t.status === "archived") continue;
+    for (const m of t.matches) {
+      if (m.status === "cancelled") continue;
+      items.push({ id: `match:${t.id}:${m.id}`, date: m.date, time: m.time, title: `${t.name} × ${m.opponent}`, detail: m.location, kind: "sport", href: `/esportes/${t.id}?aba=jogos` });
+    }
+    for (const c of t.competitions) {
+      items.push({ id: `competition:${t.id}:${c.id}`, date: c.startDate, title: `${c.name} (${t.name})`, detail: c.location, kind: "sport", href: `/esportes/${t.id}?aba=competicoes` });
+    }
   }
   return items.sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? "99").localeCompare(b.time ?? "99") || a.title.localeCompare(b.title));
 }

@@ -1,17 +1,4 @@
-import {
-  CalendarDays,
-  ClipboardList,
-  FolderOpen,
-  GraduationCap,
-  House,
-  Megaphone,
-  ScrollText,
-  Settings,
-  Ticket,
-  Users,
-  Wallet,
-  type LucideIcon,
-} from "lucide-react";
+import { CalendarDays, ClipboardList, FolderOpen, GraduationCap, House, Megaphone, ScrollText, Settings, Ticket, Trophy, Users, Wallet, type LucideIcon } from "lucide-react";
 import type { ModuleKey } from "@/types";
 
 export interface NavItem {
@@ -37,6 +24,7 @@ export const NAV: NavGroup[] = [
       { label: "Eventos e projetos", href: "/eventos", icon: CalendarDays, module: "events" },
       { label: "Financeiro", href: "/financeiro", icon: Wallet, module: "finance" },
       { label: "Marketing", href: "/marketing", icon: Megaphone, module: "marketing" },
+      { label: "Esportes", href: "/esportes", icon: Trophy, module: "sports" },
     ],
   },
   {
@@ -66,6 +54,7 @@ export const AREA_COLORS: Record<string, string> = {
   "/documentos": "#3fcf8e",
   "/secretaria": "#8fb0ec",
   "/extensao": "#7fd9b0",
+  "/esportes": "#f07a5a",
   "/diretoria": "#b6a9ff",
   "/configuracoes": "#c5cde6",
   "/auditoria": "#e9b4cf",
@@ -91,6 +80,7 @@ export const ROUTE_LABELS: Record<string, string> = {
   relatorios: "Relatórios",
   marketing: "Marketing",
   extensao: "Ensino e Extensão",
+  esportes: "Esportes",
   diretoria: "Diretoria e organização",
   cargos: "Cargos",
   configuracoes: "Configurações",

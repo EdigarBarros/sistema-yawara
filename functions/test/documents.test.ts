@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { DocumentCategory, InstitutionalDocument } from "@/types";
 import { documentsActions, newDocumentId } from "../src/modules/documents";
+import { SUPPORT_ROLE_ID, supportRoleDefinition } from "@/lib/support";
 import { systemActions } from "../src/modules/system";
 import { auditFor, bucket, caller, createMember, db, expectCode, resetEmulators, seedPeople, seedStructure } from "./helpers";
 
@@ -441,5 +442,25 @@ describe("edição, situação e arquivamento", () => {
   it("documento inexistente", async () => {
     await expectCode(documents("archive", "sec", { id: "nao-existe" }), "not_found");
     await expectCode(documents("archive", "sec", { id: "../x" }), "invalid");
+  });
+});
+
+describe("exclusão de vez (Suporte do sistema)", () => {
+  it("só o suporte exclui: documento, índice de busca e arquivos somem; fica a auditoria", async () => {
+    await db.doc(`roles/${SUPPORT_ROLE_ID}`).set({ ...supportRoleDefinition(), createdAt: "2026-10-14T12:00:00.000Z", updatedAt: "2026-10-14T12:00:00.000Z" });
+    await createMember("sup", "Suporte Teste", SUPPORT_ROLE_ID);
+    const ticket = await stage("sec", PDF);
+    const d = await createDoc("sec", {}, ticket.uploadId);
+    const path = d.versions[0].file!.path!;
+
+    await expectCode(documents("remove", "pres", { id: d.id }), "forbidden");
+    await expectCode(documents("remove", "sec", { id: d.id }), "forbidden");
+
+    await documents("remove", "sup", { id: d.id });
+    expect((await db.doc(`documents/${d.id}`).get()).exists).toBe(false);
+    expect((await db.doc(`searchIndex/document__${d.id}`).get()).exists).toBe(false);
+    expect(await exists(path)).toBe(false);
+    expect((await auditFor(d.id)).some((a) => a.action === "documents.remove")).toBe(true);
+    await expectCode(documents("remove", "sup", { id: d.id }), "not_found");
   });
 });

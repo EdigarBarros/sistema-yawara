@@ -12,12 +12,13 @@ import {
   ScrollText,
   Settings,
   Ticket,
+  Trophy,
   Users,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { useAccess } from "@/hooks/use-access";
-import { useAllSales, useCampaigns, useContents, useEvents, useFinanceEntries, useMeetings, useProjects } from "@/hooks/use-data";
+import { useAllSales, useCampaigns, useContents, useEvents, useFinanceEntries, useMeetings, useProjects, useSportsTeams } from "@/hooks/use-data";
 import { byMonth } from "@/features/finance/utils";
 import { firstName, formatLongDate, formatMoney, formatShortMonth, greeting, parseDateOnly, todayDateOnly, daysBetween } from "@/lib/format";
 import { isDemoMode } from "@/lib/mode";
@@ -27,7 +28,7 @@ import { ColumnChart } from "@/components/shared/column-chart";
 import { useAgenda } from "@/features/agenda/use-agenda";
 import { AGENDA_KINDS } from "@/features/agenda/agenda";
 import { Calendar3D } from "@/features/agenda/calendar-3d";
-import { HEALTH_LABELS, eventsArea, extensionArea, financeArea, marketingArea, meetingsArea, rafflesArea, type AreaKey, type AreaStatus, type Health } from "./panorama-rules";
+import { HEALTH_LABELS, eventsArea, extensionArea, financeArea, marketingArea, meetingsArea, rafflesArea, sportsArea, type AreaKey, type AreaStatus, type Health } from "./panorama-rules";
 import { PendingSection, RaffleTile, Tile, useActionTiles } from "./presidency-mobile";
 
 const WEEKDAY = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
@@ -56,6 +57,7 @@ const AREA_META: Record<AreaKey, { icon: LucideIcon; href: string }> = {
   marketing: { icon: Megaphone, href: "/marketing" },
   meetings: { icon: ClipboardList, href: "/secretaria" },
   extension: { icon: GraduationCap, href: "/extensao" },
+  sports: { icon: Trophy, href: "/esportes" },
 };
 
 const HEALTH_STYLES: Record<Health, { pill: string; dot: string; ring: string }> = {
@@ -143,6 +145,7 @@ function Panorama() {
   const contents = useContents(has("marketing"));
   const meetings = useMeetings(has("meetings"));
   const projects = useProjects(has("extension"));
+  const teams = useSportsTeams(has("sports"));
 
   const cards: (AreaStatus | { title: string; message: string })[] = [];
   if (has("campaigns")) cards.push(areaFrom("Rifas", [campaigns, sales], (c, s) => rafflesArea(today, c, s)));
@@ -151,6 +154,7 @@ function Panorama() {
   if (has("marketing")) cards.push(areaFrom("Marketing", [contents], (c) => marketingArea(today, c)));
   if (has("meetings")) cards.push(areaFrom("Secretaria", [meetings], (m) => meetingsArea(today, m)));
   if (has("extension")) cards.push(areaFrom("Ensino e Extensão", [projects], (p) => extensionArea(today, p)));
+  if (has("sports")) cards.push(areaFrom("Esportes", [teams], (t) => sportsArea(today, t)));
 
   const ready = cards.filter((c): c is AreaStatus => "health" in c);
   const alerts = ready.filter((c) => c.health === "alert").length;
@@ -350,7 +354,7 @@ export function PresidencyDesktopHome({ actions }: { actions?: React.ReactNode }
 
       <section aria-labelledby="o-que-fazer">
         <SectionTitle id="o-que-fazer">O que você quer fazer?</SectionTitle>
-        <div className="grid grid-cols-2 gap-4 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-[repeat(var(--cols),minmax(0,1fr))]" style={{ "--cols": tiles.length + (hasRaffle ? 2 : 0) } as React.CSSProperties}>
           {hasRaffle && <RaffleTile className="col-span-2 min-h-[180px]" />}
           {tiles.map((t, i) => (
             <Tile key={t.href} {...t} index={i} />

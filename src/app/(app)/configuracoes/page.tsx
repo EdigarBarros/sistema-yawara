@@ -4,7 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Building2, Database, FolderTree, Info, KeyRound, Landmark, LayoutGrid, Palette, Pencil, Plus, RotateCcw, Server, ShieldCheck, SlidersHorizontal, Wallet } from "lucide-react";
 import type { EntryType, InstitutionSettings, ModuleKey } from "@/types";
 import { services } from "@/services";
@@ -14,7 +14,9 @@ import { useDirectory, useDocumentCategories, useFinanceCategories, useSettings 
 import { useUI, type ThemePreference } from "@/stores/ui";
 import { MODULES } from "@/lib/modules";
 import { ENTRY_TYPE_LABELS } from "@/lib/labels";
-import { isDemoMode, isFirebaseMode } from "@/lib/mode";
+import { FILE_STORAGE, isDemoMode, isFirebaseMode } from "@/lib/mode";
+import { getDriveStatus, startDriveConnection } from "@/services/firebase/drive";
+import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { errorMessage, notifyError, notifySuccess } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
@@ -520,6 +522,64 @@ function EnvironmentSection() {
   );
 }
 
+const DRIVE_RESULT: Record<string, { tone: "ok" | "danger"; text: string }> = {
+  ok: { tone: "ok", text: "Google Drive conectado. Os próximos arquivos enviados vão para a pasta da Central." },
+  denied: { tone: "danger", text: "A autorização foi cancelada no Google. Nada mudou." },
+  invalid: { tone: "danger", text: "O pedido de conexão expirou ou já foi usado. Clique em “Conectar Google Drive” de novo." },
+  forbidden: { tone: "danger", text: "Seu perfil não pode conectar o Google Drive." },
+  error: { tone: "danger", text: "O Google não confirmou a autorização. Tente conectar de novo." },
+};
+
+/** Conexão com o Google Drive da Atlética (só com FILE_STORAGE=drive). */
+function DriveSection() {
+  const access = useAccess();
+  const admin = access.can("settings.admin");
+  const result = DRIVE_RESULT[useSearchParams().get("drive") ?? ""];
+  const status = useQuery({ queryKey: ["drive-status"], queryFn: getDriveStatus, enabled: admin });
+  const connect = useAction(startDriveConnection);
+  const s = status.data;
+  return (
+    <Panel title="Google Drive da Atlética" description="Onde ficam os arquivos enviados pela Central (documentos, comprovantes e artes).">
+      {result?.tone === "ok" && (
+        <p role="status" className="mb-4 rounded-lg border border-ok/30 bg-ok/12 px-3.5 py-2.5 text-[13px] text-ok">
+          {result.text}
+        </p>
+      )}
+      {result?.tone === "danger" && <FormAlert message={result.text} className="mb-4" />}
+      {!admin ? (
+        <ModeNotice>Somente cargos com a permissão “Configurações: administrar” podem ver e alterar esta conexão.</ModeNotice>
+      ) : status.isError ? (
+        <ErrorState message={errorMessage(status.error, "Não foi possível consultar a conexão com o Google Drive.")} onRetry={() => void status.refetch()} />
+      ) : !s ? (
+        <InlineLoader />
+      ) : (
+        <>
+          <DetailList
+            items={[
+              {
+                label: "Situação",
+                value: s.connected ? <Badge tone="ok">Conectado</Badge> : <Badge tone="warn">Não conectado</Badge>,
+              },
+              ...(s.connectedAt ? [{ label: "Conectado em", value: `${formatDateTime(s.connectedAt)}${s.connectedByName ? ` por ${s.connectedByName}` : ""}` }] : []),
+              ...(s.source === "env" ? [{ label: "Origem", value: "Variáveis de ambiente da hospedagem" }] : []),
+            ]}
+          />
+          {!s.clientConfigured ? (
+            <ModeNotice className="mt-4">Falta configurar o cliente do Google na hospedagem (GOOGLE_DRIVE_CLIENT_ID e GOOGLE_DRIVE_CLIENT_SECRET). Ver docs/backend/implantacao-gratuita.md §3.2.</ModeNotice>
+          ) : (
+            <div className="mt-4 space-y-2">
+              <Button variant="primary" onClick={() => void connect.runSafe()} loading={connect.pending}>
+                {s.connected ? "Conectar de novo" : "Conectar Google Drive"}
+              </Button>
+              <p className="text-[12.5px] text-fg-muted">Entre com a conta Google da Atlética. A Central só terá acesso à pasta “Central Yawara — arquivos”.</p>
+            </div>
+          )}
+        </>
+      )}
+    </Panel>
+  );
+}
+
 /* --------------------------------------- Página --------------------------------------- */
 
 export default function SettingsPage() {
@@ -543,7 +603,12 @@ export default function SettingsPage() {
     modulos: <ModulesSection />,
     preferencias: <PreferencesSection />,
     demonstracao: isDemoMode ? <DemoSection /> : null,
-    ambiente: isFirebaseMode ? <EnvironmentSection /> : null,
+    ambiente: isFirebaseMode ? (
+      <div className="space-y-5">
+        <EnvironmentSection />
+        {FILE_STORAGE === "drive" && <DriveSection />}
+      </div>
+    ) : null,
   };
 
   if (!canSettings && !["preferencias", "demonstracao"].includes(current)) return <RestrictedState />;

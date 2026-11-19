@@ -9,6 +9,7 @@ import { firebaseCampaigns } from "./campaigns";
 import { firebaseDocuments } from "./documents";
 import { firebaseEvents } from "./events";
 import { firebaseExtension } from "./extension";
+import { firebaseSports } from "./sports";
 import { firebaseFiles } from "./files";
 import { firebaseFinance } from "./finance";
 import { firebaseMarketing } from "./marketing";
@@ -28,6 +29,7 @@ export const firebaseServices: Services = {
   finance: firebaseFinance,
   marketing: firebaseMarketing,
   extension: firebaseExtension,
+  sports: firebaseSports,
   settings: firebaseSettings,
   notifications: firebaseNotifications,
   search: firebaseSearch,

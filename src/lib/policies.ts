@@ -17,6 +17,7 @@ import type {
   Meeting,
   MeetingStatus,
   Sale,
+  SportTeam,
 } from "@/types";
 import { canSeeRecord, hasPermission, matchesAudience, type AccessContext } from "./permissions";
 
@@ -218,4 +219,21 @@ export function canEditProject(ctx: AccessContext, p: ExtensionProject) {
 
 export function canCloseProject(ctx: AccessContext, p: ExtensionProject) {
   return p.createdBy === ctx.user.id || hasPermission(ctx, "extension.archive");
+}
+
+/* -------------------------------- Esportes ------------------------------- */
+
+export function canSeeTeam(ctx: AccessContext, t: SportTeam) {
+  if (t.responsibleId === ctx.user.id && hasPermission(ctx, "sports.view")) return true;
+  return canSeeRecord(ctx, "sports", t);
+}
+
+/** Editar dados, treinos, elenco, jogos e competições. */
+export function canEditTeam(ctx: AccessContext, t: SportTeam) {
+  return hasPermission(ctx, "sports.edit") || t.createdBy === ctx.user.id || t.responsibleId === ctx.user.id;
+}
+
+/** Pausar, arquivar e reativar a modalidade. */
+export function canArchiveTeam(ctx: AccessContext, t: SportTeam) {
+  return t.createdBy === ctx.user.id || hasPermission(ctx, "sports.archive");
 }

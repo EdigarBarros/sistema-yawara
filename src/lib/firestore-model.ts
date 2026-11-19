@@ -25,9 +25,10 @@ import type {
   InstitutionalDocument,
   Meeting,
   Sale,
+  SportTeam,
 } from "@/types";
 import { isSaleActive, summarize } from "./raffle";
-import { buyerReaders, campaignReaders, contentReaders, documentReaders, eventReaders, meetingReaders, projectEditors, projectReaders } from "./record-readers";
+import { buyerReaders, campaignReaders, contentReaders, documentReaders, eventReaders, meetingReaders, projectEditors, projectReaders, teamReaders } from "./record-readers";
 
 export const COLLECTIONS = {
   campaigns: "campaigns",
@@ -37,6 +38,7 @@ export const COLLECTIONS = {
   financeEntries: "financeEntries",
   contents: "contents",
   projects: "projects",
+  sportsTeams: "sportsTeams",
 } as const;
 
 type WithoutId<T> = Omit<T, "id">;
@@ -232,4 +234,12 @@ export function projectFromDocs(id: string, project: Omit<ProjectDoc, "readers">
     attendeeCount: project.attendeeCount,
     attendeesRestricted: !attendance,
   };
+}
+
+/* -------------------------------- esportes ------------------------------- */
+
+export type TeamDoc = WithoutId<SportTeam> & { readers: string[] };
+
+export function teamDoc(t: SportTeam): TeamDoc {
+  return { ...withoutId(t), readers: teamReaders(t) };
 }

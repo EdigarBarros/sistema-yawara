@@ -32,6 +32,7 @@ export const metadata: Metadata = {
   title: { default: "Central Yawara", template: "%s · Central Yawara" },
   description: "Plataforma interna de gestão da Associação Atlética Acadêmica de Psicologia Yawara — versão de demonstração.",
   robots: { index: false, follow: false },
+  appleWebApp: { capable: true, title: "Yawara", statusBarStyle: "black-translucent" },
 };
 
 export const viewport: Viewport = {

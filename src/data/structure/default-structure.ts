@@ -22,6 +22,7 @@ export const DEFAULT_DEPARTMENTS: DepartmentSeed[] = [
   { id: "marketing", name: "Marketing", shortName: "MKT", description: "Identidade visual, redes sociais e divulgação.", active: true },
   { id: "eventos", name: "Eventos", shortName: "EVT", description: "Festas, integrações e ações de arrecadação.", active: true },
   { id: "extensao", name: "Ensino e Extensão", shortName: "ENS", description: "Atividades acadêmicas, palestras e projetos de extensão.", active: true },
+  { id: "esportes", name: "Esportes", shortName: "ESP", description: "Modalidades esportivas, treinos e competições.", active: true },
 ];
 
 const presidency: Permission[] = allPermissions();
@@ -101,6 +102,19 @@ export const DEFAULT_ROLES: RoleSeed[] = [
     ],
   },
   {
+    id: "diretor-esportes", name: "Diretor(a) de Esportes", departmentId: "esportes", level: "director", isBoard: true, active: true, homePreset: "sports",
+    description: "Coordena as modalidades esportivas, os treinos e a participação em competições.",
+    permissions: [
+      ...p("sports", ["view", "create", "edit", "archive", "export"]),
+      ...p("events", ["view", "create"]),
+      ...p("campaigns", ["view", "create", "register"]),
+      ...p("documents", ["view", "create", "edit"]),
+      ...p("marketing", ["view", "create"]),
+      ...p("meetings", ["view"]),
+      ...p("organization", ["view"]),
+    ],
+  },
+  {
     id: "assessor-eventos", name: "Assessor(a) de Eventos", departmentId: "eventos", level: "advisor", isBoard: false, active: true, homePreset: "advisor",
     description: "Apoia a diretoria de Eventos nas tarefas e nas vendas.",
     permissions: [...p("events", ["view", "edit"]), ...p("campaigns", ["view", "register"]), ...p("documents", ["view"])],
@@ -119,6 +133,11 @@ export const DEFAULT_ROLES: RoleSeed[] = [
     id: "assessor-extensao", name: "Assessor(a) de Ensino e Extensão", departmentId: "extensao", level: "advisor", isBoard: false, active: true, homePreset: "advisor",
     description: "Apoia a organização das atividades acadêmicas e listas de presença.",
     permissions: [...p("extension", ["view", "edit"]), ...p("campaigns", ["view", "register"]), ...p("documents", ["view"])],
+  },
+  {
+    id: "assessor-esportes", name: "Assessor(a) de Esportes", departmentId: "esportes", level: "advisor", isBoard: false, active: true, homePreset: "advisor",
+    description: "Apoia a diretoria de Esportes nos treinos, no elenco e nos jogos.",
+    permissions: [...p("sports", ["view", "edit"]), ...p("campaigns", ["view", "register"]), ...p("documents", ["view"])],
   },
 ];
 
@@ -155,7 +174,7 @@ export function defaultSystemSettings(): SystemSettings {
       instagram: "",
       motto: "",
     },
-    modules: { campaigns: true, events: true, documents: true, meetings: true, finance: true, marketing: true, extension: true, organization: true, settings: true, audit: true },
+    modules: { campaigns: true, events: true, documents: true, meetings: true, finance: true, marketing: true, extension: true, sports: true, organization: true, settings: true, audit: true },
   };
 }
 

@@ -8,7 +8,7 @@ import type { InstitutionalDocument } from "@/types";
 import { useAccess } from "@/hooks/use-access";
 import { useDirectory, useDocumentCategories, useDocuments } from "@/hooks/use-data";
 import { DOCUMENT_STATUS } from "@/lib/labels";
-import { fileExtension, formatDate, formatRelative } from "@/lib/format";
+import { formatDate, formatRelative } from "@/lib/format";
 import { cn, matchesQuery } from "@/lib/utils";
 import { errorMessage } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
@@ -19,17 +19,14 @@ import { FilterChips, FilterSelect, SearchInput } from "@/components/shared/filt
 import { EmptyState, ErrorState, RestrictedState, TableSkeleton } from "@/components/shared/states";
 import { DemoTag, OwnershipBadge, StatusBadge } from "@/components/shared/badges";
 import { describeAudience } from "@/components/shared/audience";
+import { FileTypeIcon } from "@/components/shared/file-type-icon";
 import { AddDocumentDialog } from "@/features/documents/document-form-dialog";
 
 type StatusFilter = "active" | "archived" | "all";
 
 function DocIcon({ doc }: { doc: InstitutionalDocument }) {
   const file = doc.versions.at(-1)?.file;
-  return (
-    <span className="grid size-10 shrink-0 place-items-center rounded-lg border border-line bg-surface-2 font-mono text-[10px] font-semibold text-gold-fg">
-      {file ? fileExtension(file.name).slice(0, 4) : <FileText className="size-4 text-fg-subtle" />}
-    </span>
-  );
+  return <FileTypeIcon name={file?.name} isLink={!!file?.url} />;
 }
 
 export default function DocumentsPage() {

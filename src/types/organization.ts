@@ -8,6 +8,7 @@ export type ModuleKey =
   | "finance"
   | "marketing"
   | "extension"
+  | "sports"
   | "organization"
   | "settings"
   | "audit";
@@ -44,6 +45,7 @@ export type HomePreset =
   | "marketing"
   | "events"
   | "extension"
+  | "sports"
   | "advisor";
 
 export interface Role {
