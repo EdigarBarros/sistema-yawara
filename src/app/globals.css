@@ -441,6 +441,29 @@
   .anim-flip { animation: card-flip 0.6s cubic-bezier(0.2, 1, 0.3, 1) both; }
   .anim-sheet-out { transform-origin: top center; animation: sheet-out 0.6s cubic-bezier(0.2, 1, 0.3, 1) both; }
 
+  /* Estante de documentos: folhas empilhadas em profundidade que se abrem em leque no hover */
+  .doc-stack {
+    position: relative;
+    perspective: 700px;
+    transform-style: preserve-3d;
+  }
+  .doc-stack > .sheet {
+    position: absolute;
+    inset: 0;
+    border-radius: 10px;
+    transform-origin: 50% 100%;
+    transition: transform 0.55s cubic-bezier(0.2, 1, 0.3, 1);
+    transform: translate3d(calc(var(--i) * 5px), calc(var(--i) * -5px), calc(var(--i) * -14px)) rotateX(8deg);
+  }
+  .group:hover .doc-stack > .sheet,
+  .group:focus-visible .doc-stack > .sheet {
+    transform: translate3d(calc(var(--i) * 16px), calc(var(--i) * -8px), 0) rotateZ(calc(var(--i) * 6deg)) rotateX(0deg);
+  }
+  .group:hover .doc-stack > .sheet.front,
+  .group:focus-visible .doc-stack > .sheet.front {
+    transform: translate3d(0, -6px, 20px) rotateZ(-3deg);
+  }
+
   /* Números tabulares para valores e códigos */
   .tnum {
     font-variant-numeric: tabular-nums;
