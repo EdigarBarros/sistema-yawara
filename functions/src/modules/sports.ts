@@ -21,6 +21,7 @@ import type { DocumentReference, DocumentSnapshot, Transaction } from "firebase-
 import { z } from "zod";
 import { teamDoc } from "@/lib/firestore-model";
 import { canArchiveTeam, canEditTeam, canSeeTeam } from "@/lib/policies";
+import { cleanLineup, lineupWithout } from "@/lib/sports-court";
 import type { Athlete, Audience, AudienceScope, Competition, CompetitionStatus, HistoryAction, HistoryEntry, Match, MatchStatus, SportCategory, SportTeam, TeamStatus, TrainingSlot } from "@/types";
 import { db } from "../core/admin";
 import { requireModuleEnabled, requirePermission, type Actor } from "../core/actor";
@@ -167,6 +168,12 @@ const competitionSchema = strict({
 const LISTS = ["trainings", "athletes", "matches", "competitions"] as const;
 type ListName = (typeof LISTS)[number];
 const removeSchema = strict({ id: docId, list: z.enum(LISTS, { error: "Lista inválida." }), itemId: docId });
+
+const lineupSchema = strict({
+  id: docId,
+  formation: z.string().max(40, "Formação inválida."),
+  slots: z.array(strict({ athleteId: docId, x: z.number().finite(), z: z.number().finite() })).max(11, "Escalação com titulares demais."),
+});
 
 const LIST_LABEL: Record<ListName, { one: string; limit: number; prefix: string }> = {
   trainings: { one: "Treino", limit: MAX_TRAININGS, prefix: "trn" },
@@ -522,8 +529,34 @@ export const sportsActions = {
       };
       // Jogos de uma competição removida ficam sem competição (não são apagados).
       if (list === "competitions") next.matches = team.matches.map((m) => (m.competitionId === removedId ? { ...m, competitionId: undefined } : m));
+      // Quem sai do elenco sai também da escalação da quadra.
+      if (list === "athletes") next.lineup = lineupWithout(team.lineup, removedId);
       writeTeam(tx, ref, next);
       audit(tx, actor, ctx, "removeItem", teamId, `${meta.one} removido(a) da modalidade ${team.code}`, { list, itemId: removedId });
+      return { id: teamId };
+    },
+    present: presentResult,
+  }),
+
+  /** Escalação da aba Quadra: só atletas do elenco, sem repetir, dentro da quadra. */
+  saveLineup: mutation({
+    module: "sports",
+    schema: lineupSchema,
+    async run(tx, actor, { id: teamId, formation, slots }, ctx): Promise<TeamRef> {
+      actor = actor!;
+      await requireModuleEnabled(tx, "sports");
+      const { ref, team } = await loadTeam(tx, teamId);
+      requireEditable(actor, team);
+      const result = cleanLineup(team, { formation, slots });
+      if ("error" in result) fail("invalid", result.error);
+      const next: SportTeam = {
+        ...team,
+        lineup: { ...result.lineup, updatedAt: ctx.now, updatedBy: actor.uid },
+        updatedAt: ctx.now,
+        history: addHistory(team, actor, ctx, ["updated", "Escalação salva"]),
+      };
+      writeTeam(tx, ref, next);
+      audit(tx, actor, ctx, "saveLineup", teamId, `Escalação da modalidade ${team.code} salva`, { starters: result.lineup.slots.length, formation: result.lineup.formation });
       return { id: teamId };
     },
     present: presentResult,

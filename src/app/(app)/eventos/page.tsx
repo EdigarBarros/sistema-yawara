@@ -2,26 +2,25 @@
 
 import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { CalendarDays, CalendarPlus, Copy, MoreHorizontal } from "lucide-react";
+import { CalendarDays, CalendarPlus } from "lucide-react";
 import type { AtleticaEvent, EventType } from "@/types";
 import { useAccess } from "@/hooks/use-access";
 import { useDirectory, useEvents } from "@/hooks/use-data";
-import { EVENT_STATUS, EVENT_TYPE_LABELS } from "@/lib/labels";
-import { formatTime, todayDateOnly } from "@/lib/format";
+import { EVENT_TYPE_LABELS } from "@/lib/labels";
+import { daysBetween, todayDateOnly } from "@/lib/format";
 import { matchesQuery } from "@/lib/utils";
 import { errorMessage } from "@/lib/notify";
 import { isDemoMode } from "@/lib/mode";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/menu";
 import { PageHeader } from "@/components/shared/page";
-import { DataTable, type Column } from "@/components/shared/data-table";
+import { ShowcaseGrid, ShowcaseGroup } from "@/components/shared/showcase";
 import { FilterChips, FilterSelect, SearchInput, Toolbar } from "@/components/shared/filters";
 import { EmptyState, ErrorState, RestrictedState } from "@/components/shared/states";
-import { OwnershipBadge, StatusBadge } from "@/components/shared/badges";
-import { DateChip } from "@/components/shared/list-row";
-import { describeAudience } from "@/components/shared/audience";
 import { EventFormDialog } from "@/features/events/event-form-dialog";
 import { DuplicateEventDialog } from "@/features/events/event-dialogs";
+import { EventCard } from "@/features/events/event-card";
+import { EventPreview } from "@/features/events/event-preview";
+import { useIsDesktop } from "@/hooks/use-media";
 
 type Filter = "upcoming" | "planning" | "past" | "all";
 
@@ -38,6 +37,8 @@ export default function EventsPage() {
   const [dep, setDep] = useState("");
   const [query, setQuery] = useState("");
   const [duplicate, setDuplicate] = useState<AtleticaEvent | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const isDesktop = useIsDesktop();
   const createOpen = params.get("novo") === "1" && access.can("events.create");
   const setCreateOpen = (open: boolean) => router.replace(open ? `${pathname}?novo=1` : pathname, { scroll: false });
 
@@ -55,6 +56,7 @@ export default function EventsPage() {
     .filter((e) => matchesQuery(query, e.name, e.location, e.code, dir.memberName(e.createdBy)))
     .sort((a, b) => (filter === "past" ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)));
   const count = (f: Filter) => (data ?? []).filter(tests[f]).length;
+  const preview = previewId ? ((data ?? []).find((e) => e.id === previewId) ?? null) : null;
 
   if (!enabled)
     return (
@@ -69,70 +71,37 @@ export default function EventsPage() {
       />
     );
 
-  const columns: Column<AtleticaEvent>[] = [
-    {
-      key: "name",
-      header: "Evento",
-      cell: (e) => (
-        <div className="flex items-center gap-3">
-          <DateChip date={e.date} />
-          <div className="min-w-0">
-            <p className="truncate font-semibold">{e.name}</p>
-            <p className="truncate text-[12px] text-fg-subtle">
-              {EVENT_TYPE_LABELS[e.type]} · {formatTime(e.time)}
-            </p>
-          </div>
-        </div>
-      ),
-    },
-    { key: "location", header: "Local", hideBelow: "xl", cell: (e) => <span className="line-clamp-2 text-[12.5px] text-fg-muted">{e.location}</span> },
-    {
-      key: "dep",
-      header: "Responsável",
-      hideBelow: "lg",
-      cell: (e) => (
-        <div className="text-[12.5px]">
-          <p>{dir.department(e.departmentId)?.name}</p>
-          <p className="text-fg-subtle">Criado por {dir.memberName(e.createdBy)}</p>
-        </div>
-      ),
-    },
-    { key: "access", header: "Pessoas autorizadas", hideBelow: "xl", cell: (e) => <span className="line-clamp-2 text-[12.5px] text-fg-muted">{describeAudience(e.access, dir)}</span> },
-    { key: "status", header: "Situação", cell: (e) => <StatusBadge meta={EVENT_STATUS[e.status]} /> },
-    { key: "origin", header: "Origem", hideBelow: "lg", cell: (e) => <OwnershipBadge record={e} /> },
-    {
-      key: "actions",
-      header: <span className="sr-only">Ações</span>,
-      align: "right",
-      cell: (e) =>
+  const card = (e: AtleticaEvent) => (isDesktop ? <EventCard event={e} onClick={() => setPreviewId(e.id)} /> : <EventCard event={e} href={`/eventos/${e.id}`} />);
+  const empty = (
+    <EmptyState
+      icon={<CalendarDays />}
+      title="Nenhum evento encontrado"
+      description={query || type || dep ? "Ajuste os filtros para ver outros eventos." : "Ainda não há eventos neste filtro."}
+      action={
         access.can("events.create") ? (
-          <div onClick={(ev) => ev.stopPropagation()}>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="icon-sm" variant="ghost" aria-label={`Ações de ${e.name}`}>
-                  <MoreHorizontal />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem icon={<CalendarDays />} onSelect={() => router.push(`/eventos/${e.id}`)}>
-                  Abrir evento
-                </DropdownMenuItem>
-                <DropdownMenuItem icon={<Copy />} onSelect={() => setDuplicate(e)}>
-                  Duplicar evento
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        ) : null,
-    },
-  ];
+          <Button variant="primary" onClick={() => setCreateOpen(true)}>
+            <CalendarPlus /> Novo evento
+          </Button>
+        ) : undefined
+      }
+    />
+  );
+  // Nos próximos eventos, separa o que está perto do que ainda está longe.
+  const groups =
+    filter === "upcoming" && rows.length > 0
+      ? [
+          { title: "Nos próximos 7 dias", items: rows.filter((e) => daysBetween(today, e.date) <= 7) },
+          { title: "Próximas semanas", items: rows.filter((e) => daysBetween(today, e.date) > 7 && daysBetween(today, e.date) <= 30) },
+          { title: "Mais adiante", items: rows.filter((e) => daysBetween(today, e.date) > 30) },
+        ].filter((g) => g.items.length > 0)
+      : null;
 
   return (
     <>
       <PageHeader
         eyebrow="Planejamento"
         title="Eventos e projetos"
-        description="Eventos autorizados para o seu perfil, com programação, tarefas e documentos."
+        description="Eventos autorizados para o seu perfil. Toque num evento para ver o resumo; abra para cuidar da programação, das tarefas e dos documentos."
         actions={
           access.can("events.create") && (
             <Button variant="primary" onClick={() => setCreateOpen(true)}>
@@ -173,46 +142,28 @@ export default function EventsPage() {
         {isError ? (
           <ErrorState message={errorMessage(error)} onRetry={() => refetch()} />
         ) : (
-          <DataTable
-            caption="Eventos"
-            rows={rows}
-            columns={columns}
-            loading={isLoading}
-            getRowId={(e) => e.id}
-            onRowClick={(e) => router.push(`/eventos/${e.id}`)}
-            mobileCard={(e) => (
-              <div className="flex gap-3">
-                <DateChip date={e.date} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="truncate font-semibold">{e.name}</p>
-                    <StatusBadge meta={EVENT_STATUS[e.status]} />
-                  </div>
-                  <p className="truncate text-[12px] text-fg-subtle">
-                    {EVENT_TYPE_LABELS[e.type]} · {formatTime(e.time)} · {e.location}
-                  </p>
-                  <p className="text-[12px] text-fg-subtle">{dir.department(e.departmentId)?.name}</p>
-                </div>
-              </div>
+          <div className="space-y-7 rounded-b-xl bg-surface-2/50 p-4 sm:p-5">
+            {groups && !isLoading ? (
+              groups.map((g) => (
+                <ShowcaseGroup key={g.title} title={g.title} count={g.items.length}>
+                  <ShowcaseGrid label={g.title} items={g.items} getId={(e) => e.id} render={card} />
+                </ShowcaseGroup>
+              ))
+            ) : (
+              <ShowcaseGrid label="Eventos" items={rows} loading={isLoading} getId={(e) => e.id} render={card} empty={empty} />
             )}
-            empty={
-              <EmptyState
-                icon={<CalendarDays />}
-                title="Nenhum evento encontrado"
-                description={query || type || dep ? "Ajuste os filtros para ver outros eventos." : "Ainda não há eventos neste filtro."}
-                action={
-                  access.can("events.create") ? (
-                    <Button variant="primary" onClick={() => setCreateOpen(true)}>
-                      <CalendarPlus /> Novo evento
-                    </Button>
-                  ) : undefined
-                }
-              />
-            }
-          />
+          </div>
         )}
       </section>
       <EventFormDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <EventPreview
+        event={preview}
+        onClose={() => setPreviewId(null)}
+        onDuplicate={(e) => {
+          setPreviewId(null);
+          setDuplicate(e);
+        }}
+      />
       {duplicate && <DuplicateEventDialog open onOpenChange={(o) => !o && setDuplicate(null)} event={duplicate} />}
     </>
   );

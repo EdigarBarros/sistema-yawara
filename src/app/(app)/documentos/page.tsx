@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FilePlus2, FileText, FolderOpen, LayoutGrid, List } from "lucide-react";
 import type { InstitutionalDocument } from "@/types";
@@ -16,7 +15,9 @@ import { Segmented } from "@/components/ui/form";
 import { PageHeader } from "@/components/shared/page";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { FilterChips, FilterSelect, SearchInput } from "@/components/shared/filters";
-import { EmptyState, ErrorState, RestrictedState, TableSkeleton } from "@/components/shared/states";
+import { EmptyState, ErrorState, RestrictedState } from "@/components/shared/states";
+import { ShowcaseGrid } from "@/components/shared/showcase";
+import { CountUp, DocShelfCard } from "@/features/documents/doc-shelf";
 import { DemoTag, OwnershipBadge, StatusBadge } from "@/components/shared/badges";
 import { describeAudience } from "@/components/shared/audience";
 import { FileTypeIcon } from "@/components/shared/file-type-icon";
@@ -43,7 +44,7 @@ export default function DocumentsPage() {
   const [status, setStatus] = useState<StatusFilter>("active");
   const [sort, setSort] = useState("recent");
   const [query, setQuery] = useState("");
-  const [view, setView] = useState<"list" | "cards">("list");
+  const [view, setView] = useState<"list" | "cards">("cards");
   const createOpen = params.get("novo") === "1" && access.can("documents.create");
   const setCreateOpen = (o: boolean) => router.replace(o ? `${pathname}?novo=1` : pathname, { scroll: false });
 
@@ -131,7 +132,9 @@ export default function DocumentsPage() {
                 <span className="flex items-center gap-2">
                   <FolderOpen className="size-4" /> Todas
                 </span>
-                <span className="font-mono text-[11px] text-fg-subtle">{base.length}</span>
+                <span className="tnum font-mono text-[11px] text-fg-subtle">
+                  <CountUp value={base.length} />
+                </span>
               </button>
             </li>
             {categories?.map((c) => (
@@ -146,7 +149,9 @@ export default function DocumentsPage() {
                   )}
                 >
                   <span className="truncate">{c.name}</span>
-                  <span className="font-mono text-[11px] text-fg-subtle">{counts(c.id)}</span>
+                  <span className="tnum font-mono text-[11px] text-fg-subtle">
+                    <CountUp value={counts(c.id)} />
+                  </span>
                 </button>
               </li>
             ))}
@@ -179,8 +184,8 @@ export default function DocumentsPage() {
                 value={view}
                 onChange={setView}
                 options={[
+                  { value: "cards", label: "Estante", icon: <LayoutGrid /> },
                   { value: "list", label: "Lista", icon: <List /> },
-                  { value: "cards", label: "Cartões", icon: <LayoutGrid /> },
                 ]}
               />
             </div>
@@ -231,30 +236,17 @@ export default function DocumentsPage() {
               )}
               empty={<EmptyState icon={<FileText />} title="Nenhum documento encontrado" description="Ajuste a busca, a categoria ou os filtros." />}
             />
-          ) : isLoading ? (
-            <TableSkeleton />
-          ) : rows.length === 0 ? (
-            <EmptyState icon={<FileText />} title="Nenhum documento encontrado" description="Ajuste a busca, a categoria ou os filtros." />
           ) : (
-            <ul className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-3">
-              {rows.map((d) => (
-                <li key={d.id}>
-                  <Link href={`/documentos/${d.id}`} className="flex h-full flex-col gap-3 rounded-xl border border-line bg-sunken p-4 transition-colors hover:border-gold/40">
-                    <div className="flex items-start justify-between gap-3">
-                      <DocIcon doc={d} />
-                      <StatusBadge meta={DOCUMENT_STATUS[d.status]} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="line-clamp-2 font-semibold">{d.name}</p>
-                      <p className="mt-1 line-clamp-2 text-[12.5px] text-fg-muted">{d.description}</p>
-                    </div>
-                    <p className="text-[12px] text-fg-subtle">
-                      {catName(d.categoryId)} · v{d.versions.length} · {formatRelative(d.updatedAt)}
-                    </p>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <div className="rounded-b-xl bg-surface-2/50 p-4 sm:p-5">
+              <ShowcaseGrid
+                label="Documentos"
+                items={rows}
+                loading={isLoading}
+                getId={(d) => d.id}
+                render={(d) => <DocShelfCard doc={d} categoryName={catName(d.categoryId)} />}
+                empty={<EmptyState icon={<FileText />} title="Nenhum documento encontrado" description="Ajuste a busca, a categoria ou os filtros." />}
+              />
+            </div>
           )}
         </section>
       </div>

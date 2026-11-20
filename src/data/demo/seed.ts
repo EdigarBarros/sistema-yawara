@@ -32,7 +32,7 @@ import { buildContents } from "./marketing";
 import { buildProjects } from "./extension";
 import { buildSportsTeams } from "./sports";
 
-export const DEMO_DB_VERSION = 3;
+export const DEMO_DB_VERSION = 4;
 
 export interface DemoDB {
   version: number;

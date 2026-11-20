@@ -54,6 +54,21 @@ export interface Competition {
   notes?: string;
 }
 
+/** Posição de um titular na quadra 3D, em metros a partir do centro. */
+export interface LineupSlot {
+  athleteId: ID;
+  x: number;
+  z: number;
+}
+
+/** Escalação montada na aba Quadra. */
+export interface TeamLineup {
+  formation: string;
+  slots: LineupSlot[];
+  updatedAt?: ISODateTime;
+  updatedBy?: ID;
+}
+
 /** Modalidade esportiva da Atlética (ex.: Futsal Feminino). */
 export interface SportTeam {
   id: ID;
@@ -72,6 +87,8 @@ export interface SportTeam {
   athletes: Athlete[];
   matches: Match[];
   competitions: Competition[];
+  /** Escalação da aba Quadra (só para esportes com quadra desenhada). */
+  lineup?: TeamLineup;
   access: Audience;
   createdBy: ID;
   createdAt: ISODateTime;

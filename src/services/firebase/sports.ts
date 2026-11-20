@@ -120,4 +120,9 @@ export const firebaseSports: SportsService = {
     const rid = takeRequestId();
     return team("removeItem", { id, list, itemId }, rid);
   },
+
+  async saveLineup(id, lineup) {
+    const rid = takeRequestId();
+    return team("saveLineup", { id, formation: lineup.formation, slots: lineup.slots.map((s) => ({ athleteId: s.athleteId, x: s.x, z: s.z })) }, rid);
+  },
 };

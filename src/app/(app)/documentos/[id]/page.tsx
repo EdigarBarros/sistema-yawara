@@ -7,6 +7,7 @@ import { Archive, ArchiveRestore, CalendarDays, ClipboardList, Download, Externa
 import type { FileRef } from "@/types";
 import { services } from "@/services";
 import { downloadName } from "@/services/firebase/files";
+import { cn } from "@/lib/utils";
 import { isSafeLink } from "@/lib/file-links";
 import { useAccess } from "@/hooks/use-access";
 import { useAction } from "@/hooks/use-action";
@@ -197,7 +198,9 @@ export default function DocumentDetailPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-4">
           <Panel title="Pré-visualização" description={current.file ? `${current.file.name} · ${current.file.url ? "link externo" : formatBytes(current.file.size)}` : undefined}>
-            <Preview file={current.file} sample={doc.sample} preview={preview} />
+            <div key={current.version} className="anim-sheet-out">
+              <Preview file={current.file} sample={doc.sample} preview={preview} />
+            </div>
           </Panel>
           {doc.description && (
             <Panel title="Descrição">
@@ -218,10 +221,22 @@ export default function DocumentDetailPage() {
             bodyClassName="py-1.5"
           >
             <ul className="divide-y divide-line">
-              {[...doc.versions].reverse().map((v) => {
+              {[...doc.versions].reverse().map((v, i) => {
+                const latest = v.version === doc.versions.length;
                 return (
-                  <li key={v.version} className="flex items-center gap-3 px-5 py-3">
-                    <span className="grid size-9 shrink-0 place-items-center rounded-lg border border-line bg-surface-2 font-mono text-[12px] font-semibold">v{v.version}</span>
+                  <li key={v.version} className="anim-row flex items-center gap-3 px-5 py-3" style={{ animationDelay: `${i * 60}ms` }}>
+                    {/* Folhas empilhadas: quanto mais antiga, mais "para trás" */}
+                    <span className="relative grid size-9 shrink-0 place-items-center">
+                      {!latest && <span aria-hidden className="absolute inset-0 translate-x-[3px] -translate-y-[3px] rounded-lg border border-line bg-surface-3" />}
+                      <span
+                        className={cn(
+                          "relative grid size-9 place-items-center rounded-lg border font-mono text-[12px] font-semibold",
+                          latest ? "border-gold/50 bg-gold/10 text-gold-fg" : "border-line bg-surface-2",
+                        )}
+                      >
+                        v{v.version}
+                      </span>
+                    </span>
                     <div className="min-w-0 flex-1">
                       <p className="flex items-center gap-2 truncate text-[13.5px] font-medium">
                         {v.file?.name ?? "Sem arquivo"}
