@@ -36,17 +36,21 @@ export default function EntriesPage() {
   const [status, setStatus] = useState<"" | EntryStatus>("");
   const [category, setCategory] = useState("");
   const [query, setQuery] = useState("");
-  const [importing, setImporting] = useState(false);
 
   const selectedId = params.get("id");
   const newType = params.get("novo") as EntryType | null;
+  // ?importar=1 abre a importação de extrato direto (atalho da tela inicial do Financeiro).
+  const importing = params.get("importar") === "1";
   const setParam = (key: string, value: string | null) => {
     const next = new URLSearchParams(params.toString());
     next.delete("id");
     next.delete("novo");
+    next.delete("importar");
     if (value) next.set(key, value);
     router.replace(next.size ? `${pathname}?${next}` : pathname, { scroll: false });
   };
+
+  const setImporting = (open: boolean) => setParam("importar", open ? "1" : null);
 
   if (!enabled) return <RestrictedState />;
 
