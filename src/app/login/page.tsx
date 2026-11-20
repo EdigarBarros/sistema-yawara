@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, CalendarDays, ClipboardList, Eye, EyeOff, FolderOpen, Info, KeyRound, Lock, Mail, Moon, Sun, Ticket, UserRoundCheck, Wallet } from "lucide-react";
+import { ArrowRight, CalendarDays, ClipboardList, Eye, EyeOff, FolderOpen, Info, KeyRound, Lock, Mail, Moon, Sun, Ticket, Trophy, UserRoundCheck, Wallet } from "lucide-react";
 import { services } from "@/services";
 import { useMounted } from "@/hooks/use-mounted";
 import { useSession, useSessionReady } from "@/stores/session";
@@ -20,6 +20,7 @@ import { Avatar, Skeleton } from "@/components/ui/misc";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DemoNotice } from "@/components/shared/states";
 import { BrandEmblem } from "@/components/layout/brand";
+import { EmblemOrbit, orbitChipStyle } from "@/features/login/emblem-orbit";
 import { Checkbox } from "@/components/ui/form";
 import { FormAlert } from "@/components/shared/form-alert";
 import { isDemoMode, isFirebaseMode } from "@/lib/mode";
@@ -28,12 +29,14 @@ import { useFirebaseSession, type SessionEndReason } from "@/services/firebase/s
 /** Campo maior, com brilho dourado no foco. */
 const FIELD = "h-12 rounded-xl bg-sunken/70 text-[15px] transition-shadow focus:shadow-[0_0_0_4px_rgba(225,175,55,0.14)]";
 
+/** Mesma ordem das peças da órbita (features/login/emblem-orbit.tsx): cada pílula acende quando a sua peça passa na frente. */
 const FEATURES = [
   { icon: <Ticket />, label: "Rifas" },
   { icon: <CalendarDays />, label: "Agenda" },
   { icon: <ClipboardList />, label: "Atas" },
   { icon: <Wallet />, label: "Finanças" },
   { icon: <FolderOpen />, label: "Documentos" },
+  { icon: <Trophy />, label: "Esportes" },
 ];
 
 const loginSchema = z.object({
@@ -311,11 +314,9 @@ export default function LoginPage() {
             <span className="text-[11.5px] font-semibold tracking-[0.28em] text-fg-muted">CENTRAL YAWARA</span>
           </div>
           <div className="flex max-w-[540px] flex-col items-center lg:items-start">
-            <div className="relative mb-6 lg:mb-8">
-              <span aria-hidden className="absolute inset-[-30%] rounded-full bg-[radial-gradient(closest-side,var(--halo-a),var(--halo-b),transparent)]" style={{ animation: "breathe 5s ease-in-out infinite" }} />
-              <div className="relative" style={{ animation: "pop .7s cubic-bezier(.2,1.3,.4,1) both, float-soft 6s ease-in-out .7s infinite" }}>
-                <BrandEmblem size={136} className="size-[104px] drop-shadow-[0_18px_40px_var(--emblem-shadow)] lg:size-[136px]" priority />
-              </div>
+            {/* Cena 3D: o escudo balança e as áreas da Central giram em volta dele */}
+            <div className="mb-2 w-full max-w-[560px] lg:-ml-6 lg:mb-4">
+              <EmblemOrbit />
             </div>
             <p className="eyebrow anim-rise !text-gold-fg" style={{ animationDelay: "120ms" }}>
               Sistema interno de gestão
@@ -332,13 +333,14 @@ export default function LoginPage() {
             </p>
             <ul className="mt-6 hidden flex-wrap gap-2 sm:flex lg:justify-start">
               {FEATURES.map((f, i) => (
-                <li
-                  key={f.label}
-                  className="anim-pop flex h-9 items-center gap-2 rounded-full border border-line-strong bg-surface/60 px-3.5 text-[13px] font-medium text-fg-muted backdrop-blur-sm [&_svg]:size-4 [&_svg]:text-gold-fg"
-                  style={{ animationDelay: `${450 + i * 70}ms` }}
-                >
-                  {f.icon}
-                  {f.label}
+                <li key={f.label} className="anim-pop" style={{ animationDelay: `${450 + i * 70}ms` }}>
+                  <span
+                    className="flex h-9 items-center gap-2 rounded-full border border-line-strong bg-surface/60 px-3.5 text-[13px] font-medium text-fg-muted backdrop-blur-sm transition-colors [&_svg]:size-4 [&_svg]:text-gold-fg"
+                    style={orbitChipStyle(i)}
+                  >
+                    {f.icon}
+                    {f.label}
+                  </span>
                 </li>
               ))}
             </ul>
