@@ -25,10 +25,12 @@ import { HistoryTimeline } from "@/components/shared/history";
 import { DateChip } from "@/components/shared/list-row";
 import { confirmAction } from "@/components/shared/confirm";
 import { TeamFormDialog } from "@/features/sports/team-form-dialog";
+import { LineupBoard } from "@/features/sports/court/lineup-board";
+import { courtModalityOf } from "@/lib/sports-court";
 import { AthleteDialog, CompetitionDialog, MatchDialog, TrainingDialog } from "@/features/sports/item-dialogs";
 import { matchOutcome, nextTraining, OUTCOME_META, SPORTS_COLOR, teamRecord, trainingLabel, upcomingMatches, whenLabel } from "@/features/sports/utils";
 
-const TABS = ["visao", "treinos", "elenco", "jogos", "competicoes", "historico"] as const;
+const TABS = ["visao", "quadra", "treinos", "elenco", "jogos", "competicoes", "historico"] as const;
 type Tab = (typeof TABS)[number];
 
 type Editing =
@@ -67,6 +69,7 @@ export default function SportTeamPage() {
   const record = teamRecord(t.matches);
   const upcoming = upcomingMatches(t, today);
   const training = t.status === "active" ? nextTraining(t.trainings, today) : null;
+  const court = courtModalityOf(t.sport);
   const competitionName = (cid?: string) => (cid ? (t.competitions.find((c) => c.id === cid)?.name ?? "Competição removida") : "Amistoso");
 
   const askRemove = async (list: TeamList, itemId: string, label: string) => {
@@ -171,6 +174,7 @@ export default function SportTeamPage() {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="visao">Visão geral</TabsTrigger>
+          <TabsTrigger value="quadra">Quadra</TabsTrigger>
           <TabsTrigger value="treinos" count={t.trainings.length}>
             Treinos
           </TabsTrigger>
@@ -185,6 +189,19 @@ export default function SportTeamPage() {
           </TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
         </TabsList>
+
+        {/* -------------------------------- quadra 3D -------------------------------- */}
+        <TabsContent value="quadra" className="mt-5">
+          {court ? (
+            <LineupBoard team={t} modality={court} color={SPORTS_COLOR} editable={editable} />
+          ) : (
+            <EmptyState
+              icon={<Shirt />}
+              title="Quadra ainda não disponível para este esporte"
+              description="A escalação na quadra 3D existe para futsal, vôlei, basquete e handebol. Para usar, o campo Esporte da modalidade precisa ter um desses nomes."
+            />
+          )}
+        </TabsContent>
 
         {/* ------------------------------ visão geral ------------------------------ */}
         <TabsContent value="visao" className="mt-5 space-y-4">

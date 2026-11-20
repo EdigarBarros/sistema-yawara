@@ -1,3 +1,4 @@
+import { cleanLineup, lineupWithout } from "@/lib/sports-court";
 import type { ItemInput, SportsService, TeamInput, TeamList } from "../contracts";
 import type { Athlete, Competition, Match, SportTeam, TrainingSlot } from "@/types";
 import type { DemoDB } from "@/data/demo/seed";
@@ -175,7 +176,21 @@ export const localSports: SportsService = {
       if (!items.some((i) => i.id === itemId)) throw new ServiceError("not_found", `${LIST_LABEL[list]} não encontrado(a). Pode já ter sido removido(a).`);
       (t as unknown as Record<TeamList, { id: string }[]>)[list] = items.filter((i) => i.id !== itemId);
       if (list === "competitions") t.matches = t.matches.map((m) => (m.competitionId === itemId ? { ...m, competitionId: undefined } : m));
+      if (list === "athletes") t.lineup = lineupWithout(t.lineup, itemId);
       touch(t, ctx.user.id, `${LIST_LABEL[list]} removido(a)`);
+      return clone(t);
+    });
+  },
+
+  async saveLineup(id, lineup) {
+    await latency(200, 400);
+    return commit((db) => {
+      const ctx = accessContext(db);
+      const t = editable(db, ctx, id);
+      const result = cleanLineup(t, lineup);
+      if ("error" in result) throw new ServiceError("invalid", result.error);
+      t.lineup = { ...result.lineup, updatedAt: new Date().toISOString(), updatedBy: ctx.user.id };
+      touch(t, ctx.user.id, "Escalação salva");
       return clone(t);
     });
   },

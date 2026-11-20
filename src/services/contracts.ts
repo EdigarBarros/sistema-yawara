@@ -9,6 +9,7 @@
  */
 import type {
   AppNotification,
+  TeamLineup,
   Athlete,
   Competition,
   Match,
@@ -466,6 +467,8 @@ export interface SportsService {
   saveMatch(id: ID, item: ItemInput<Match>): Promise<SportTeam>;
   saveCompetition(id: ID, item: ItemInput<Competition>): Promise<SportTeam>;
   removeItem(id: ID, list: TeamList, itemId: ID): Promise<SportTeam>;
+  /** Escalação da aba Quadra (só esportes com quadra desenhada). */
+  saveLineup(id: ID, lineup: Pick<TeamLineup, "formation" | "slots">): Promise<SportTeam>;
 }
 
 /* ---------------------------- Configurações ----------------------------- */

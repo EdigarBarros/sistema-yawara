@@ -1,4 +1,5 @@
-import type { Athlete, SportTeam } from "@/types";
+import type { Athlete, SportTeam, TeamLineup } from "@/types";
+import { COURT_RULES, type CourtModality } from "@/lib/sports-court";
 import { audience, h, type Clock } from "./helpers";
 import { USR } from "./organization";
 
@@ -11,6 +12,17 @@ function roster(prefix: string, positions: string[], captainIndex = 0): Athlete[
     position,
     captain: i === captainIndex || undefined,
   }));
+}
+
+/** Escalação de exemplo: os primeiros atletas do elenco nas vagas da formação. */
+function demoLineup(modality: CourtModality, formation: string, prefix: string, starters: number, clock: Clock): TeamLineup {
+  const f = COURT_RULES[modality].formations.find((x) => x.key === formation)!;
+  return {
+    formation,
+    slots: f.spots.slice(0, starters).map((spot, i) => ({ athleteId: `${prefix}-ath-${i + 1}`, x: spot.x, z: spot.z })),
+    updatedAt: clock.at(-2, 21, 0),
+    updatedBy: USR.gabriel,
+  };
 }
 
 export function buildSportsTeams(clock: Clock): SportTeam[] {
@@ -30,6 +42,7 @@ export function buildSportsTeams(clock: Clock): SportTeam[] {
         { id: "trn-ff-2", weekday: 4, start: "19:00", end: "20:30", location: "Quadra do campus (local de demonstração)" },
       ],
       athletes: roster("ff", ["Goleira", "Fixo", "Ala", "Ala", "Pivô", "Ala", "Fixo", "Goleira"], 2),
+      lineup: demoLineup("futsal", "1-2-1", "ff", 5, clock),
       competitions: [
         { id: "cmp-ff-1", name: "Jogos Universitários da Saúde (exemplo)", startDate: clock.date(-60), endDate: clock.date(-57), location: "Ginásio municipal (exemplo)", placement: "3º lugar", status: "finished" },
         { id: "cmp-ff-2", name: "Copa Intercursos 2026.2 (exemplo)", startDate: clock.date(9), endDate: clock.date(30), location: "Ginásio do campus (exemplo)", status: "upcoming" },
@@ -63,6 +76,7 @@ export function buildSportsTeams(clock: Clock): SportTeam[] {
       status: "active",
       trainings: [{ id: "trn-vm-1", weekday: 6, start: "09:00", end: "11:00", location: "Ginásio do campus (local de demonstração)" }],
       athletes: roster("vm", ["Levantador(a)", "Oposto(a)", "Ponteiro(a)", "Ponteiro(a)", "Central", "Central", "Líbero"], 0),
+      lineup: demoLineup("volei", "5-1", "vm", 6, clock),
       competitions: [{ id: "cmp-vm-1", name: "Copa Intercursos 2026.2 (exemplo)", startDate: clock.date(9), endDate: clock.date(30), location: "Ginásio do campus (exemplo)", status: "upcoming" }],
       matches: [
         { id: "mch-vm-1", date: clock.date(-12), time: "10:00", opponent: "Atlética de Engenharia (exemplo)", location: "Ginásio do campus (exemplo)", scoreFor: 3, scoreAgainst: 1, status: "played", notes: "Placar em sets." },

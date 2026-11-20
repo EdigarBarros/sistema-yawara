@@ -122,3 +122,17 @@ describe("treinos, elenco, jogos e competições", () => {
     await expectCode(sports("saveTraining", "esp", { id: t.id, item: { weekday: 3, start: "18:00", location: "Quadra" } }), "unavailable");
   });
 });
+
+describe("escalação na quadra (saveLineup)", () => {
+  it("salva a escalação conferida e remover atleta tira da quadra", async () => {
+    const created = await createTeam();
+    let t = await sports<SportTeam>("saveAthlete", "esp", { id: created.id, item: { name: "Goleira Teste", number: "1", position: "Goleira" } });
+    const gk = t.athletes[0];
+    t = await sports<SportTeam>("saveLineup", "esp", { id: created.id, formation: "1-2-1", slots: [{ athleteId: gk.id, x: -50, z: 0 }] });
+    expect(t.lineup?.slots).toEqual([{ athleteId: gk.id, x: -20, z: 0 }]);
+    expect(t.lineup?.updatedBy).toBe("esp");
+    await expectCode(sports("saveLineup", "esp", { id: created.id, formation: "x", slots: [{ athleteId: "fantasma", x: 0, z: 0 }] }), "invalid");
+    t = await sports<SportTeam>("removeItem", "esp", { id: created.id, list: "athletes", itemId: gk.id });
+    expect(t.lineup?.slots).toEqual([]);
+  });
+});
