@@ -20,7 +20,7 @@ import { Avatar, Skeleton } from "@/components/ui/misc";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DemoNotice } from "@/components/shared/states";
 import { BrandEmblem } from "@/components/layout/brand";
-import { ShowcaseLine, ShowcaseStage, useShowcase } from "@/features/login/showcase/showcase";
+import { ShowcaseStage, ShowcaseSummary, useShowcase } from "@/features/login/showcase/showcase";
 import { Checkbox } from "@/components/ui/form";
 import { FormAlert } from "@/components/shared/form-alert";
 import { isDemoMode, isFirebaseMode } from "@/lib/mode";
@@ -307,32 +307,33 @@ export default function LoginPage() {
           </div>
           <div className="flex max-w-[540px] flex-col items-center lg:items-start">
             {/* Vitrine 3D: órbita por diretoria e uma cena por recurso (features/login/showcase) */}
-            <div className="mb-2 w-full max-w-[620px] lg:-ml-10 lg:mb-2">
+            <div className="mb-8 w-full max-w-[620px] lg:-ml-10 lg:mb-6">
               <ShowcaseStage {...showcase} />
             </div>
+            <ShowcaseSummary />
             <p className="eyebrow anim-rise !text-gold-fg" style={{ animationDelay: "120ms" }}>
               Sistema interno de gestão
             </p>
-            <h1 className="anim-rise mt-3 font-display text-[42px] leading-[1.02] font-bold tracking-[-0.01em] sm:text-[60px]" style={{ animationDelay: "200ms" }}>
-              Central{" "}
-              <span className="bg-gradient-to-r from-[var(--title-from)] via-[var(--title-via)] to-[var(--title-to)] bg-clip-text text-transparent">Yawara</span>
+            <h1 className="anim-rise mt-3 font-display text-[50px] leading-[0.98] font-extrabold tracking-[-0.015em] drop-shadow-[0_10px_30px_rgba(0,0,0,0.35)] sm:text-[78px]" style={{ animationDelay: "200ms" }}>
+              Central <span className="title-shine">Yawara</span>
             </h1>
-            <p className="anim-rise mt-2 font-display text-[17px] font-medium text-ice sm:text-[19px]" style={{ animationDelay: "280ms" }}>
+            <p className="anim-rise mt-2 font-display text-[17px] font-medium text-ice sm:text-[20px]" style={{ animationDelay: "280ms" }}>
               Associação Atlética Acadêmica de Psicologia
             </p>
-            <p className="anim-rise mt-5 font-display text-[21px] font-semibold text-fg sm:text-[26px]" style={{ animationDelay: "360ms" }}>
-              <ShowcaseLine step={showcase.step} />
-            </p>
-            <p className="anim-rise mt-2 hidden max-w-[440px] text-[14.5px] leading-relaxed text-fg-muted sm:block" style={{ animationDelay: "440ms" }}>
-              Tudo da Atlética em um só lugar. Acesso restrito à diretoria e assessores.
-            </p>
+            <div className="anim-rise mt-5 flex flex-wrap items-center justify-center gap-3 lg:justify-start" style={{ animationDelay: "360ms" }}>
+              <span className="somos-badge">
+                <span aria-hidden className="somos-claws">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+                #SOMOS<b>YAWARA</b>
+              </span>
+              <span className="hidden text-[13.5px] text-fg-muted sm:inline">Acesso restrito à diretoria e assessores.</span>
+            </div>
           </div>
           <div className="anim-rise hidden items-center gap-3.5 text-[12px] text-fg-subtle lg:flex" style={{ animationDelay: "800ms" }}>
             <span className="anim-grow h-px w-14 bg-gradient-to-r from-gold to-transparent" />
-            <span className="text-[11px] font-semibold tracking-[0.32em] text-fg-muted">
-              #SOMOS<span className="text-gold">YAWARA</span>
-            </span>
-            <span>·</span>
             <span>@atleticayawara</span>
           </div>
         </section>

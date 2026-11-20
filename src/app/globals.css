@@ -472,6 +472,55 @@
       opacity 0.2s ease;
   }
 
+  /* Título da tela de entrada: "Yawara" dourado com um brilho que passa */
+  .title-shine {
+    background: linear-gradient(100deg, var(--title-from) 0%, var(--title-via) 35%, #fff4cc 48%, var(--title-via) 60%, var(--title-to) 100%);
+    background-size: 250% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: title-shine 5.5s ease-in-out 1s infinite;
+  }
+  @keyframes title-shine {
+    0% { background-position: 100% 0; }
+    45%, 100% { background-position: 0% 0; }
+  }
+
+  /* Selo #SOMOSYAWARA */
+  .somos-badge {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 18px 10px 14px;
+    border-radius: 999px;
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: 0.24em;
+    color: var(--fg);
+    border: 1px solid color-mix(in oklab, var(--gold) 55%, transparent);
+    background: linear-gradient(90deg, color-mix(in oklab, var(--gold) 18%, transparent), color-mix(in oklab, var(--gold) 4%, transparent));
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--gold) 7%, transparent), 0 12px 32px -12px color-mix(in oklab, var(--gold) 55%, transparent);
+    overflow: hidden;
+  }
+  .somos-badge b { color: var(--gold); font-weight: 800; }
+  .somos-badge::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(100deg, transparent 30%, rgba(255, 240, 190, 0.35) 50%, transparent 70%);
+    transform: translateX(-120%);
+    animation: somos-sweep 4.5s ease-in-out 1.5s infinite;
+  }
+  @keyframes somos-sweep {
+    0% { transform: translateX(-120%); }
+    40%, 100% { transform: translateX(120%); }
+  }
+  .somos-claws { display: inline-flex; gap: 3px; transform: rotate(-18deg); }
+  .somos-claws i { display: block; width: 3px; height: 16px; border-radius: 3px; background: linear-gradient(180deg, var(--gold), transparent); }
+  .somos-claws i:nth-child(2) { height: 20px; margin-top: -4px; }
+
   /* Toque: encolhe de leve ao pressionar */
   .press { transition: transform 0.18s cubic-bezier(0.2, 1.3, 0.4, 1), filter 0.18s ease, background-color 0.18s ease; }
   .press:active { transform: scale(0.96); filter: brightness(1.1); }
