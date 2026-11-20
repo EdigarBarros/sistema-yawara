@@ -173,8 +173,31 @@
   transform: rotateX(80deg);
 }
 
-/* ---------- pílulas que acendem com a peça da frente ---------- */
-@keyframes orb-chip {
-  0%, 100% { color: var(--fg); border-color: color-mix(in oklab, var(--gold) 60%, transparent); background-color: color-mix(in oklab, var(--gold) 14%, transparent); }
-  10%, 90% { color: var(--fg-muted); border-color: var(--line-strong); background-color: transparent; }
+.orb-post { background: linear-gradient(135deg, #f58529, #dd2a7b 55%, #8134af) !important; }
+
+/* ---------- "Para a diretoria de <palavra>": a palavra vira em 3D ---------- */
+.orb-line { display: inline-flex; flex-wrap: wrap; align-items: baseline; column-gap: 0.3em; }
+.orb-words {
+  display: inline-grid;
+  perspective: 600px;
+  /* a linha não pula de largura: o espaço é o da palavra mais longa */
+}
+.orb-word {
+  grid-area: 1 / 1;
+  white-space: nowrap;
+  font-weight: 700;
+  background: linear-gradient(90deg, var(--title-from), var(--title-via), var(--title-to));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  transform-origin: 50% 50% -0.45em;
+  backface-visibility: hidden;
+  animation: orb-word var(--T, 30s) linear infinite;
+}
+/* de pé na janela em volta de 0% (1/6 do ciclo: 8,3% para cada lado); entra de baixo e sai por cima */
+@keyframes orb-word {
+  0%, 6.5% { transform: rotateX(0deg); opacity: 1; }
+  8.4%, 91.6% { transform: rotateX(90deg); opacity: 0; }
+  91.61% { transform: rotateX(-90deg); opacity: 0; }
+  93.5%, 100% { transform: rotateX(0deg); opacity: 1; }
 }

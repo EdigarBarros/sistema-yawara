@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { CalendarDays, Check, ClipboardList, FileText, Ticket, Trophy, Wallet } from "lucide-react";
+import { CalendarDays, Check, ClipboardList, GraduationCap, Megaphone, Trophy, Wallet } from "lucide-react";
 import "./emblem-orbit.css";
 
 /**
@@ -11,8 +11,8 @@ import "./emblem-orbit.css";
  * olha. Tudo é transform e opacidade (a placa de vídeo desenha), sem filtros
  * em camadas grandes. As peças são fictícias: só ilustram o que a Central faz.
  *
- * As pílulas abaixo do título acendem junto com a peça que passa na frente
- * (mesma duração de giro: ORBIT_SECONDS; ver `orbitChipStyle`).
+ * A palavra de "Para a diretoria de …" troca junto com a peça que passa na
+ * frente (mesma duração de giro: ORBIT_SECONDS; ver `DiretoriaWord`).
  */
 
 export const ORBIT_SECONDS = 30;
@@ -37,25 +37,15 @@ function Card({ icon, title, children, tone = "gold" }: { icon: ReactNode; title
   );
 }
 
-/** Ordem igual à das pílulas da tela de entrada (FEATURES em app/login/page.tsx). */
-const PIECES: Piece[] = [
+/**
+ * Uma peça por diretoria, na mesma ordem das palavras da frase "Para a
+ * diretoria de …" (DiretoriaWord): a palavra troca quando a peça dela passa na frente.
+ */
+const PIECES: (Piece & { word: string })[] = [
   {
-    key: "rifas",
+    key: "eventos",
+    word: "Eventos",
     dy: -44,
-    node: (
-      <Card icon={<Ticket />} title="Rifa Yawara">
-        <div className="orb-big">
-          41<small> / 80 vendidos</small>
-        </div>
-        <div className="orb-bar">
-          <i style={{ width: "51%" }} />
-        </div>
-      </Card>
-    ),
-  },
-  {
-    key: "agenda",
-    dy: 34,
     node: (
       <Card icon={<CalendarDays />} title="Agenda" tone="info">
         <div className="orb-date">
@@ -69,8 +59,9 @@ const PIECES: Piece[] = [
     ),
   },
   {
-    key: "atas",
-    dy: -26,
+    key: "secretaria",
+    word: "Secretaria",
+    dy: 34,
     node: (
       <Card icon={<ClipboardList />} title="Ata da reunião" tone="ok">
         <div className="orb-pill">
@@ -80,8 +71,9 @@ const PIECES: Piece[] = [
     ),
   },
   {
-    key: "financas",
-    dy: 46,
+    key: "financeiro",
+    word: "Financeiro",
+    dy: -26,
     node: (
       <Card icon={<Wallet />} title="Financeiro" tone="ok">
         <div className="orb-big orb-ok">+ R$ 912,00</div>
@@ -94,24 +86,38 @@ const PIECES: Piece[] = [
     ),
   },
   {
-    key: "documentos",
-    dy: -40,
+    key: "comunicacao",
+    word: "Comunicação",
+    dy: 46,
     node: (
-      <Card icon={<FileText />} title="Documentos" tone="rose">
+      <Card icon={<Megaphone />} title="Post agendado" tone="rose">
         <div className="orb-file">
-          <span>PDF</span>
-          Estatuto 2026
+          <span className="orb-post">IG</span>
+          Arte da Calourada
         </div>
       </Card>
     ),
   },
   {
     key: "esportes",
-    dy: 30,
+    word: "Esportes",
+    dy: -40,
     node: (
       <Card icon={<Trophy />} title="Futsal">
         <div className="orb-score">
           Yawara <b>3 × 1</b>
+        </div>
+      </Card>
+    ),
+  },
+  {
+    key: "extensao",
+    word: "Ensino e Extensão",
+    dy: 30,
+    node: (
+      <Card icon={<GraduationCap />} title="Palestra" tone="info">
+        <div className="orb-big">
+          48<small> certificados</small>
         </div>
       </Card>
     ),
@@ -121,12 +127,28 @@ const PIECES: Piece[] = [
 export const ORBIT_KEYS = PIECES.map((p) => p.key);
 
 /**
- * Estilo da pílula `i`: acende quando a peça `i` está na frente.
- * A peça i fica na frente quando o anel girou 360° − i·(360°/n), então o
- * atraso negativo de i/n do ciclo põe o "aceso" (0% e 100%) nesse instante.
+ * "Para a diretoria de <palavra>": a palavra vira em 3D (como um letreiro) e
+ * troca quando a peça da diretoria dela passa na frente do escudo.
+ * A peça i fica na frente quando o anel girou 360° − i·(360°/n); o atraso
+ * negativo de i/n do ciclo põe a palavra "de pé" (0% e 100%) nesse instante.
  */
-export function orbitChipStyle(i: number): CSSProperties {
-  return { animation: `orb-chip ${ORBIT_SECONDS}s linear ${-(ORBIT_SECONDS * i) / PIECES.length}s infinite` };
+export function DiretoriaWord({ className }: { className?: string }) {
+  const n = PIECES.length;
+  return (
+    <span className={className}>
+      <span className="sr-only">Para as diretorias de {PIECES.map((p) => p.word).join(", ")}.</span>
+      <span aria-hidden className="orb-line">
+        Para a diretoria de{" "}
+        <span className="orb-words">
+          {PIECES.map((p, i) => (
+            <span key={p.key} className="orb-word" style={{ animationDelay: `${-(ORBIT_SECONDS * i) / n}s` } as CSSProperties}>
+              {p.word}
+            </span>
+          ))}
+        </span>
+      </span>
+    </span>
+  );
 }
 
 export function EmblemOrbit() {

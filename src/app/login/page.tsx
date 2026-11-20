@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, CalendarDays, ClipboardList, Eye, EyeOff, FolderOpen, Info, KeyRound, Lock, Mail, Moon, Sun, Ticket, Trophy, UserRoundCheck, Wallet } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Info, KeyRound, Lock, Mail, Moon, Sun, UserRoundCheck } from "lucide-react";
 import { services } from "@/services";
 import { useMounted } from "@/hooks/use-mounted";
 import { useSession, useSessionReady } from "@/stores/session";
@@ -20,7 +20,7 @@ import { Avatar, Skeleton } from "@/components/ui/misc";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DemoNotice } from "@/components/shared/states";
 import { BrandEmblem } from "@/components/layout/brand";
-import { EmblemOrbit, orbitChipStyle } from "@/features/login/emblem-orbit";
+import { DiretoriaWord, EmblemOrbit } from "@/features/login/emblem-orbit";
 import { Checkbox } from "@/components/ui/form";
 import { FormAlert } from "@/components/shared/form-alert";
 import { isDemoMode, isFirebaseMode } from "@/lib/mode";
@@ -29,15 +29,6 @@ import { useFirebaseSession, type SessionEndReason } from "@/services/firebase/s
 /** Campo maior, com brilho dourado no foco. */
 const FIELD = "h-12 rounded-xl bg-sunken/70 text-[15px] transition-shadow focus:shadow-[0_0_0_4px_rgba(225,175,55,0.14)]";
 
-/** Mesma ordem das peças da órbita (features/login/emblem-orbit.tsx): cada pílula acende quando a sua peça passa na frente. */
-const FEATURES = [
-  { icon: <Ticket />, label: "Rifas" },
-  { icon: <CalendarDays />, label: "Agenda" },
-  { icon: <ClipboardList />, label: "Atas" },
-  { icon: <Wallet />, label: "Finanças" },
-  { icon: <FolderOpen />, label: "Documentos" },
-  { icon: <Trophy />, label: "Esportes" },
-];
 
 const loginSchema = z.object({
   email: z.string().trim().min(1, "Informe seu e-mail.").email("Digite um e-mail válido, como nome@example.org."),
@@ -328,22 +319,12 @@ export default function LoginPage() {
             <p className="anim-rise mt-2 font-display text-[17px] font-medium text-ice sm:text-[19px]" style={{ animationDelay: "280ms" }}>
               Associação Atlética Acadêmica de Psicologia
             </p>
-            <p className="anim-rise mt-4 hidden max-w-[440px] text-[15px] leading-relaxed text-fg-muted sm:block" style={{ animationDelay: "360ms" }}>
-              Campanhas, eventos, documentos, reuniões e finanças da Atlética em um só lugar. Acesso restrito à diretoria e assessores.
+            <p className="anim-rise mt-5 font-display text-[21px] font-semibold text-fg sm:text-[26px]" style={{ animationDelay: "360ms" }}>
+              <DiretoriaWord />
             </p>
-            <ul className="mt-6 hidden flex-wrap gap-2 sm:flex lg:justify-start">
-              {FEATURES.map((f, i) => (
-                <li key={f.label} className="anim-pop" style={{ animationDelay: `${450 + i * 70}ms` }}>
-                  <span
-                    className="flex h-9 items-center gap-2 rounded-full border border-line-strong bg-surface/60 px-3.5 text-[13px] font-medium text-fg-muted backdrop-blur-sm transition-colors [&_svg]:size-4 [&_svg]:text-gold-fg"
-                    style={orbitChipStyle(i)}
-                  >
-                    {f.icon}
-                    {f.label}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <p className="anim-rise mt-2 hidden max-w-[440px] text-[14.5px] leading-relaxed text-fg-muted sm:block" style={{ animationDelay: "440ms" }}>
+              Tudo da Atlética em um só lugar. Acesso restrito à diretoria e assessores.
+            </p>
           </div>
           <div className="anim-rise hidden items-center gap-3.5 text-[12px] text-fg-subtle lg:flex" style={{ animationDelay: "800ms" }}>
             <span className="anim-grow h-px w-14 bg-gradient-to-r from-gold to-transparent" />
