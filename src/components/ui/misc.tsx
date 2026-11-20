@@ -94,7 +94,7 @@ export function Progress({ value, max = 100, className, label }: { value: number
       aria-label={label}
       className={cn("h-1.5 w-full overflow-hidden rounded-full bg-surface-3", className)}
     >
-      <div className="h-full rounded-full bg-gradient-to-r from-[#b28413] to-gold transition-[width]" style={{ width: `${pct}%` }} />
+      <div className="fill-in h-full rounded-full bg-gradient-to-r from-[#b28413] to-gold transition-[width] duration-700" style={{ width: `${pct}%` }} />
     </div>
   );
 }

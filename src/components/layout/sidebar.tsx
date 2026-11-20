@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { isFirebaseMode } from "@/lib/mode";
 import { USE_EMULATORS } from "@/services/firebase/app";
 import { NAV } from "./nav";
+import { useGlide } from "@/hooks/use-glide";
 import { BrandLockup } from "./brand";
 
 function isActive(pathname: string, href: string) {
@@ -19,9 +20,14 @@ function isActive(pathname: string, href: string) {
 export function NavList({ collapsed }: { collapsed?: boolean }) {
   const pathname = usePathname();
   const access = useAccess();
+  // O fundo do item ativo desliza pelo menu ao trocar de tela.
+  const [glideRef, glideStyle] = useGlide<HTMLElement>([pathname, collapsed]);
 
   return (
-    <nav aria-label="Navegação principal" className="flex flex-col gap-0.5">
+    <nav ref={glideRef} aria-label="Navegação principal" className="relative flex flex-col gap-0.5">
+      <span aria-hidden className="glide rounded-lg bg-gold/10" style={glideStyle}>
+        <span className="absolute top-2 bottom-2 -left-3 w-[3px] rounded-r bg-gold" />
+      </span>
       {NAV.map((group, gi) => {
         const items = group.items.filter((i) => !i.module || access.canModule(i.module));
         if (items.length === 0) return null;
@@ -41,14 +47,14 @@ export function NavList({ collapsed }: { collapsed?: boolean }) {
                   key={item.href}
                   href={item.href}
                   aria-current={active ? "page" : undefined}
+                  data-glide-active={active || undefined}
                   title={collapsed ? item.label : undefined}
                   className={cn(
                     "relative flex h-[38px] items-center gap-3 rounded-lg px-3 text-[13.5px] font-medium transition-colors",
                     collapsed && "justify-center px-0",
-                    active ? "bg-gold/10 text-fg" : "text-fg-muted hover:bg-surface hover:text-fg",
+                    active ? "text-fg" : "text-fg-muted hover:bg-surface hover:text-fg",
                   )}
                 >
-                  {active && <span className="absolute top-2 bottom-2 -left-3 w-[3px] rounded-r bg-gold" aria-hidden />}
                   <Icon className={cn("size-[18px] shrink-0", active && "text-gold")} aria-hidden />
                   {!collapsed && <span className="truncate">{item.label}</span>}
                 </Link>

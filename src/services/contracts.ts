@@ -7,14 +7,15 @@
  * implementação com Firebase (Auth, Firestore, Storage) que respeite os
  * mesmos contratos e trocá-la em src/services/index.ts.
  */
-import type { AthleteInput, SessionInput } from "@/lib/sports";
 import type {
   AppNotification,
-  SportModality,
+  Athlete,
+  Competition,
+  Match,
+  SportCategory,
   SportTeam,
-  TeamCategory,
-  TeamLineup,
   TeamStatus,
+  TrainingSlot,
   AtleticaEvent,
   Audience,
   Campaign,
@@ -149,6 +150,14 @@ export interface InvitationResult {
   link: string | null;
 }
 
+/** Correção de conta feita pelo Suporte do sistema. Só os campos enviados mudam; `photo: null` remove a foto. */
+export interface SupportAccountInput {
+  name?: string;
+  email?: string;
+  password?: string;
+  photo?: string | null;
+}
+
 export interface OrganizationService {
   snapshot(): Promise<OrganizationSnapshot>;
   createRole(input: RoleInput): Promise<Role>;
@@ -166,6 +175,10 @@ export interface OrganizationService {
   inviteMember(input: InviteInput): Promise<InvitationResult>;
   renewInvitation(id: ID): Promise<InvitationResult>;
   revokeInvitation(id: ID): Promise<Invitation>;
+  /** Suporte do sistema: troca nome, foto, e-mail de acesso e senha de qualquer integrante. */
+  supportUpdateAccount(id: ID, input: SupportAccountInput): Promise<Member>;
+  /** Suporte do sistema: link de um convite pendente. */
+  invitationLink(id: ID): Promise<string>;
 }
 
 /* ------------------------------ Campanhas ------------------------------- */
@@ -279,34 +292,6 @@ export interface EventService {
   updateSupplier(eventId: ID, supplierId: ID, input: Partial<Omit<Supplier, "id">>): Promise<AtleticaEvent>;
 }
 
-/* ------------------------------- Esportes ------------------------------- */
-
-export interface TeamInput {
-  name: string;
-  modality: SportModality;
-  category: TeamCategory;
-  color: string;
-  departmentId: ID;
-  coachIds: ID[];
-  access: Audience;
-  notes?: string;
-}
-
-export interface SportsService {
-  list(): Promise<SportTeam[]>;
-  get(id: ID): Promise<SportTeam>;
-  create(input: TeamInput): Promise<SportTeam>;
-  /** A modalidade só muda enquanto o time não tem atletas (posições e quadra dependem dela). */
-  update(id: ID, input: Partial<TeamInput>): Promise<SportTeam>;
-  setStatus(id: ID, status: TeamStatus): Promise<SportTeam>;
-  /** Sem `athleteId`: cadastra; com `athleteId`: edita. */
-  saveAthlete(teamId: ID, input: AthleteInput, athleteId?: ID): Promise<SportTeam>;
-  removeAthlete(teamId: ID, athleteId: ID): Promise<SportTeam>;
-  saveLineup(teamId: ID, lineup: Pick<TeamLineup, "formation" | "slots">): Promise<SportTeam>;
-  /** Sem `sessionId`: marca; com `sessionId`: edita (inclui situação e placar). */
-  saveSession(teamId: ID, input: SessionInput, sessionId?: ID): Promise<SportTeam>;
-}
-
 /* ------------------------------ Documentos ------------------------------ */
 
 export interface DocumentInput {
@@ -331,6 +316,8 @@ export interface DocumentService {
   addVersion(id: ID, file: File, note?: string): Promise<InstitutionalDocument>;
   archive(id: ID): Promise<InstitutionalDocument>;
   restore(id: ID): Promise<InstitutionalDocument>;
+  /** Suporte do sistema: exclui o documento e os arquivos de todas as versões. Não tem volta. */
+  remove(id: ID): Promise<void>;
 }
 
 /* ------------------------------- Reuniões ------------------------------- */
@@ -451,6 +438,36 @@ export interface ExtensionService {
   linkDocument(id: ID, documentId: ID): Promise<ExtensionProject>;
 }
 
+/* -------------------------------- Esportes ------------------------------- */
+
+export interface TeamInput {
+  name: string;
+  sport: string;
+  category: SportCategory;
+  description: string;
+  coach?: string;
+  responsibleId: ID;
+  access: Audience;
+}
+
+/** Item de uma lista da modalidade: com `id` atualiza; sem `id` inclui. */
+export type ItemInput<T extends { id: ID }> = Omit<T, "id"> & { id?: ID };
+
+export type TeamList = "trainings" | "athletes" | "matches" | "competitions";
+
+export interface SportsService {
+  list(): Promise<SportTeam[]>;
+  get(id: ID): Promise<SportTeam>;
+  create(input: TeamInput): Promise<SportTeam>;
+  update(id: ID, input: Partial<TeamInput>): Promise<SportTeam>;
+  setStatus(id: ID, status: TeamStatus): Promise<SportTeam>;
+  saveTraining(id: ID, item: ItemInput<TrainingSlot>): Promise<SportTeam>;
+  saveAthlete(id: ID, item: ItemInput<Athlete>): Promise<SportTeam>;
+  saveMatch(id: ID, item: ItemInput<Match>): Promise<SportTeam>;
+  saveCompetition(id: ID, item: ItemInput<Competition>): Promise<SportTeam>;
+  removeItem(id: ID, list: TeamList, itemId: ID): Promise<SportTeam>;
+}
+
 /* ---------------------------- Configurações ----------------------------- */
 
 export interface SettingsService {
@@ -516,6 +533,8 @@ export interface AuditService {
    * falhas não impedem a exportação. Demonstração: não faz nada.
    */
   recordExport(input: ExportRecordInput): Promise<void>;
+  /** Suporte do sistema: apaga registros da auditoria (até 100 por vez). */
+  remove(ids: ID[]): Promise<void>;
 }
 
 export interface Services {
@@ -523,12 +542,12 @@ export interface Services {
   organization: OrganizationService;
   campaigns: CampaignService;
   events: EventService;
-  sports: SportsService;
   documents: DocumentService;
   meetings: MeetingService;
   finance: FinanceService;
   marketing: MarketingService;
   extension: ExtensionService;
+  sports: SportsService;
   settings: SettingsService;
   notifications: NotificationService;
   search: SearchService;

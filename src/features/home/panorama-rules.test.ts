@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AtleticaEvent, Campaign, ContentItem, ExtensionProject, FinanceEntry, Meeting, Sale, SportSession, SportTeam } from "@/types";
+import type { AtleticaEvent, Campaign, ContentItem, ExtensionProject, FinanceEntry, Meeting, Sale, SportTeam } from "@/types";
 import { eventsArea, extensionArea, financeArea, marketingArea, meetingsArea, rafflesArea, sportsArea } from "./panorama-rules";
 
 const TODAY = "2026-10-20";
@@ -79,17 +79,13 @@ describe("panorama: marketing, secretaria e extensão", () => {
 });
 
 describe("panorama: esportes", () => {
-  const session = (partial: Partial<SportSession>) => ({ id: Math.random().toString(36), kind: "treino", date: "2026-10-22", time: "19:00", location: "Quadra", status: "scheduled", ...partial }) as SportSession;
-  const team = (sessions: SportSession[], slots = 5) =>
-    ({ id: "t1", name: "Futsal", status: "active", sessions, lineup: { formation: "1-2-1", slots: Array.from({ length: slots }, (_, i) => ({ athleteId: `a${i}`, x: 0, z: 0 })) } }) as unknown as SportTeam;
-
-  it("parado sem time ativo; verde com treino na semana", () => {
-    expect(sportsArea(TODAY, []).health).toBe("idle");
-    expect(sportsArea(TODAY, [team([session({})])])).toMatchObject({ health: "ok", headline: "1" });
+  const team = (matches: Partial<SportTeam["matches"][number]>[], status: SportTeam["status"] = "active") =>
+    ({ id: "t", name: "Futsal Fem.", status, matches: matches.map((m, i) => ({ id: `m${i}`, opponent: "Medicina", location: "Ginásio", status: "scheduled", ...m })) }) as SportTeam;
+  it("parado sem modalidade ativa; amarelo com jogo passado sem resultado", () => {
+    expect(sportsArea(TODAY, [team([], "paused")]).health).toBe("idle");
+    expect(sportsArea(TODAY, [team([{ date: "2026-10-10" }])]).reason).toContain("1 jogo já passou");
   });
-
-  it("amarelo com jogo passado sem resultado ou jogo próximo sem escalação", () => {
-    expect(sportsArea(TODAY, [team([session({ kind: "amistoso", opponent: "X", date: "2026-10-10" })])]).reason).toContain("sem resultado");
-    expect(sportsArea(TODAY, [team([session({ kind: "amistoso", opponent: "X" })], 0)]).reason).toContain("ainda não tem escalação");
+  it("mostra o próximo jogo", () => {
+    expect(sportsArea(TODAY, [team([{ date: "2026-10-25" }])])).toMatchObject({ health: "ok", caption: "próximo jogo: Futsal Fem. × Medicina" });
   });
 });

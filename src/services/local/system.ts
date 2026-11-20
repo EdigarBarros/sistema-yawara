@@ -7,7 +7,7 @@ import { formatDate, formatMoney } from "@/lib/format";
 import { matchesQuery, newId } from "@/lib/utils";
 import { commit, getDB, resetDB } from "./db";
 import { accessContext, clone, findOrThrow, latency, requirePermission, ServiceError } from "./context";
-import { canSeeCampaign, canSeeContent, canSeeDocument, canSeeEvent, canSeeMeeting, canSeeProject } from "@/lib/policies";
+import { canSeeCampaign, canSeeContent, canSeeDocument, canSeeEvent, canSeeMeeting, canSeeProject, canSeeTeam } from "@/lib/policies";
 
 function validName(name: string) {
   if (!name || name.trim().length < 2) throw new ServiceError("invalid", "Informe um nome com pelo menos 2 caracteres.");
@@ -184,6 +184,13 @@ export const localSearch: SearchService = {
       for (const p of db.projects) {
         if (canSeeProject(ctx, p) && matchesQuery(q, p.name, p.code, p.description)) {
           results.push({ id: p.id, kind: "project", title: p.name, subtitle: `${p.code} · ${formatDate(p.date)}`, href: `/extensao/${p.id}`, at: p.updatedAt });
+        }
+      }
+    }
+    if (on("sports")) {
+      for (const t of db.sportsTeams) {
+        if (canSeeTeam(ctx, t) && matchesQuery(q, t.name, t.code, t.sport, t.coach ?? "", t.description)) {
+          results.push({ id: t.id, kind: "team", title: t.name, subtitle: `${t.code} · ${t.sport}`, href: `/esportes/${t.id}`, at: t.updatedAt });
         }
       }
     }

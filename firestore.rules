@@ -198,14 +198,6 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    /* -------------------------------- esportes ----------------------------- */
-
-    // Times: elenco, escalação, treinos e jogos no próprio documento.
-    match /sportTeams/{teamId} {
-      allow get, list: if visible('sports', resource.data);
-      allow write: if false;
-    }
-
     /* --------------------------- ensino e extensão ------------------------- */
 
     match /projects/{projectId} {
@@ -220,6 +212,14 @@ service cloud.firestore {
           && (can('extension.admin') || can('extension.edit') || resource.data.editors.hasAny(myTokens()));
         allow write: if false;
       }
+    }
+
+    /* ------------------------------- esportes ------------------------------ */
+
+    // Modalidades (treinos, elenco, jogos e competições no mesmo documento).
+    match /sportsTeams/{teamId} {
+      allow get, list: if visible('sports', resource.data);
+      allow write: if false;
     }
 
     /* ----------------------------- notificações ---------------------------- */

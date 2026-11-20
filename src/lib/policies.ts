@@ -224,21 +224,16 @@ export function canCloseProject(ctx: AccessContext, p: ExtensionProject) {
 /* -------------------------------- Esportes ------------------------------- */
 
 export function canSeeTeam(ctx: AccessContext, t: SportTeam) {
-  if (t.coachIds.includes(ctx.user.id) && hasPermission(ctx, "sports.view")) return true;
+  if (t.responsibleId === ctx.user.id && hasPermission(ctx, "sports.view")) return true;
   return canSeeRecord(ctx, "sports", t);
 }
 
-/** Elenco, escalação, treinos e jogos: quem tem "editar", o criador e os técnicos do time. */
+/** Editar dados, treinos, elenco, jogos e competições. */
 export function canEditTeam(ctx: AccessContext, t: SportTeam) {
-  return hasPermission(ctx, "sports.edit") || hasPermission(ctx, "sports.admin") || t.createdBy === ctx.user.id || t.coachIds.includes(ctx.user.id);
+  return hasPermission(ctx, "sports.edit") || t.createdBy === ctx.user.id || t.responsibleId === ctx.user.id;
 }
 
-/** Nome, modalidade, técnicos e público do time: criador, administradores ou quem tem "editar" e não é assessor. */
-export function canEditTeamSettings(ctx: AccessContext, t: SportTeam) {
-  if (t.createdBy === ctx.user.id || hasPermission(ctx, "sports.admin")) return true;
-  return hasPermission(ctx, "sports.edit") && ctx.role.level !== "advisor";
-}
-
+/** Pausar, arquivar e reativar a modalidade. */
 export function canArchiveTeam(ctx: AccessContext, t: SportTeam) {
   return t.createdBy === ctx.user.id || hasPermission(ctx, "sports.archive");
 }

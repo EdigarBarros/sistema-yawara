@@ -28,12 +28,14 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { FieldValue, type DocumentData, type DocumentReference, type Transaction } from "firebase-admin/firestore";
-import type { FileRef } from "@/types";
 import type { Actor } from "./actor";
 import { bucket, db, nowISO, Timestamp, timestampInDays } from "./admin";
 import type { PrepareContext } from "./dispatch";
 import { z } from "zod";
 import { fail } from "./errors";
+import { cancelDriveUpload, deleteDriveFile, driveFileInfo, putDriveChunk, readDriveRange, renameDriveFile, startDriveUpload } from "./drive";
+import { intersects } from "@/lib/access-tokens";
+import type { FileRef, Permission } from "@/types";
 
 type StorageFile = ReturnType<ReturnType<typeof bucket>["file"]>;
 
@@ -84,8 +86,9 @@ export const EXTENSION_BY_MIME: Record<string, string> = {
   "application/vnd.oasis.opendocument.presentation": "odp",
 };
 
-/** Regra de envio da instalação: no banco os limites são menores e vídeo não é aceito. */
+/** Regra de envio da instalação: no banco os limites são menores; no banco e no Drive, vídeo não é aceito. */
 export function uploadRule(purpose: UploadPurpose) {
+  if (storesInDrive()) return { ...UPLOAD_RULES[purpose], maxBytes: DRIVE_MAX_BYTES, kinds: DATABASE_LIMITS[purpose].kinds };
   return storesInDatabase() ? { ...UPLOAD_RULES[purpose], ...DATABASE_LIMITS[purpose] } : UPLOAD_RULES[purpose];
 }
 
@@ -219,9 +222,13 @@ export async function createUploadTicket(actor: Actor, input: TicketInput) {
   const id = randomUUID().replace(/-/g, "");
   const path = `staging/${actor.uid}/${id}/${fileName}`;
   const inDatabase = storesInDatabase();
-  if (inDatabase) await discardMyStaleChunks(actor.uid);
+  const inDrive = storesInDrive();
+  if (inDatabase || inDrive) await discardMyStaleChunks(actor.uid);
+  // Drive: a sessão de envio é aberta já com o tamanho exato; o endereço dela nunca sai do servidor.
+  const sessionUri = inDrive ? await startDriveUpload(fileName, input.contentType, input.size, id) : null;
   await db.doc(`uploads/${id}`).create({
     ...(inDatabase ? { storage: "database", chunks: chunkCount(input.size) } : {}),
+    ...(inDrive ? { storage: "drive", chunks: Math.max(1, Math.ceil(input.size / DRIVE_CHUNK_BYTES)), nextIndex: 0, sessionUri } : {}),
     uid: actor.uid,
     purpose: input.purpose,
     targetId: input.targetId ?? null,
@@ -235,7 +242,7 @@ export async function createUploadTicket(actor: Actor, input: TicketInput) {
     expiresAt: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
     expireAt: timestampInDays(7),
   });
-  return { uploadId: id, path, fileName, ...(inDatabase ? { chunkBytes: FILE_CHUNK_BYTES } : {}) };
+  return { uploadId: id, path, fileName, ...(inDatabase ? { chunkBytes: FILE_CHUNK_BYTES } : inDrive ? { chunkBytes: DRIVE_CHUNK_BYTES } : {}) };
 }
 
 export function acceptedLabel(purpose: UploadPurpose) {
@@ -324,6 +331,7 @@ export async function finalizeUpload(actor: Actor, uploadId: string, purpose: Up
   if (claim.file) return claim.file;
   const ticket = claim.ticket;
   if (ticket.storage === "database") return finalizeDatabaseUpload(uploadId, purpose, destDir, ctx, ticketRef, ticket);
+  if (ticket.storage === "drive") return finalizeDriveUpload(uploadId, purpose, destDir, ctx, ticketRef, ticket);
 
   // 2) Compensação registrada ANTES de copiar: se a operação falhar (inclusive
   //    na própria preparação), o tíquete é descartado e o arquivo definitivo apagado.
@@ -477,6 +485,23 @@ export function storesInDatabase() {
   return process.env.FILE_STORAGE === "database";
 }
 
+/**
+ * `FILE_STORAGE=drive`: o navegador manda o arquivo em partes de 3 MiB pelo
+ * servidor (`systemApi.uploadChunk`), que confere cada parte e a repassa na
+ * hora para um envio retomável do Google Drive — nada fica no banco. A
+ * primeira parte já tem o tipo real conferido; ao anexar, o servidor confere
+ * tamanho e SHA-256 no próprio Drive. A leitura é pelo servidor (`readDriveFile`).
+ */
+export function storesInDrive() {
+  return process.env.FILE_STORAGE === "drive";
+}
+
+/** Parte do envio no Drive: múltiplo de 256 KiB (exigência do Drive) e, em base64, abaixo do limite de 4,5 MB da hospedagem. */
+export const DRIVE_CHUNK_BYTES = 3 * MB;
+
+/** Limite por arquivo no Drive (o espaço total é o da conta da Atlética, 15 GB). */
+export const DRIVE_MAX_BYTES = 500 * MB;
+
 export function chunkCount(size: number) {
   return Math.max(1, Math.ceil(size / FILE_CHUNK_BYTES));
 }
@@ -489,7 +514,7 @@ function chunkRefs(uploadId: string, total: number) {
   return Array.from({ length: total }, (_, i) => db.doc(`fileChunks/${chunkId(uploadId, i)}`));
 }
 
-async function deleteChunks(uploadId: string, total: number) {
+export async function deleteChunks(uploadId: string, total: number) {
   const batch = db.batch();
   for (const ref of chunkRefs(uploadId, total)) batch.delete(ref);
   await batch.commit();
@@ -497,6 +522,7 @@ async function deleteChunks(uploadId: string, total: number) {
 
 /** Grava um pedaço do arquivo de um tíquete pendente da própria pessoa. */
 export async function writeUploadChunk(actor: Actor, input: { uploadId: string; index: number; data: string }) {
+  if (storesInDrive()) return writeDriveChunk(actor, input);
   if (!storesInDatabase()) fail("unavailable", "O envio em pedaços não está ativo nesta instalação.");
   if (!/^[a-f0-9]{32}$/.test(input.uploadId)) fail("invalid", "Envio de arquivo inválido.");
   const bytes = Buffer.from(input.data, "base64");
@@ -553,18 +579,135 @@ async function finalizeDatabaseUpload(
   return file;
 }
 
+/** Pedaço lido por vez no Drive: em base64 cabe no limite de 4,5 MB por resposta da hospedagem. */
+export const DRIVE_READ_BYTES = 3 * MB;
+
+/**
+ * Mesmo critério das regras do Firestore para os pedaços (`fileOwnerVisible`):
+ * quem pode ver o registro dono do arquivo pode abrir o arquivo.
+ */
+async function canReadFileOf(actor: Actor, destDir: string) {
+  const settings = (await db.doc("settings/system").get()).data();
+  const moduleOn = (module: string) => settings?.modules?.[module] !== false;
+  const visible = (module: string, data: DocumentData | undefined) =>
+    !!data &&
+    actor.can(`${module}.view` as Permission) &&
+    moduleOn(module) &&
+    (actor.can(`${module}.admin` as Permission) || intersects(actor.tokens, Array.isArray(data.readers) ? data.readers : []));
+  const parts = destDir.split("/");
+  if (parts[0] === "documents" && parts.length >= 2) return visible("documents", (await db.doc(`documents/${parts[1]}`).get()).data());
+  if (parts[0] === "campaigns" && parts.length === 4 && parts[2] === "receipts") {
+    if (!visible("campaigns", (await db.doc(`campaigns/${parts[1]}`).get()).data())) return false;
+    if (actor.can("campaigns.admin")) return true;
+    const buyer = (await db.doc(`campaigns/${parts[1]}/buyers/${parts[3]}`).get()).data();
+    return intersects(actor.tokens, Array.isArray(buyer?.readers) ? buyer.readers : []);
+  }
+  if (parts[0] === "finance" && parts.length === 2) return actor.can("finance.view") && moduleOn("finance");
+  if (parts[0] === "marketing" && parts.length === 2) return visible("marketing", (await db.doc(`contents/${parts[1]}`).get()).data());
+  return false;
+}
+
+/** Lê um pedaço de um arquivo do Drive já anexado a um registro que a pessoa pode ver. */
+export async function readDriveFile(actor: Actor, input: { uploadId: string; index: number }) {
+  const ticket = (await db.doc(`uploads/${input.uploadId}`).get()).data();
+  const file = ticket?.file as FileRef | undefined;
+  // Mesma resposta para "não existe" e "sem acesso": não revela quais arquivos existem.
+  if (!ticket || ticket.status !== "attached" || !file?.driveId || !(await canReadFileOf(actor, String(ticket.destDir)))) {
+    fail("forbidden", "Seu perfil não tem acesso a este arquivo.");
+  }
+  const start = input.index * DRIVE_READ_BYTES;
+  if (start >= file.size) fail("invalid", "Pedaço do arquivo fora do esperado.");
+  const data = await readDriveRange(file.driveId, start, Math.min(start + DRIVE_READ_BYTES, file.size) - 1);
+  return { data: data.toString("base64"), size: file.size };
+}
+
 /** Apaga os pedaços de envios vencidos e nunca anexados da própria pessoa (não há rotina agendada no plano gratuito). */
 async function discardMyStaleChunks(uid: string) {
   const stale = await db.collection("uploads").where("uid", "==", uid).where("status", "==", "pending").limit(20).get();
   for (const doc of stale.docs) {
     const ticket = doc.data();
-    if (ticket.storage !== "database" || !ticketExpired(ticket)) continue;
+    if ((ticket.storage !== "database" && ticket.storage !== "drive") || !ticketExpired(ticket)) continue;
     const discarded = await db.runTransaction(async (tx) => {
       const fresh = (await tx.get(doc.ref)).data();
       if (!fresh || fresh.status !== "pending") return false;
       tx.update(doc.ref, { status: "discarded", discardedAt: nowISO() });
       return true;
     });
-    if (discarded) await deleteChunks(doc.id, Number(ticket.chunks) || 1);
+    if (!discarded) continue;
+    if (ticket.storage === "database") await deleteChunks(doc.id, Number(ticket.chunks) || 1);
+    else if (ticket.driveId) await deleteDriveFile(String(ticket.driveId)).catch(() => undefined);
+    else if (ticket.sessionUri) await cancelDriveUpload(String(ticket.sessionUri));
   }
+}
+
+/* ------------------------------------------------------------------------
+ * ENVIO EM PARTES PARA O GOOGLE DRIVE (FILE_STORAGE=drive)
+ * ------------------------------------------------------------------------ */
+
+const EXPECTED_ORDER = "Parte do arquivo fora de ordem. Envie o arquivo novamente.";
+
+/**
+ * Recebe uma parte, confere tíquete, ordem e tamanho, e a repassa ao Drive.
+ * A parte só conta como recebida depois que o Drive confirma (o progresso no
+ * navegador é real). Repetir uma parte já recebida não é erro.
+ */
+async function writeDriveChunk(actor: Actor, input: { uploadId: string; index: number; data: string }) {
+  if (!/^[a-f0-9]{32}$/.test(input.uploadId)) fail("invalid", "Envio de arquivo inválido.");
+  const bytes = Buffer.from(input.data, "base64");
+  const ticketRef = db.doc(`uploads/${input.uploadId}`);
+  const ticket = (await ticketRef.get()).data();
+  if (!ticket) fail("invalid", "O envio do arquivo expirou ou não foi encontrado. Envie o arquivo novamente.");
+  if (ticket.uid !== actor.uid || ticket.storage !== "drive") fail("forbidden", "Este envio de arquivo pertence a outra operação.");
+  if (ticket.status !== "pending") fail("conflict", USED_ELSEWHERE);
+  if (ticketExpired(ticket)) fail("invalid", EXPIRED);
+  const total = Number(ticket.chunks);
+  const next = Number(ticket.nextIndex ?? 0);
+  if (!Number.isInteger(input.index) || input.index < 0 || input.index >= total) fail("invalid", "Pedaço do arquivo fora do esperado.");
+  if (input.index < next) return { received: input.index };
+  if (input.index > next) fail("invalid", EXPECTED_ORDER);
+  const expected = input.index < total - 1 ? DRIVE_CHUNK_BYTES : ticket.size - DRIVE_CHUNK_BYTES * (total - 1);
+  if (bytes.length !== expected) fail("invalid", "O arquivo recebido não corresponde ao arquivo informado. Envie novamente.");
+
+  // Primeira parte: o tipo real é conferido antes de qualquer byte ir para o Drive.
+  if (input.index === 0 && !acceptedContent(bytes.subarray(0, 4096), ticket, ticket.purpose as UploadPurpose)) {
+    await ticketRef.update({ status: "rejected", rejectedAt: nowISO() });
+    await cancelDriveUpload(String(ticket.sessionUri));
+    fail("invalid", `O conteúdo do arquivo não corresponde a um formato aceito (${acceptedLabel(ticket.purpose as UploadPurpose)}).`);
+  }
+
+  const result = await putDriveChunk(String(ticket.sessionUri), bytes, input.index * DRIVE_CHUNK_BYTES, ticket.size);
+  await db.runTransaction(async (tx) => {
+    const fresh = (await tx.get(ticketRef)).data();
+    if (!fresh || fresh.status !== "pending" || Number(fresh.nextIndex ?? 0) !== input.index) return;
+    tx.update(ticketRef, { nextIndex: input.index + 1, ...(result.done ? { driveId: result.id, sessionUri: FieldValue.delete() } : {}) });
+  });
+  return { received: input.index };
+}
+
+/** Confere no Drive o arquivo enviado em partes e devolve a referência para o registro. */
+async function finalizeDriveUpload(
+  uploadId: string,
+  purpose: UploadPurpose,
+  destDir: string,
+  ctx: PrepareContext,
+  ticketRef: DocumentReference,
+  ticket: DocumentData,
+): Promise<FileRef> {
+  // Se a operação falhar, o envio volta a "pendente" e o arquivo continua no Drive para repetir a operação.
+  ctx.onAbort(() => releaseDatabaseClaim(ticketRef, destDir));
+  if (!ticket.driveId) fail("invalid", "O envio do arquivo não foi concluído. Envie o arquivo novamente.");
+  const driveId = String(ticket.driveId);
+  const info = await driveFileInfo(driveId);
+  if (info.size !== ticket.size || info.size > ticket.maxBytes) fail("invalid", "O arquivo recebido não corresponde ao arquivo informado. Envie novamente.");
+  const detected = acceptedContent(await readDriveRange(driveId, 0, Math.min(4096, info.size) - 1), ticket, purpose);
+  if (!detected) {
+    await deleteDriveFile(driveId);
+    await ticketRef.update({ status: "rejected", rejectedAt: nowISO() });
+    fail("invalid", `O conteúdo do arquivo não corresponde a um formato aceito (${acceptedLabel(purpose)}).`);
+  }
+  const name = storedFileName(ticket.fileName, detected);
+  if (name !== ticket.fileName) await renameDriveFile(driveId, name);
+  const file: FileRef = { name, size: info.size, mimeType: detected, path: `${destDir}/${uploadId}-${name}`, driveId, ...(info.sha256 ? { sha256: info.sha256 } : {}) };
+  await ticketRef.update({ status: "finalized", file, finalizedAt: nowISO() });
+  return file;
 }

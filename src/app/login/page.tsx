@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, CalendarDays, ClipboardList, Eye, EyeOff, FolderOpen, Info, KeyRound, Lock, Mail, Moon, Sun, Ticket, UserRoundCheck, Wallet } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Info, KeyRound, Lock, Mail, Moon, Sun, UserRoundCheck } from "lucide-react";
 import { services } from "@/services";
 import { useMounted } from "@/hooks/use-mounted";
 import { useSession, useSessionReady } from "@/stores/session";
@@ -19,7 +19,7 @@ import { Field, Input } from "@/components/ui/form";
 import { Avatar, Skeleton } from "@/components/ui/misc";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DemoNotice } from "@/components/shared/states";
-import { BrandEmblem } from "@/components/layout/brand";
+import { ShowcaseStage, ShowcaseSummary, useShowcase } from "@/features/login/showcase/showcase";
 import { Checkbox } from "@/components/ui/form";
 import { FormAlert } from "@/components/shared/form-alert";
 import { isDemoMode, isFirebaseMode } from "@/lib/mode";
@@ -28,13 +28,6 @@ import { useFirebaseSession, type SessionEndReason } from "@/services/firebase/s
 /** Campo maior, com brilho dourado no foco. */
 const FIELD = "h-12 rounded-xl bg-sunken/70 text-[15px] transition-shadow focus:shadow-[0_0_0_4px_rgba(225,175,55,0.14)]";
 
-const FEATURES = [
-  { icon: <Ticket />, label: "Rifas" },
-  { icon: <CalendarDays />, label: "Agenda" },
-  { icon: <ClipboardList />, label: "Atas" },
-  { icon: <Wallet />, label: "Finanças" },
-  { icon: <FolderOpen />, label: "Documentos" },
-];
 
 const loginSchema = z.object({
   email: z.string().trim().min(1, "Informe seu e-mail.").email("Digite um e-mail válido, como nome@example.org."),
@@ -259,6 +252,29 @@ function DemoProfiles({ onSelect }: { onSelect: (userId: string, label: string) 
   );
 }
 
+/** "#SOMOSYAWARA" com as letras em 3D: chegam do fundo e, de tempos em tempos, uma onda gira cada letra. */
+function SomosYawara() {
+  const word = (text: string, from: number, gold?: boolean) =>
+    Array.from(text).map((ch, i) => (
+      <span key={i} className={gold ? "somos-ch somos-gold" : "somos-ch"} style={{ "--i": from + i } as React.CSSProperties}>
+        {ch}
+      </span>
+    ));
+  return (
+    <div className="anim-rise mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[13px] text-fg-subtle lg:mt-1 lg:justify-start" style={{ animationDelay: "500ms" }}>
+      <span className="anim-grow hidden h-px w-16 bg-gradient-to-r from-gold to-transparent sm:block" />
+      <span className="somos" aria-label="#SOMOSYAWARA">
+        <span aria-hidden>
+          {word("#SOMOS", 0)}
+          {word("YAWARA", 6, true)}
+        </span>
+      </span>
+      <span aria-hidden>·</span>
+      <span>@atleticayawara</span>
+    </div>
+  );
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const { ready: hydrated, userId } = useSessionReady();
@@ -268,6 +284,7 @@ export default function LoginPage() {
   const [tab, setTab] = useState<"login" | "demo">("login");
   const mounted = useMounted();
   const isDark = !mounted || resolveTheme(theme) === "dark";
+  const showcase = useShowcase();
 
   useEffect(() => {
     if (hydrated && userId) router.replace("/inicio");
@@ -305,51 +322,26 @@ export default function LoginPage() {
 
       <div className="mx-auto grid min-h-dvh max-w-[1400px] grid-cols-[minmax(0,1fr)] items-center lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
         {/* Marca */}
-        <section className="flex flex-col items-center gap-6 px-6 pt-10 pb-6 text-center sm:px-10 lg:min-h-dvh lg:items-start lg:justify-between lg:px-16 lg:py-14 lg:text-left">
-          <div className="anim-rise hidden items-center gap-2.5 lg:flex">
-            <BrandEmblem size={28} priority />
-            <span className="text-[11.5px] font-semibold tracking-[0.28em] text-fg-muted">CENTRAL YAWARA</span>
-          </div>
-          <div className="flex max-w-[540px] flex-col items-center lg:items-start">
-            <div className="relative mb-6 lg:mb-8">
-              <span aria-hidden className="absolute inset-[-30%] rounded-full bg-[radial-gradient(closest-side,var(--halo-a),var(--halo-b),transparent)]" style={{ animation: "breathe 5s ease-in-out infinite" }} />
-              <div className="relative" style={{ animation: "pop .7s cubic-bezier(.2,1.3,.4,1) both, float-soft 6s ease-in-out .7s infinite" }}>
-                <BrandEmblem size={136} className="size-[104px] drop-shadow-[0_18px_40px_var(--emblem-shadow)] lg:size-[136px]" priority />
-              </div>
-            </div>
-            <p className="eyebrow anim-rise !text-gold-fg" style={{ animationDelay: "120ms" }}>
+        <section className="flex flex-col items-center px-6 pt-10 pb-6 text-center sm:px-10 lg:min-h-dvh lg:items-start lg:justify-center lg:px-16 lg:py-10 lg:text-left">
+          <div className="flex w-full max-w-[560px] flex-col items-center lg:items-start">
+            <ShowcaseSummary />
+            <p className="eyebrow anim-rise !text-gold-fg" style={{ animationDelay: "60ms" }}>
               Sistema interno de gestão
             </p>
-            <h1 className="anim-rise mt-3 font-display text-[42px] leading-[1.02] font-bold tracking-[-0.01em] sm:text-[60px]" style={{ animationDelay: "200ms" }}>
-              Central{" "}
-              <span className="bg-gradient-to-r from-[var(--title-from)] via-[var(--title-via)] to-[var(--title-to)] bg-clip-text text-transparent">Yawara</span>
+            <h1 className="anim-rise mt-3 font-display text-[50px] leading-[0.98] font-extrabold tracking-[-0.015em] drop-shadow-[0_10px_30px_rgba(0,0,0,0.35)] sm:text-[78px]" style={{ animationDelay: "120ms" }}>
+              Central <span className="title-shine">Yawara</span>
             </h1>
-            <p className="anim-rise mt-2 font-display text-[17px] font-medium text-ice sm:text-[19px]" style={{ animationDelay: "280ms" }}>
+            <p className="anim-rise mt-2 font-display text-[17px] font-medium text-ice sm:text-[20px]" style={{ animationDelay: "180ms" }}>
               Associação Atlética Acadêmica de Psicologia
             </p>
-            <p className="anim-rise mt-4 hidden max-w-[440px] text-[15px] leading-relaxed text-fg-muted sm:block" style={{ animationDelay: "360ms" }}>
-              Campanhas, eventos, documentos, reuniões e finanças da Atlética em um só lugar. Acesso restrito à diretoria e assessores.
+            <p className="anim-rise mt-1.5 hidden text-[13.5px] text-fg-muted sm:block" style={{ animationDelay: "240ms" }}>
+              Acesso restrito à diretoria e assessores.
             </p>
-            <ul className="mt-6 hidden flex-wrap gap-2 sm:flex lg:justify-start">
-              {FEATURES.map((f, i) => (
-                <li
-                  key={f.label}
-                  className="anim-pop flex h-9 items-center gap-2 rounded-full border border-line-strong bg-surface/60 px-3.5 text-[13px] font-medium text-fg-muted backdrop-blur-sm [&_svg]:size-4 [&_svg]:text-gold-fg"
-                  style={{ animationDelay: `${450 + i * 70}ms` }}
-                >
-                  {f.icon}
-                  {f.label}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="anim-rise hidden items-center gap-3.5 text-[12px] text-fg-subtle lg:flex" style={{ animationDelay: "800ms" }}>
-            <span className="anim-grow h-px w-14 bg-gradient-to-r from-gold to-transparent" />
-            <span className="text-[11px] font-semibold tracking-[0.32em] text-fg-muted">
-              #SOMOS<span className="text-gold">YAWARA</span>
-            </span>
-            <span>·</span>
-            <span>@atleticayawara</span>
+            {/* Vitrine 3D: órbita por diretoria e uma cena por recurso (features/login/showcase) */}
+            <div className="mt-2 w-full max-w-[620px] lg:-mt-6 lg:-ml-10">
+              <ShowcaseStage {...showcase} />
+            </div>
+            <SomosYawara />
           </div>
         </section>
 

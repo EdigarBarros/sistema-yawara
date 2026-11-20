@@ -6,25 +6,19 @@ import { DOCUMENT_STATUS } from "@/lib/labels";
 import { fileExtension, formatRelative } from "@/lib/format";
 import { useCountUp } from "@/hooks/use-count-up";
 import { DemoTag, StatusBadge } from "@/components/shared/badges";
+import { fileTypeOf } from "@/components/shared/file-type-icon";
 import { ShowcaseCard } from "@/components/shared/showcase";
 
 const DOC_COLOR = AREA_COLORS["/documentos"] ?? "#3fcf8e";
 
-/** Cor da "capa" pelo tipo do arquivo. */
-function extColor(ext: string) {
-  if (ext === "PDF") return "#e5484d";
-  if (["DOC", "DOCX", "ODT", "TXT"].includes(ext)) return "#5b86d9";
-  if (["XLS", "XLSX", "CSV", "ODS"].includes(ext)) return "#3fcf8e";
-  if (["PNG", "JPG", "JPEG", "WEBP", "GIF", "SVG"].includes(ext)) return "#e88ab5";
-  if (["PPT", "PPTX", "KEY"].includes(ext)) return "#f2a93b";
-  return "#e1af37";
-}
-
 /** Pilha de folhas: uma folha a mais por versão (até 4), a da frente mostra o tipo do arquivo. */
 export function DocStack({ doc, size = "md" }: { doc: InstitutionalDocument; size?: "sm" | "md" }) {
   const file = doc.versions.at(-1)?.file;
-  const ext = file ? fileExtension(file.name).slice(0, 4) : "LINK";
-  const color = extColor(ext);
+  const isLink = !!file?.url;
+  const type = fileTypeOf(file?.name, isLink);
+  const color = type.color;
+  const Icon = type.icon;
+  const ext = isLink ? "LINK" : file ? fileExtension(file.name).slice(0, 4) : "—";
   const behind = Math.min(3, Math.max(0, doc.versions.length - 1));
   const dims = size === "sm" ? "h-[52px] w-[40px]" : "h-[96px] w-[74px]";
   return (
@@ -34,10 +28,8 @@ export function DocStack({ doc, size = "md" }: { doc: InstitutionalDocument; siz
       ))}
       <span className="sheet front grid overflow-hidden border border-line-strong bg-[linear-gradient(160deg,#ffffff,#e9eefc)] shadow-[0_10px_24px_-12px_rgba(3,15,69,0.6)]" style={{ "--i": 0 } as React.CSSProperties}>
         <span className="absolute inset-x-0 top-0 h-[22%]" style={{ background: color }} />
-        <span className="absolute top-[30%] right-[14%] left-[14%] space-y-[6%]">
-          <span className="block h-[3px] rounded bg-[#c5cde6]" />
-          <span className="block h-[3px] w-4/5 rounded bg-[#c5cde6]" />
-          <span className="block h-[3px] w-3/5 rounded bg-[#c5cde6]" />
+        <span className="absolute top-[30%] right-0 left-0 grid place-items-center">
+          <Icon className={size === "sm" ? "size-4" : "size-7"} style={{ color }} strokeWidth={1.8} />
         </span>
         <span className={`absolute right-0 bottom-[8%] left-0 text-center font-mono font-bold ${size === "sm" ? "text-[9px]" : "text-[13px]"}`} style={{ color }}>
           {ext}

@@ -1,211 +1,172 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { CalendarPlus, Plus, Trophy } from "lucide-react";
-import type { SessionKind } from "@/types";
+import { useState } from "react";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { CalendarClock, Dumbbell, Plus, Swords, Trophy, Users } from "lucide-react";
+import type { SportTeam, TeamStatus } from "@/types";
 import { useAccess } from "@/hooks/use-access";
-import { useTeams } from "@/hooks/use-data";
-import { canEditTeam } from "@/lib/policies";
-import { MODALITIES, recentResults, SESSION_KIND_LABELS, SPORT_RULES, teamRecord, upcomingSessions } from "@/lib/sports";
-import { todayDateOnly } from "@/lib/format";
+import { useSportsTeams } from "@/hooks/use-data";
+import { TEAM_STATUS } from "@/lib/labels";
+import { formatDate, formatTime, todayDateOnly } from "@/lib/format";
 import { matchesQuery } from "@/lib/utils";
 import { errorMessage } from "@/lib/notify";
-import { isDemoMode } from "@/lib/mode";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/shared/page";
-import { FilterChips, FilterSelect, SearchInput, Toolbar } from "@/components/shared/filters";
-import { EmptyState, ErrorState, RestrictedState } from "@/components/shared/states";
-import { ShowcaseGrid, ShowcaseGroup } from "@/components/shared/showcase";
-import { NextGameHero, ScorePill, SessionRow, TeamCard } from "@/features/sports/sport-ui";
-import { SessionDialog, TeamFormDialog } from "@/features/sports/sport-dialogs";
+import { PageHeader, Panel } from "@/components/shared/page";
+import { FilterChips, SearchInput, Toolbar } from "@/components/shared/filters";
+import { EmptyState, ErrorState, InlineLoader, RestrictedState } from "@/components/shared/states";
+import { StatusBadge } from "@/components/shared/badges";
+import { DateChip, ListRow } from "@/components/shared/list-row";
+import { TeamFormDialog } from "@/features/sports/team-form-dialog";
+import { nextTraining, SPORTS_COLOR, teamRecord, teamSubtitle, upcomingMatches, whenLabel } from "@/features/sports/utils";
 
-type Filter = "active" | "archived";
-type Agenda = "upcoming" | "results";
+type Filter = TeamStatus | "all";
 
 export default function SportsPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
   const access = useAccess();
   const enabled = access.canModule("sports");
-  const { data, isLoading, isError, error, refetch } = useTeams(enabled);
-  const [filter, setFilter] = useState<Filter>("active");
-  const [modality, setModality] = useState("");
+  const { data, isLoading, isError, error, refetch } = useSportsTeams(enabled);
+  const [status, setStatus] = useState<Filter>("active");
   const [query, setQuery] = useState("");
-  const [agenda, setAgenda] = useState<Agenda>("upcoming");
-  const [kind, setKind] = useState<SessionKind | "">("");
-  const [teamOpen, setTeamOpen] = useState(false);
-  const [sessionOpen, setSessionOpen] = useState(false);
+  const createOpen = params.get("novo") === "1" && access.can("sports.create");
+  const setCreateOpen = (o: boolean) => router.replace(o ? `${pathname}?novo=1` : pathname, { scroll: false });
+  if (!enabled) return <RestrictedState />;
 
+  const all = data ?? [];
   const today = todayDateOnly();
-  const teams = useMemo(() => data ?? [], [data]);
-  const activeTeams = teams.filter((t) => t.status === "active");
-  const editableTeams = activeTeams.filter((t) => !!access.ctx && canEditTeam(access.ctx, t));
-  const upcoming = upcomingSessions(activeTeams, today);
-  const results = recentResults(teams);
-  const nextGame = upcoming.find((s) => s.kind !== "treino");
-  const total = activeTeams.reduce(
-    (acc, t) => {
-      const r = teamRecord(t);
-      return { win: acc.win + r.win, draw: acc.draw + r.draw, loss: acc.loss + r.loss };
-    },
-    { win: 0, draw: 0, loss: 0 },
-  );
-
-  const rows = teams
-    .filter((t) => (filter === "active" ? t.status === "active" : t.status === "archived"))
-    .filter((t) => !modality || t.modality === modality)
-    .filter((t) => matchesQuery(query, t.name, t.code, SPORT_RULES[t.modality].label));
-  const agendaRows = (agenda === "upcoming" ? upcoming : results).filter((s) => !kind || s.kind === kind).slice(0, 12);
-
-  if (!enabled)
-    return (
-      <RestrictedState
-        description={access.moduleEnabled("sports") ? (isDemoMode ? undefined : "Seu perfil não tem acesso aos esportes. Procure a diretoria se precisar.") : "O módulo de esportes está desativado nas configurações."}
-      />
-    );
+  const count = (s: Filter) => all.filter((t) => s === "all" || t.status === s).length;
+  const rows = all
+    .filter((t) => status === "all" || t.status === status)
+    .filter((t) => matchesQuery(query, t.name, t.sport, t.code, t.coach ?? ""))
+    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  const nextGames = all
+    .filter((t) => t.status !== "archived")
+    .flatMap((t) => upcomingMatches(t, today).map((m) => ({ team: t, match: m })))
+    .sort((a, b) => a.match.date.localeCompare(b.match.date) || (a.match.time ?? "").localeCompare(b.match.time ?? ""))
+    .slice(0, 5);
 
   return (
     <>
       <PageHeader
-        eyebrow="Vestiário"
+        eyebrow="Operação"
         title="Esportes"
-        description="Times, elenco e escalação na quadra 3D, além dos treinos e jogos da Atlética."
+        description="Modalidades da Atlética: treinos, elenco, jogos e competições."
         actions={
-          <>
-            {editableTeams.length > 0 && (
-              <Button onClick={() => setSessionOpen(true)}>
-                <CalendarPlus /> Marcar treino ou jogo
-              </Button>
-            )}
-            {access.can("sports.create") && (
-              <Button variant="primary" onClick={() => setTeamOpen(true)}>
-                <Plus /> Novo time
-              </Button>
-            )}
-          </>
+          access.can("sports.create") && (
+            <Button variant="primary" onClick={() => setCreateOpen(true)}>
+              <Plus /> Nova modalidade
+            </Button>
+          )
         }
       />
 
-      {isError ? (
-        <ErrorState message={errorMessage(error)} onRetry={() => refetch()} />
-      ) : (
-        <div className="space-y-8">
-          {(nextGame || results.length > 0) && (
-            <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-              {nextGame ? (
-                <NextGameHero session={nextGame} team={nextGame.team} />
-              ) : (
-                <div className="grid place-items-center rounded-[22px] border border-dashed border-line-strong p-6 text-[13px] text-fg-muted">Nenhum jogo marcado.</div>
-              )}
-              <div className="anim-rise rounded-[22px] border border-line bg-surface p-5" style={{ animationDelay: "120ms" }}>
-                <p className="eyebrow">Campanha da Atlética</p>
-                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                  {[
-                    { label: "Vitórias", value: total.win, cls: "text-ok" },
-                    { label: "Empates", value: total.draw, cls: "text-fg-muted" },
-                    { label: "Derrotas", value: total.loss, cls: "text-danger" },
-                  ].map((x) => (
-                    <div key={x.label} className="rounded-xl bg-surface-2 py-3">
-                      <div className={`tnum font-display text-[30px] leading-none font-extrabold ${x.cls}`}>{x.value}</div>
-                      <div className="mt-1 text-[11.5px] text-fg-subtle">{x.label}</div>
-                    </div>
-                  ))}
-                </div>
-                {results.length > 0 && (
-                  <ul className="mt-4 space-y-2">
-                    {results.slice(0, 3).map((s) => (
-                      <li key={s.id} className="flex items-center gap-2 text-[13px]">
-                        <span className="size-2 shrink-0 rounded-full" style={{ background: s.team.color }} aria-hidden />
-                        <span className="min-w-0 flex-1 truncate">
-                          {s.team.name} <span className="text-fg-subtle">x</span> {s.opponent}
-                        </span>
-                        <ScorePill score={s.score!} />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          )}
-
-          <ShowcaseGroup title="Times" count={rows.length}>
-            <section className="rounded-xl border border-line bg-surface">
-              <Toolbar>
-                <FilterChips
-                  ariaLabel="Filtrar times"
-                  value={filter}
-                  onChange={setFilter}
-                  options={[
-                    { value: "active", label: "Ativos", count: activeTeams.length },
-                    { value: "archived", label: "Arquivados", count: teams.length - activeTeams.length },
-                  ]}
+      {nextGames.length > 0 && (
+        <Panel title="Próximos jogos" description="De todas as modalidades que você acompanha" className="mb-5" bodyClassName="py-1.5">
+          <ul className="divide-y divide-line">
+            {nextGames.map(({ team, match }) => (
+              <li key={match.id}>
+                <ListRow
+                  href={`/esportes/${team.id}?aba=jogos`}
+                  leading={<DateChip date={match.date} />}
+                  title={`${team.name} × ${match.opponent}`}
+                  subtitle={`${match.time ? `${formatTime(match.time)} · ` : ""}${match.location}${match.competitionId ? ` · ${team.competitions.find((c) => c.id === match.competitionId)?.name ?? ""}` : " · Amistoso"}`}
                 />
-                <div className="flex flex-wrap gap-2">
-                  <FilterSelect label="Modalidade" value={modality} onChange={setModality} options={[{ value: "", label: "Todas as modalidades" }, ...MODALITIES.map((m) => ({ value: m, label: SPORT_RULES[m].label }))]} />
-                  <SearchInput value={query} onChange={setQuery} placeholder="Buscar time" className="w-full sm:w-52" />
-                </div>
-              </Toolbar>
-              <div className="rounded-b-xl bg-surface-2/50 p-4 sm:p-5">
-                <ShowcaseGrid
-                  label="Times"
-                  items={rows}
-                  loading={isLoading}
-                  getId={(t) => t.id}
-                  render={(t) => <TeamCard team={t} />}
-                  empty={
-                    <EmptyState
-                      icon={<Trophy />}
-                      title={query || modality ? "Nenhum time encontrado" : filter === "archived" ? "Nenhum time arquivado" : "Nenhum time ainda"}
-                      description={query || modality ? "Ajuste os filtros." : "Crie o primeiro time para montar o elenco e a escalação."}
-                      action={
-                        access.can("sports.create") && filter === "active" ? (
-                          <Button variant="primary" onClick={() => setTeamOpen(true)}>
-                            <Plus /> Novo time
-                          </Button>
-                        ) : undefined
-                      }
-                    />
-                  }
-                />
-              </div>
-            </section>
-          </ShowcaseGroup>
-
-          <ShowcaseGroup title="Agenda esportiva">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <FilterChips
-                ariaLabel="Agenda"
-                value={agenda}
-                onChange={setAgenda}
-                options={[
-                  { value: "upcoming", label: "Próximos", count: upcoming.length },
-                  { value: "results", label: "Resultados", count: results.length },
-                ]}
-              />
-              <FilterSelect
-                label="Tipo"
-                value={kind}
-                onChange={(v) => setKind(v as SessionKind | "")}
-                options={[{ value: "", label: "Treinos e jogos" }, ...(Object.keys(SESSION_KIND_LABELS) as SessionKind[]).map((k) => ({ value: k, label: SESSION_KIND_LABELS[k] }))]}
-              />
-            </div>
-            {agendaRows.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-line-strong px-4 py-6 text-center text-[13px] text-fg-muted">
-                {agenda === "upcoming" ? "Nada marcado por enquanto." : "Nenhum resultado registrado ainda."}
-              </p>
-            ) : (
-              <ul className="grid gap-2 lg:grid-cols-2">
-                {agendaRows.map((s, i) => (
-                  <li key={s.id} className="anim-row" style={{ animationDelay: `${i * 40}ms` }}>
-                    <SessionRow session={s} team={s.team} showTeam />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </ShowcaseGroup>
-        </div>
+              </li>
+            ))}
+          </ul>
+        </Panel>
       )}
 
-      <TeamFormDialog open={teamOpen} onOpenChange={setTeamOpen} />
-      <SessionDialog open={sessionOpen} onOpenChange={setSessionOpen} teams={editableTeams} />
+      <section className="rounded-xl border border-line bg-surface">
+        <Toolbar>
+          <FilterChips
+            ariaLabel="Situação"
+            value={status}
+            onChange={setStatus}
+            options={[
+              { value: "active", label: "Em atividade", count: count("active") },
+              { value: "paused", label: "Pausadas", count: count("paused") },
+              { value: "archived", label: "Arquivadas", count: count("archived") },
+              { value: "all", label: "Todas", count: count("all") },
+            ]}
+          />
+          <SearchInput value={query} onChange={setQuery} placeholder="Buscar modalidade ou esporte" className="w-full sm:w-64" />
+        </Toolbar>
+        {isError ? (
+          <ErrorState message={errorMessage(error)} onRetry={() => refetch()} />
+        ) : isLoading ? (
+          <InlineLoader />
+        ) : rows.length === 0 ? (
+          <EmptyState
+            icon={<Trophy />}
+            title={all.length === 0 ? "Nenhuma modalidade ainda" : "Nenhuma modalidade encontrada"}
+            description={all.length === 0 ? "Cadastre a primeira modalidade (ex.: Futsal Feminino) para organizar treinos, elenco e jogos." : undefined}
+            action={
+              access.can("sports.create") && all.length === 0 ? (
+                <Button variant="primary" onClick={() => setCreateOpen(true)}>
+                  <Plus /> Nova modalidade
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : (
+          <ul className="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-3">
+            {rows.map((t, i) => (
+              <TeamCard key={t.id} team={t} today={today} index={i} />
+            ))}
+          </ul>
+        )}
+      </section>
+      <TeamFormDialog open={createOpen} onOpenChange={setCreateOpen} />
     </>
+  );
+}
+
+function TeamCard({ team, today, index }: { team: SportTeam; today: string; index: number }) {
+  const record = teamRecord(team.matches);
+  const next = upcomingMatches(team, today)[0];
+  const training = team.status === "active" ? nextTraining(team.trainings, today) : null;
+  return (
+    <li className="anim-rise" style={{ animationDelay: `${Math.min(index * 45, 450)}ms` }}>
+      <Link
+        href={`/esportes/${team.id}`}
+        className="group flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-surface-2 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.6)] focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:outline-none"
+      >
+        <div className="flex items-start gap-3 px-4 pt-4 pb-3" style={{ background: `linear-gradient(180deg, ${SPORTS_COLOR}26, transparent)` }}>
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl text-[#06102e]" style={{ background: `linear-gradient(145deg, ${SPORTS_COLOR}, ${SPORTS_COLOR}aa)` }}>
+            <Trophy className="size-5" strokeWidth={2.2} aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-display text-[18px] leading-tight font-bold">{team.name}</p>
+            <p className="truncate text-[12.5px] text-fg-muted">{teamSubtitle(team)}</p>
+          </div>
+          <StatusBadge meta={TEAM_STATUS[team.status]} />
+        </div>
+        <dl className="grid min-w-0 flex-1 gap-2.5 px-4 pb-3 text-[12.5px]">
+          <div className="flex min-w-0 items-center gap-2 text-fg-muted">
+            <Dumbbell className="size-4 shrink-0 text-fg-subtle" aria-hidden />
+            <dt className="sr-only">Próximo treino</dt>
+            <dd className="truncate">{training ? `${whenLabel(training)}, ${formatTime(training.slot.start)} · ${training.slot.location}` : team.trainings.length ? "Treinos suspensos" : "Sem horário de treino"}</dd>
+          </div>
+          <div className="flex min-w-0 items-center gap-2 text-fg-muted">
+            <Swords className="size-4 shrink-0 text-fg-subtle" aria-hidden />
+            <dt className="sr-only">Próximo jogo</dt>
+            <dd className="truncate">{next ? `${formatDate(next.date)} × ${next.opponent}` : "Nenhum jogo agendado"}</dd>
+          </div>
+        </dl>
+        <div className="mt-auto flex items-center justify-between gap-2 border-t border-line px-4 py-2.5 text-[12px] text-fg-subtle">
+          <span className="flex items-center gap-1.5">
+            <Users className="size-3.5" aria-hidden /> {team.athletes.length} no elenco
+          </span>
+          <span className="flex items-center gap-1.5 font-mono tnum" title="Vitórias, empates e derrotas">
+            <CalendarClock className="size-3.5" aria-hidden />
+            <span className="text-ok">{record.wins}V</span> <span className="text-warn">{record.draws}E</span> <span className="text-danger">{record.losses}D</span>
+          </span>
+        </div>
+      </Link>
+    </li>
   );
 }

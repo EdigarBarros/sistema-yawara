@@ -11,6 +11,7 @@ import type {
   Department,
   DocumentCategory,
   ExtensionProject,
+  SportTeam,
   FinanceCategory,
   FinanceEntry,
   InstitutionalDocument,
@@ -18,7 +19,6 @@ import type {
   Member,
   Role,
   Sale,
-  SportTeam,
   SystemSettings,
 } from "@/types";
 import { audience, createClock, createRng, type Clock } from "./helpers";
@@ -30,7 +30,7 @@ import { buildMeetings } from "./meetings";
 import { buildFinanceCategories, buildFinanceEntries } from "./finance";
 import { buildContents } from "./marketing";
 import { buildProjects } from "./extension";
-import { buildTeams } from "./sports";
+import { buildSportsTeams } from "./sports";
 
 export const DEMO_DB_VERSION = 3;
 
@@ -51,7 +51,7 @@ export interface DemoDB {
   financeEntries: FinanceEntry[];
   contents: ContentItem[];
   projects: ExtensionProject[];
-  teams: SportTeam[];
+  sportsTeams: SportTeam[];
   notifications: AppNotification[];
   /** Contadores para gerar códigos legíveis (RIFA-2026-011, EVT-2026-019…). */
   counters: Record<string, number>;
@@ -130,9 +130,9 @@ export function buildSeed(now = new Date(), seed = 2026): DemoDB {
     financeEntries: buildFinanceEntries(clock),
     contents: buildContents(clock),
     projects: buildProjects(clock),
-    teams: buildTeams(clock),
+    sportsTeams: buildSportsTeams(clock),
     notifications: buildNotifications(clock),
-    counters: { RIFA: 10, EVT: 18, REU: 22, LAN: 30, MKT: 50, ENS: 6, TIM: 3 },
+    counters: { RIFA: 10, EVT: 18, REU: 22, LAN: 30, MKT: 50, ENS: 6, ESP: 3 },
   };
 }
 

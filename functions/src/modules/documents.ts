@@ -30,6 +30,9 @@
  *    não foi validada); quem valida mantém o documento vigente.
  *  - Arquivar/restaurar: `canArchiveDocument` (criador ou documents.archive).
  *    Arquivar não apaga nada (nem arquivos).
+ *  - Excluir de vez (remove): só o Suporte do sistema. Apaga o documento, a
+ *    entrada de busca e, depois da confirmação, os arquivos de todas as
+ *    versões (Storage ou pedaços no banco). Não tem volta.
  *  - Categoria, departamento, público e vínculos (evento, reunião, projeto)
  *    precisam existir; vínculos precisam estar visíveis para quem os faz.
  *
@@ -57,16 +60,16 @@ import type {
   InstitutionalDocument,
   Meeting,
 } from "@/types";
-import { db } from "../core/admin";
-import { requireModuleEnabled, requirePermission, type Actor } from "../core/actor";
+import { bucket, db } from "../core/admin";
+import { requireModuleEnabled, requirePermission, requireSupport, type Actor } from "../core/actor";
 import { auditInTx } from "../core/audit";
 import { alreadyCompleted, mutation, type RunContext } from "../core/dispatch";
 import { fail } from "../core/errors";
-import { fileLinkSchema, markAttached, ONE_FILE_SOURCE, resolveFile } from "../core/files";
+import { deleteChunks, fileLinkSchema, markAttached, ONE_FILE_SOURCE, resolveFile } from "../core/files";
 import { appendHistory, historyEntry } from "../core/history";
 import { notify } from "../core/notify";
 import { requireDoc, toDTO } from "../core/records";
-import { indexRecord, searchEntryFor } from "../core/search-index";
+import { indexRecord, searchEntryFor, unindexRecord } from "../core/search-index";
 
 /* ------------------------------- limites -------------------------------- */
 
@@ -678,6 +681,29 @@ export const documentsActions = {
     },
     async present(result, actor) {
       return presentDocument(result, actor);
+    },
+  }),
+
+  remove: mutation({
+    module: "documents",
+    schema: idSchema,
+    async run(tx, actor, { id }, ctx) {
+      actor = actor!;
+      requireSupport(actor, "Somente o Suporte do sistema pode excluir documentos de vez. Use Arquivar.");
+      const { ref, doc: current } = await loadDocument(tx, id);
+      tx.delete(ref);
+      unindexRecord(tx, "document", id);
+      audit(tx, actor, ctx, "remove", id, `Documento excluído pelo suporte: ${current.name}`, { versions: current.versions.length });
+
+      const files = current.versions.map((v) => v.file).filter((f): f is FileRef => !!f?.path);
+      ctx.after(async () => {
+        for (const file of files) {
+          // Arquivo no banco: o uploadId é o início do nome no caminho (`<uploadId>-<nome>`).
+          if (file.chunks) await deleteChunks(file.path!.split("/").pop()!.split("-")[0], file.chunks);
+        }
+        if (files.some((f) => !f.chunks)) await bucket().deleteFiles({ prefix: `documents/${id}/` });
+      });
+      return { id };
     },
   }),
 };

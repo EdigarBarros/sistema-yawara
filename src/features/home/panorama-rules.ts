@@ -153,20 +153,12 @@ export function extensionArea(today: DateOnly, projects: ExtensionProject[]): Ar
 export function sportsArea(today: DateOnly, teams: SportTeam[]): AreaStatus {
   const base = { key: "sports" as const, title: "Esportes", href: "/esportes" };
   const active = teams.filter((t) => t.status === "active");
-  const sessions = active.flatMap((t) => t.sessions.map((s) => ({ ...s, team: t })));
-  const week = sessions.filter((s) => s.status === "scheduled" && s.date >= today && daysBetween(today, s.date) <= 7);
-  const games = sessions.filter((s) => s.status === "scheduled" && s.kind !== "treino" && s.date >= today).sort((a, b) => a.date.localeCompare(b.date));
-  // Jogo que já passou e continua "marcado": falta registrar o resultado.
-  const noResult = sessions.filter((s) => s.status === "scheduled" && s.kind !== "treino" && s.date < today).length;
-  const next = games[0];
-  const headline = String(week.length);
-  const caption = week.length === 1 ? "treino ou jogo nesta semana" : "treinos e jogos nesta semana";
-  if (active.length === 0) return { ...base, health: "idle", headline: "—", caption: "nenhum time ativo", reason: "Crie um time para montar elenco e escalação." };
-  if (noResult > 0) return { ...base, health: "warn", headline, caption, reason: `${plural(noResult, "jogo já passou", "jogos já passaram")} sem resultado registrado.` };
-  if (next && daysBetween(today, next.date) <= 7) {
-    const short = active.find((t) => t.id === next.team.id && t.lineup.slots.length === 0);
-    if (short) return { ...base, health: "warn", headline, caption, reason: `${next.team.name} joga em ${formatDayMonth(next.date)} e ainda não tem escalação.` };
-    return { ...base, health: "ok", headline, caption, reason: `Próximo jogo: ${next.team.name} x ${next.opponent} em ${formatDayMonth(next.date)}.` };
-  }
-  return { ...base, health: week.length ? "ok" : "idle", headline, caption, reason: week.length ? "Treinos em dia." : "Nada marcado para os próximos dias." };
+  const scheduled = active.flatMap((t) => t.matches.filter((m) => m.status === "scheduled").map((m) => ({ t, m })));
+  const noResult = scheduled.filter(({ m }) => m.date < today).length;
+  const next = scheduled.filter(({ m }) => m.date >= today).sort((a, b) => a.m.date.localeCompare(b.m.date))[0];
+  const headline = next ? formatDayMonth(next.m.date) : "—";
+  const caption = next ? `próximo jogo: ${next.t.name} × ${next.m.opponent}` : `${plural(active.length, "modalidade ativa", "modalidades ativas")}`;
+  if (active.length === 0) return { ...base, health: "idle", headline, caption, reason: "Nenhuma modalidade em atividade." };
+  if (noResult > 0) return { ...base, health: "warn", headline, caption, reason: `${plural(noResult, "jogo já passou", "jogos já passaram")} sem o resultado registrado.` };
+  return { ...base, health: "ok", headline, caption, reason: next ? "Jogos e resultados em dia." : "Nenhum jogo marcado por enquanto." };
 }

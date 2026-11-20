@@ -45,6 +45,7 @@ export type HomePreset =
   | "marketing"
   | "events"
   | "extension"
+  | "sports"
   | "advisor";
 
 export interface Role {

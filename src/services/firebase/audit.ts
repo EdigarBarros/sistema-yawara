@@ -53,6 +53,11 @@ export const firebaseAudit: AuditService = {
     }
   },
 
+  async remove(ids) {
+    const rid = takeRequestId();
+    await callApi("system", "deleteAuditLogs", { ids }, rid);
+  },
+
   /** Melhor esforço: a exportação já aconteceu no navegador; uma falha aqui não a desfaz. */
   async recordExport(input) {
     const rid = takeRequestId();

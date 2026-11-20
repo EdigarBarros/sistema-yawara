@@ -38,7 +38,7 @@ export const COLLECTIONS = {
   financeEntries: "financeEntries",
   contents: "contents",
   projects: "projects",
-  sportTeams: "sportTeams",
+  sportsTeams: "sportsTeams",
 } as const;
 
 type WithoutId<T> = Omit<T, "id">;
@@ -173,14 +173,6 @@ export function eventDoc(e: AtleticaEvent): EventDoc {
   return { ...withoutId(e), readers: eventReaders(e) };
 }
 
-/* ------------------------------- esportes ------------------------------- */
-
-export type SportTeamDoc = WithoutId<SportTeam> & { readers: string[] };
-
-export function sportTeamDoc(t: SportTeam): SportTeamDoc {
-  return { ...withoutId(t), readers: teamReaders(t) };
-}
-
 /* ------------------------------ documentos ------------------------------ */
 
 export type DocumentDoc = WithoutId<InstitutionalDocument> & { readers: string[] };
@@ -242,4 +234,12 @@ export function projectFromDocs(id: string, project: Omit<ProjectDoc, "readers">
     attendeeCount: project.attendeeCount,
     attendeesRestricted: !attendance,
   };
+}
+
+/* -------------------------------- esportes ------------------------------- */
+
+export type TeamDoc = WithoutId<SportTeam> & { readers: string[] };
+
+export function teamDoc(t: SportTeam): TeamDoc {
+  return { ...withoutId(t), readers: teamReaders(t) };
 }

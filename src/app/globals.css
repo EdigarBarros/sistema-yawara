@@ -236,6 +236,15 @@
   from { background-position: 200% 0; }
   to { background-position: -200% 0; }
 }
+@keyframes surgir {
+  from { opacity: 0; transform: translateY(18px) scale(0.985); }
+}
+@keyframes linha {
+  from { opacity: 0; transform: translateX(-10px); }
+}
+@keyframes encher {
+  from { clip-path: inset(0 100% 0 0 round 999px); }
+}
 @keyframes page-rise {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: none; }
@@ -286,6 +295,7 @@
   from { opacity: 0; transform: translateX(-28px); }
   to { opacity: 1; transform: none; }
 }
+
 /* Vitrines (campanhas, eventos, esportes, documentos) */
 @keyframes ring-fill {
   from { stroke-dashoffset: var(--ring-len); }
@@ -337,6 +347,12 @@
     scrollbar-width: thin;
     scrollbar-color: var(--line-strong) transparent;
   }
+}
+
+/* Curva "de mola" das animações: arranca rápido e freia aos poucos (a mesma do OpusCash) */
+:root {
+  --spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --spring-bounce: cubic-bezier(0.34, 1.4, 0.64, 1);
 }
 
 @layer components {
@@ -414,12 +430,108 @@
   .anim-step { animation: step-in 0.32s cubic-bezier(0.2, 1, 0.3, 1) both; }
   .anim-step[data-back] { animation-name: step-back; }
 
-  /* Troca de tela: no celular desliza na direção da aba; no computador sobe de leve */
-  .page-in { animation: page-rise 0.38s cubic-bezier(0.2, 1, 0.3, 1) both; }
-  .page-in[data-dir="right"] { animation-name: page-right; }
-  .page-in[data-dir="left"] { animation-name: page-left; }
+  /* Troca de tela: no celular a tela desliza na direção da aba; no computador ela não se move inteira,
+     quem chega são os blocos (abaixo). */
+  .page-in[data-dir="right"] { animation: page-right 0.38s var(--spring) both; }
+  .page-in[data-dir="left"] { animation: page-left 0.38s var(--spring) both; }
   @media (min-width: 1024px) {
-    .page-in[data-dir] { animation-name: page-rise; }
+    .page-in[data-dir] { animation: none; }
+  }
+
+  /* Entrada em cascata (como no OpusCash): cada bloco da tela sobe e aparece, um depois do outro,
+     e os cartões das grades também. 'backwards' solta o elemento no fim, para não brigar com o hover.
+     Sem 'filter': desfocar blocos grandes engasga em computador fraco; opacidade e deslocamento rodam na placa de vídeo. */
+  .page-in > *,
+  .page-in > * > .grid > *,
+  .page-in > .grid > * {
+    animation: surgir 0.6s var(--spring) backwards;
+  }
+  .page-in > :nth-child(2) { animation-delay: 0.06s; }
+  .page-in > :nth-child(3) { animation-delay: 0.12s; }
+  .page-in > :nth-child(4) { animation-delay: 0.18s; }
+  .page-in > :nth-child(5) { animation-delay: 0.24s; }
+  .page-in > :nth-child(n + 6) { animation-delay: 0.3s; }
+  .page-in > * > .grid > :nth-child(1), .page-in > .grid > :nth-child(1) { animation-delay: 0.1s; }
+  .page-in > * > .grid > :nth-child(2), .page-in > .grid > :nth-child(2) { animation-delay: 0.16s; }
+  .page-in > * > .grid > :nth-child(3), .page-in > .grid > :nth-child(3) { animation-delay: 0.22s; }
+  .page-in > * > .grid > :nth-child(4), .page-in > .grid > :nth-child(4) { animation-delay: 0.28s; }
+  .page-in > * > .grid > :nth-child(5), .page-in > .grid > :nth-child(5) { animation-delay: 0.34s; }
+  .page-in > * > .grid > :nth-child(n + 6), .page-in > .grid > :nth-child(n + 6) { animation-delay: 0.4s; }
+  /* Linhas das tabelas e listas entram em seguida, deslizando de leve */
+  .page-in tbody > tr,
+  .page-in ul.divide-y > li {
+    animation: linha 0.5s var(--spring) backwards;
+  }
+  .page-in tbody > tr:nth-child(1), .page-in ul.divide-y > li:nth-child(1) { animation-delay: 0.2s; }
+  .page-in tbody > tr:nth-child(2), .page-in ul.divide-y > li:nth-child(2) { animation-delay: 0.24s; }
+  .page-in tbody > tr:nth-child(3), .page-in ul.divide-y > li:nth-child(3) { animation-delay: 0.28s; }
+  .page-in tbody > tr:nth-child(4), .page-in ul.divide-y > li:nth-child(4) { animation-delay: 0.32s; }
+  .page-in tbody > tr:nth-child(5), .page-in ul.divide-y > li:nth-child(5) { animation-delay: 0.36s; }
+  .page-in tbody > tr:nth-child(n + 6), .page-in ul.divide-y > li:nth-child(n + 6) { animation-delay: 0.4s; }
+
+  /* Barras de progresso se enchem ao aparecer */
+  .fill-in { animation: encher 1.2s var(--spring) 0.25s backwards; }
+
+  /* Destaque que desliza entre abas, filtros e menu (hook useGlide) */
+  .glide {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    transition:
+      transform 0.42s cubic-bezier(0.3, 1.25, 0.4, 1),
+      width 0.42s cubic-bezier(0.3, 1.25, 0.4, 1),
+      height 0.42s cubic-bezier(0.3, 1.25, 0.4, 1),
+      opacity 0.2s ease;
+  }
+
+  /* Título da tela de entrada: "Yawara" dourado com um brilho que passa */
+  .title-shine {
+    background: linear-gradient(100deg, var(--title-from) 0%, var(--title-via) 35%, #fff4cc 48%, var(--title-via) 60%, var(--title-to) 100%);
+    background-size: 250% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: title-shine 5.5s ease-in-out 1s infinite;
+  }
+  @keyframes title-shine {
+    0% { background-position: 100% 0; }
+    45%, 100% { background-position: 0% 0; }
+  }
+
+  /* #SOMOSYAWARA: letras em 3D. Chegam do fundo e, a cada 6 s, uma onda dá um giro em cada letra. */
+  .somos {
+    display: inline-block;
+    perspective: 500px;
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 0.3em;
+    color: var(--fg);
+    white-space: nowrap;
+  }
+  @media (min-width: 640px) {
+    .somos { font-size: 19px; }
+  }
+  .somos-ch {
+    display: inline-block;
+    transform-origin: 50% 50% -0.4em;
+    animation:
+      somos-in 0.8s cubic-bezier(0.2, 1.25, 0.35, 1) calc(0.6s + var(--i) * 45ms) both,
+      somos-wave 6s ease-in-out calc(2.4s + var(--i) * 70ms) infinite;
+  }
+  .somos-gold {
+    color: #f4cd5c;
+    text-shadow: 0 1px 0 #c9971f, 0 2px 0 #a5780a, 0 3px 0 #8f6806, 0 6px 12px rgba(0, 0, 0, 0.5), 0 0 18px rgba(244, 205, 92, 0.35);
+  }
+  [data-theme="light"] .somos-gold { color: #d9a52a; }
+  @keyframes somos-in {
+    from { opacity: 0; transform: translate3d(0, 18px, -160px) rotateX(-80deg); }
+  }
+  @keyframes somos-wave {
+    0% { transform: rotateX(0deg); }
+    12% { transform: rotateX(360deg); }
+    100% { transform: rotateX(360deg); }
   }
 
   /* Toque: encolhe de leve ao pressionar */
@@ -470,12 +582,40 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-  }
+/* Troca de elementos (lib/transition.ts): itens da lista deslizam até a nova posição,
+   os que saem desbotam e os que chegam aparecem. A tela em volta só cruza rápido. */
+.vt-item {
+  view-transition-name: match-element;
+  view-transition-class: item;
+}
+::view-transition-group(*.item) {
+  animation-duration: 0.36s;
+  animation-timing-function: cubic-bezier(0.2, 1, 0.3, 1);
+}
+::view-transition-old(*.item):only-child {
+  animation: vt-out 0.2s ease both;
+}
+::view-transition-new(*.item):only-child {
+  animation: vt-in 0.32s cubic-bezier(0.2, 1, 0.3, 1) 0.06s both;
+}
+:root[data-vt="list"]::view-transition-group(root) {
+  animation-duration: 0.18s;
+}
+@keyframes vt-out {
+  to { opacity: 0; transform: scale(0.97); }
+}
+@keyframes vt-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+}
+
+/* Animações reduzidas: só quando escolhidas em Configurações (data-motion, em stores/ui.ts).
+   O aviso do sistema (prefers-reduced-motion) NÃO desliga nada: no Windows ele vem ligado só por
+   "Efeitos de animação" desligado, e aí a Central inteira ficava sem nenhuma animação. */
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-delay: 0s !important;
+  transition-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
 }

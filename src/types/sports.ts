@@ -1,82 +1,78 @@
 import type { Audience, DateOnly, HistoryEntry, ID, ISODateTime, TimeOnly } from "./common";
 
-/** Modalidades com quadra desenhada (a quadra 3D sabe montar cada uma). */
-export type SportModality = "futsal" | "volei" | "basquete" | "handebol";
+/** Naipe da modalidade. */
+export type SportCategory = "feminino" | "masculino" | "misto";
 
-export type TeamCategory = "masculino" | "feminino" | "misto";
+export type TeamStatus = "active" | "paused" | "archived";
 
-export type TeamStatus = "active" | "archived";
+/** Horário fixo de treino na semana (0 = domingo … 6 = sábado). */
+export interface TrainingSlot {
+  id: ID;
+  weekday: number;
+  start: TimeOnly;
+  end?: TimeOnly;
+  location: string;
+}
 
-export interface TeamAthlete {
+/** Integrante do elenco. Só nome e dados de jogo: nada de contato ou documento. */
+export interface Athlete {
   id: ID;
   name: string;
-  /** Integrante da Central (opcional: a maioria dos atletas não faz parte da diretoria). */
-  memberId?: ID;
-  number: number;
-  /** Chave da posição em SPORT_RULES[modalidade].positions. */
-  position: string;
-  course?: string;
-  active: boolean;
+  /** Número da camisa. */
+  number?: string;
+  position?: string;
+  captain?: boolean;
 }
 
-/**
- * Posição de um titular na quadra, em metros, a partir do centro.
- * x = comprimento (negativo = nossa defesa), z = largura.
- */
-export interface LineupSlot {
-  athleteId: ID;
-  x: number;
-  z: number;
-}
+export type MatchStatus = "scheduled" | "played" | "cancelled";
 
-export interface TeamLineup {
-  formation: string;
-  slots: LineupSlot[];
-  updatedAt?: ISODateTime;
-  updatedBy?: ID;
-}
-
-export type SessionKind = "treino" | "amistoso" | "campeonato";
-
-export type SessionStatus = "scheduled" | "done" | "cancelled";
-
-export interface SportSession {
+export interface Match {
   id: ID;
-  kind: SessionKind;
   date: DateOnly;
-  time: TimeOnly;
+  time?: TimeOnly;
+  opponent: string;
   location: string;
-  /** Adversário (amistoso e campeonato). */
-  opponent?: string;
-  /** Nome da competição (campeonato). */
-  competition?: string;
-  /** Placar final (só jogos realizados). */
-  score?: { us: number; them: number };
-  status: SessionStatus;
+  /** Competição da modalidade em que o jogo acontece (opcional). */
+  competitionId?: ID;
+  scoreFor?: number;
+  scoreAgainst?: number;
+  status: MatchStatus;
   notes?: string;
-  createdBy: ID;
-  createdAt: ISODateTime;
-  updatedAt: ISODateTime;
 }
 
+export type CompetitionStatus = "upcoming" | "ongoing" | "finished";
+
+export interface Competition {
+  id: ID;
+  name: string;
+  startDate: DateOnly;
+  endDate?: DateOnly;
+  location: string;
+  /** Resultado final (ex.: "Campeã", "3º lugar"). */
+  placement?: string;
+  status: CompetitionStatus;
+  notes?: string;
+}
+
+/** Modalidade esportiva da Atlética (ex.: Futsal Feminino). */
 export interface SportTeam {
   id: ID;
   code: string;
   name: string;
-  modality: SportModality;
-  category: TeamCategory;
-  /** Cor do uniforme (hex). */
-  color: string;
-  departmentId: ID;
-  /** Técnicos e responsáveis (integrantes): veem e editam o time. */
-  coachIds: ID[];
-  access: Audience;
+  /** Esporte (ex.: Futsal, Vôlei, Handebol). */
+  sport: string;
+  category: SportCategory;
+  description: string;
+  /** Técnico(a) ou treinador(a); pode ser alguém de fora da Central. */
+  coach?: string;
+  /** Integrante da Central que coordena a modalidade. */
+  responsibleId: ID;
   status: TeamStatus;
-  athletes: TeamAthlete[];
-  lineup: TeamLineup;
-  /** Treinos e jogos ficam no próprio time (limite em SPORT_LIMITS). */
-  sessions: SportSession[];
-  notes?: string;
+  trainings: TrainingSlot[];
+  athletes: Athlete[];
+  matches: Match[];
+  competitions: Competition[];
+  access: Audience;
   createdBy: ID;
   createdAt: ISODateTime;
   updatedAt: ISODateTime;

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { MinusCircle, Paperclip, PlusCircle, Receipt } from "lucide-react";
+import { FileSpreadsheet, MinusCircle, Paperclip, PlusCircle, Receipt } from "lucide-react";
 import type { EntryStatus, EntryType, FinanceEntry } from "@/types";
 import { useAccess } from "@/hooks/use-access";
 import { useDirectory, useFinanceCategories, useFinanceEntries } from "@/hooks/use-data";
@@ -20,6 +20,7 @@ import { StatusBadge } from "@/components/shared/badges";
 import { FinanceNav } from "@/features/finance/finance-nav";
 import { EntryFormDialog } from "@/features/finance/entry-form-dialog";
 import { EntrySheet } from "@/features/finance/entry-sheet";
+import { StatementImportDialog } from "@/features/finance/statement-import-dialog";
 import { summarizeFinance } from "@/features/finance/utils";
 
 export default function EntriesPage() {
@@ -35,6 +36,7 @@ export default function EntriesPage() {
   const [status, setStatus] = useState<"" | EntryStatus>("");
   const [category, setCategory] = useState("");
   const [query, setQuery] = useState("");
+  const [importing, setImporting] = useState(false);
 
   const selectedId = params.get("id");
   const newType = params.get("novo") as EntryType | null;
@@ -106,6 +108,9 @@ export default function EntriesPage() {
         actions={
           access.can("finance.register") && (
             <>
+              <Button variant="ghost" onClick={() => setImporting(true)}>
+                <FileSpreadsheet /> Importar extrato
+              </Button>
               <Button onClick={() => setParam("novo", "expense")}>
                 <MinusCircle /> Nova despesa
               </Button>
@@ -191,6 +196,7 @@ export default function EntriesPage() {
           />
         )}
       </section>
+      {access.can("finance.register") && <StatementImportDialog open={importing} onOpenChange={setImporting} entries={data ?? []} />}
       <EntrySheet entry={selected} onOpenChange={(o) => !o && setParam("id", null)} />
       <EntryFormDialog
         open={!!newType && access.can("finance.register")}

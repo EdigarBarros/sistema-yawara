@@ -24,7 +24,7 @@ const SIZES: Record<ButtonSize, string> = {
 
 export function buttonClasses(variant: ButtonVariant = "secondary", size: ButtonSize = "md", className?: string) {
   return cn(
-    "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap font-semibold transition-colors select-none",
+    "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap font-semibold select-none transition-[color,background-color,border-color,box-shadow,transform] duration-300 ease-[var(--spring-bounce)] active:scale-95 active:duration-150 [@media(hover:hover)_and_(pointer:fine)]:hover:scale-[1.03] disabled:hover:scale-100",
     "disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50",
     "[&_svg]:size-4 [&_svg]:shrink-0",
     VARIANTS[variant],

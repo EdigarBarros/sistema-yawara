@@ -48,6 +48,6 @@ export function projectEditors(p: Pick<ExtensionProject, "createdBy" | "responsi
   return [...new Set([p.createdBy, p.responsibleId].filter(Boolean).map((id) => TOKEN.user(id as ID)))].sort();
 }
 
-export function teamReaders(t: Pick<SportTeam, "access" | "departmentId" | "createdBy" | "coachIds">) {
-  return readersFor([{ audience: t.access, fallbackDepartmentId: t.departmentId }], [t.createdBy, ...t.coachIds]);
+export function teamReaders(t: Pick<SportTeam, "access" | "createdBy" | "responsibleId">) {
+  return readersFor([{ audience: t.access }], [t.createdBy, t.responsibleId]);
 }

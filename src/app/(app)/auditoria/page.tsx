@@ -3,16 +3,18 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { AlertTriangle, RotateCcw, ScrollText, X } from "lucide-react";
+import { AlertTriangle, RotateCcw, ScrollText, Trash2, X } from "lucide-react";
 import type { AuditLogEntry, AuditOutcome, AuditQuery } from "@/types";
 import { services } from "@/services";
 import { useAccess } from "@/hooks/use-access";
+import { useAction } from "@/hooks/use-action";
 import { useDirectory } from "@/hooks/use-data";
 import { useSession } from "@/stores/session";
 import { MODULES } from "@/lib/modules";
 import { formatDateTime } from "@/lib/format";
 import { errorMessage } from "@/lib/notify";
 import { isDemoMode } from "@/lib/mode";
+import { isSupportRole } from "@/lib/support";
 import type { Tone } from "@/lib/labels";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/misc";
@@ -20,6 +22,7 @@ import { PageHeader } from "@/components/shared/page";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { FilterSelect, Toolbar } from "@/components/shared/filters";
 import { DemoNotice, EmptyState, ErrorState, RestrictedState } from "@/components/shared/states";
+import { confirmAction } from "@/components/shared/confirm";
 import { moduleLabel, resourceLabel } from "./audit-labels";
 
 /** Registros por página (cursor). */
@@ -164,6 +167,31 @@ export default function AuditPage() {
     retry: false,
   });
 
+  // Suporte do sistema: apaga registros (o servidor aceita até 100 por chamada).
+  const support = !isDemoMode && isSupportRole(access.role?.id);
+  const removeLogs = useAction(
+    async (ids: string[]) => {
+      for (let i = 0; i < ids.length; i += 100) await services.audit.remove(ids.slice(i, i + 100));
+      return ids.length;
+    },
+    { success: (n) => (n === 1 ? "Registro apagado" : `${n} registros apagados`) },
+  );
+  const confirmRemove = async (ids: string[]) => {
+    const ok = await confirmAction({
+      title: ids.length === 1 ? "Apagar este registro da auditoria?" : `Apagar os ${ids.length} registros carregados?`,
+      description: "Não dá para desfazer. Fica um registro dizendo quantos foram apagados e por quem.",
+      confirmLabel: "Apagar",
+      tone: "danger",
+    });
+    if (ok) await removeLogs.runSafe(ids);
+  };
+  const deleteButton = (e: AuditLogEntry) =>
+    support && (
+      <Button size="icon-sm" variant="ghost" aria-label="Apagar registro" disabled={removeLogs.pending} onClick={() => void confirmRemove([e.id])}>
+        <Trash2 />
+      </Button>
+    );
+
   if (!allowed) {
     return (
       <RestrictedState
@@ -231,6 +259,7 @@ export default function AuditPage() {
     { key: "resource", header: "Registro", hideBelow: "xl", cell: resourceCell },
     { key: "summary", header: "Resumo", cell: (e) => <span className="line-clamp-2 max-w-[420px] text-[13px] text-fg-muted">{e.summary}</span> },
     { key: "outcome", header: "Resultado", cell: outcomeBadge },
+    ...(support ? [{ key: "delete", header: "", align: "right" as const, cell: deleteButton }] : []),
   ];
 
   const memberOptions = [...dir.members].sort((a, b) => a.name.localeCompare(b.name, "pt-BR")).map((m) => ({ value: m.id, label: m.name }));
@@ -243,12 +272,21 @@ export default function AuditPage() {
         description={
           isDemoMode
             ? "Histórico das operações importantes: quem fez, quando, em qual módulo e com qual resultado."
-            : "Registro oficial das operações importantes, gravado pelo servidor com autor verificado e horário do servidor. Não pode ser alterado nem apagado pela Central."
+            : support
+              ? "Registro oficial das operações importantes, gravado pelo servidor com autor verificado e horário do servidor. Como suporte, você pode apagar registros."
+              : "Registro oficial das operações importantes, gravado pelo servidor com autor verificado e horário do servidor. Não pode ser alterado nem apagado pela Central."
         }
         actions={
-          <Button variant="secondary" loading={audit.isRefetching && !audit.isFetchingNextPage} onClick={() => void audit.refetch()}>
-            <RotateCcw /> Atualizar
-          </Button>
+          <>
+            {support && rows.length > 0 && (
+              <Button variant="danger" loading={removeLogs.pending} onClick={() => void confirmRemove(rows.map((e) => e.id))}>
+                <Trash2 /> Apagar lista carregada
+              </Button>
+            )}
+            <Button variant="secondary" loading={audit.isRefetching && !audit.isFetchingNextPage} onClick={() => void audit.refetch()}>
+              <RotateCcw /> Atualizar
+            </Button>
+          </>
         }
       />
 
@@ -309,6 +347,7 @@ export default function AuditPage() {
                     {formatDateTime(e.at)} · {authorName(e)} · {moduleLabel(e.module)}
                   </p>
                   <p className="line-clamp-2 text-[12.5px] text-fg-muted">{e.summary}</p>
+                  {support && <div className="flex justify-end">{deleteButton(e)}</div>}
                 </div>
               )}
               empty={

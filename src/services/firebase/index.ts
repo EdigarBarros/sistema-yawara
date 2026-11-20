@@ -9,6 +9,7 @@ import { firebaseCampaigns } from "./campaigns";
 import { firebaseDocuments } from "./documents";
 import { firebaseEvents } from "./events";
 import { firebaseExtension } from "./extension";
+import { firebaseSports } from "./sports";
 import { firebaseFiles } from "./files";
 import { firebaseFinance } from "./finance";
 import { firebaseMarketing } from "./marketing";
@@ -17,19 +18,18 @@ import { firebaseNotifications } from "./notifications";
 import { firebaseOrganization } from "./organization";
 import { firebaseSearch } from "./search";
 import { firebaseSettings } from "./settings";
-import { firebaseSports } from "./sports";
 
 export const firebaseServices: Services = {
   auth: firebaseAuth,
   organization: firebaseOrganization,
   campaigns: firebaseCampaigns,
   events: firebaseEvents,
-  sports: firebaseSports,
   documents: firebaseDocuments,
   meetings: firebaseMeetings,
   finance: firebaseFinance,
   marketing: firebaseMarketing,
   extension: firebaseExtension,
+  sports: firebaseSports,
   settings: firebaseSettings,
   notifications: firebaseNotifications,
   search: firebaseSearch,

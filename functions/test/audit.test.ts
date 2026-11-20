@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Audience } from "@/types";
 import { auditActions } from "../src/modules/audit";
+import { SUPPORT_ROLE_ID, supportRoleDefinition } from "@/lib/support";
 import { auditFor, caller, createMember, db, expectCode, resetEmulators, seedPeople, seedStructure } from "./helpers";
 
 const system = caller("system", auditActions);
@@ -137,5 +138,23 @@ describe("recordExport: registro de exportações na auditoria", () => {
     await expectCode(system("recordExport", "sec", { ...base, personalData: "sim" }), "invalid");
     await expectCode(system("recordExport", undefined, base), "unauthenticated");
     expect(await exportsOf("reu1")).toHaveLength(0);
+  });
+});
+
+describe("deleteAuditLogs: apagar registros (Suporte do sistema)", () => {
+  it("só o suporte apaga; fica um registro de quantos foram apagados", async () => {
+    await db.doc(`roles/${SUPPORT_ROLE_ID}`).set({ ...supportRoleDefinition(), createdAt: NOW, updatedAt: NOW });
+    await createMember("sup", "Suporte Teste", SUPPORT_ROLE_ID);
+    const a = await db.collection("auditLogs").add({ at: NOW, action: "x.test", module: "audit", resourceId: "r1", summary: "teste" });
+    const b = await db.collection("auditLogs").add({ at: NOW, action: "x.test", module: "audit", resourceId: "r1", summary: "teste" });
+
+    await expectCode(system("deleteAuditLogs", "pres", { ids: [a.id] }), "forbidden");
+    await expectCode(system("deleteAuditLogs", "sup", { ids: [] }), "invalid");
+
+    await system("deleteAuditLogs", "sup", { ids: [a.id, b.id] });
+    expect((await a.get()).exists).toBe(false);
+    expect((await b.get()).exists).toBe(false);
+    const trail = await db.collection("auditLogs").where("action", "==", "audit.deleteLogs").get();
+    expect(trail.docs.map((d) => d.data())).toEqual([expect.objectContaining({ actorId: "sup", details: { count: 2 } })]);
   });
 });

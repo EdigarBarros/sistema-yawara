@@ -1,15 +1,16 @@
 /**
  * Esportes (Firebase).
  *
- * Leituras: Firestore com as regras de segurança (`sportTeams/{id}` filtrado
- * por `readers`, ou tudo para quem tem sports.admin). Elenco, escalação,
- * treinos e jogos vêm no próprio documento do time.
- * Escritas: função `sportsApi` — o servidor confere permissões, elenco,
- * escalação e placares, grava histórico e auditoria e recalcula o público.
+ * Leituras: Firestore com as regras de segurança — `sportsTeams/{id}`
+ * filtrado por `readers` (ou tudo para quem tem sports.admin), com treinos,
+ * elenco, jogos e competições no próprio documento.
+ * Escritas: função chamável `sportsApi` — o servidor confere permissões e
+ * responsável, grava histórico, auditoria e índice de busca, e devolve a
+ * modalidade já filtrada para quem chamou.
  */
 import { doc, getDoc } from "firebase/firestore";
 import type { SportTeam } from "@/types";
-import type { SportsService, TeamInput } from "../contracts";
+import type { TeamInput, SportsService } from "../contracts";
 import { ServiceError } from "../errors";
 import { firebase } from "./app";
 import { callApi, takeRequestId } from "./call";
@@ -17,10 +18,21 @@ import { mapFirestoreError } from "./convert";
 import { getVisible, listVisible } from "./queries";
 import { whenAccess } from "./session";
 
-const TEAM_KEYS = ["name", "modality", "category", "color", "departmentId", "coachIds", "access", "notes"] as const;
-const AUDIENCE_KEYS = ["scope", "departmentId", "roleIds", "userIds"] as const;
+type TeamData = SportTeam & { readers?: string[] };
 
-/** Só os campos do contrato; `undefined` vai como `null` (= limpar o campo opcional). */
+const TEAM_KEYS = ["name", "sport", "category", "description", "coach", "responsibleId", "access"] as const;
+const AUDIENCE_KEYS = ["scope", "departmentId", "roleIds", "userIds"] as const;
+const TRAINING_KEYS = ["id", "weekday", "start", "end", "location"] as const;
+const ATHLETE_KEYS = ["id", "name", "number", "position", "captain"] as const;
+const MATCH_KEYS = ["id", "date", "time", "opponent", "location", "competitionId", "scoreFor", "scoreAgainst", "status", "notes"] as const;
+const COMPETITION_KEYS = ["id", "name", "startDate", "endDate", "location", "placement", "status", "notes"] as const;
+
+const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+
+/**
+ * Envia só os campos do contrato. Campo presente com `undefined` vai como
+ * `null` (= limpar o campo opcional); campo ausente não é alterado.
+ */
 function pick(input: object, keys: readonly string[]): Record<string, unknown> {
   const source = input as Record<string, unknown>;
   const out: Record<string, unknown> = {};
@@ -34,17 +46,13 @@ function teamPayload(input: Partial<TeamInput>) {
   return payload;
 }
 
-function normalize(t: SportTeam): SportTeam {
-  return {
-    ...t,
-    coachIds: t.coachIds ?? [],
-    athletes: t.athletes ?? [],
-    lineup: t.lineup ?? { formation: "", slots: [] },
-    sessions: t.sessions ?? [],
-    history: t.history ?? [],
-  };
+function normalize(t: TeamData): SportTeam {
+  const { readers: _r, ...team } = t;
+  void _r;
+  return { ...team, trainings: t.trainings ?? [], athletes: t.athletes ?? [], matches: t.matches ?? [], competitions: t.competitions ?? [], history: t.history ?? [] };
 }
 
+/** Mesmo comportamento do modo demonstração: módulo desativado não é consultado. */
 async function requireModuleEnabled() {
   await whenAccess();
   let disabled = false;
@@ -57,45 +65,59 @@ async function requireModuleEnabled() {
   if (disabled) throw new ServiceError("unavailable", "Este módulo está desativado nas configurações.");
 }
 
-const call = async (action: string, payload: unknown) => normalize(await callApi<SportTeam>("sports", action, payload, takeRequestId()));
+function team(action: string, payload: unknown, rid: string) {
+  return callApi<TeamData>("sports", action, payload, rid).then(normalize);
+}
 
 export const firebaseSports: SportsService = {
   async list() {
-    const [, items] = await Promise.all([requireModuleEnabled(), listVisible<SportTeam>("sportTeams", "sports")]);
+    const [, items] = await Promise.all([requireModuleEnabled(), listVisible<TeamData>("sportsTeams", "sports")]);
     return items.map(normalize);
   },
 
   async get(id) {
-    if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new ServiceError("not_found", "Time não encontrado.");
-    const [, team] = await Promise.all([requireModuleEnabled(), getVisible<SportTeam>(`sportTeams/${id}`, "Time")]);
-    return normalize(team);
+    if (!ID_PATTERN.test(id)) throw new ServiceError("not_found", "Modalidade não encontrada.");
+    const [, data] = await Promise.all([requireModuleEnabled(), getVisible<TeamData>(`sportsTeams/${id}`, "Modalidade")]);
+    return normalize(data);
   },
 
-  create: (input) => call("create", teamPayload(input)),
-  update: (id, input) => call("update", { id, input: teamPayload(input) }),
-  setStatus: (id, status) => call("setStatus", { id, status }),
-  saveAthlete: (teamId, input, athleteId) =>
-    call("saveAthlete", {
-      teamId,
-      athleteId: athleteId ?? null,
-      input: { name: input.name, number: input.number, position: input.position, course: input.course ?? null, memberId: input.memberId ?? null, active: input.active },
-    }),
-  removeAthlete: (teamId, athleteId) => call("removeAthlete", { teamId, athleteId }),
-  saveLineup: (teamId, lineup) => call("saveLineup", { teamId, formation: lineup.formation, slots: lineup.slots.map((s) => ({ athleteId: s.athleteId, x: s.x, z: s.z })) }),
-  saveSession: (teamId, input, sessionId) =>
-    call("saveSession", {
-      teamId,
-      sessionId: sessionId ?? null,
-      input: {
-        kind: input.kind,
-        date: input.date,
-        time: input.time,
-        location: input.location,
-        opponent: input.opponent ?? null,
-        competition: input.competition ?? null,
-        status: input.status,
-        score: input.score ?? null,
-        notes: input.notes ?? null,
-      },
-    }),
+  async create(input) {
+    const rid = takeRequestId();
+    return team("create", teamPayload(input), rid);
+  },
+
+  async update(id, input) {
+    const rid = takeRequestId();
+    return team("update", { id, input: teamPayload(input) }, rid);
+  },
+
+  async setStatus(id, status) {
+    const rid = takeRequestId();
+    return team("setStatus", { id, status }, rid);
+  },
+
+  async saveTraining(id, item) {
+    const rid = takeRequestId();
+    return team("saveTraining", { id, item: pick(item, TRAINING_KEYS) }, rid);
+  },
+
+  async saveAthlete(id, item) {
+    const rid = takeRequestId();
+    return team("saveAthlete", { id, item: pick(item, ATHLETE_KEYS) }, rid);
+  },
+
+  async saveMatch(id, item) {
+    const rid = takeRequestId();
+    return team("saveMatch", { id, item: pick(item, MATCH_KEYS) }, rid);
+  },
+
+  async saveCompetition(id, item) {
+    const rid = takeRequestId();
+    return team("saveCompetition", { id, item: pick(item, COMPETITION_KEYS) }, rid);
+  },
+
+  async removeItem(id, list, itemId) {
+    const rid = takeRequestId();
+    return team("removeItem", { id, list, itemId }, rid);
+  },
 };

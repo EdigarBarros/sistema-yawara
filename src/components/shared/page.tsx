@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CountUp } from "./count-up";
 
 /** Cabeçalho padrão de todas as páginas. */
 export function PageHeader({
@@ -107,7 +108,9 @@ export function Stat({
     <div className={cn("rounded-xl border border-line bg-surface px-4 py-4 sm:px-5", className)}>
       <div className="eyebrow">{label}</div>
       <div className="mt-3 mb-2.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <strong className="tnum font-mono text-[20px] leading-none font-semibold whitespace-nowrap tracking-[-0.02em] min-[400px]:text-[22px] sm:text-[28px]">{value}</strong>
+        <strong className="tnum font-mono text-[20px] leading-none font-semibold whitespace-nowrap tracking-[-0.02em] min-[400px]:text-[22px] sm:text-[28px]">
+          <CountUp value={value} />
+        </strong>
         {suffix && <span className="font-mono text-[13px] text-fg-subtle">{suffix}</span>}
       </div>
       {children}

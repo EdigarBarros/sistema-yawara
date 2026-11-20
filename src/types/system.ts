@@ -50,7 +50,8 @@ export type SearchResultKind =
   | "meeting"
   | "finance"
   | "project"
-  | "content";
+  | "content"
+  | "team";
 
 export interface SearchResult {
   id: ID;

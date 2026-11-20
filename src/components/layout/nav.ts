@@ -1,18 +1,4 @@
-import {
-  CalendarDays,
-  ClipboardList,
-  FolderOpen,
-  GraduationCap,
-  House,
-  Megaphone,
-  ScrollText,
-  Settings,
-  Ticket,
-  Trophy,
-  Users,
-  Wallet,
-  type LucideIcon,
-} from "lucide-react";
+import { CalendarDays, ClipboardList, FolderOpen, GraduationCap, House, Megaphone, ScrollText, Settings, Ticket, Trophy, Users, Wallet, type LucideIcon } from "lucide-react";
 import type { ModuleKey } from "@/types";
 
 export interface NavItem {
@@ -36,9 +22,9 @@ export const NAV: NavGroup[] = [
     items: [
       { label: "Campanhas e vendas", href: "/campanhas", icon: Ticket, module: "campaigns" },
       { label: "Eventos e projetos", href: "/eventos", icon: CalendarDays, module: "events" },
-      { label: "Esportes", href: "/esportes", icon: Trophy, module: "sports" },
       { label: "Financeiro", href: "/financeiro", icon: Wallet, module: "finance" },
       { label: "Marketing", href: "/marketing", icon: Megaphone, module: "marketing" },
+      { label: "Esportes", href: "/esportes", icon: Trophy, module: "sports" },
     ],
   },
   {
@@ -63,12 +49,12 @@ export const NAV: NavGroup[] = [
 export const AREA_COLORS: Record<string, string> = {
   "/campanhas": "#e1af37",
   "/eventos": "#f2a93b",
-  "/esportes": "#3fcf8e",
   "/financeiro": "#5b86d9",
   "/marketing": "#e88ab5",
   "/documentos": "#3fcf8e",
   "/secretaria": "#8fb0ec",
   "/extensao": "#7fd9b0",
+  "/esportes": "#f07a5a",
   "/diretoria": "#b6a9ff",
   "/configuracoes": "#c5cde6",
   "/auditoria": "#e9b4cf",
@@ -84,7 +70,6 @@ export const ROUTE_LABELS: Record<string, string> = {
   campanhas: "Campanhas e vendas",
   nova: "Nova rifa",
   eventos: "Eventos e projetos",
-  esportes: "Esportes",
   novo: "Novo",
   documentos: "Documentos",
   secretaria: "Secretaria e reuniões",
@@ -95,6 +80,7 @@ export const ROUTE_LABELS: Record<string, string> = {
   relatorios: "Relatórios",
   marketing: "Marketing",
   extensao: "Ensino e Extensão",
+  esportes: "Esportes",
   diretoria: "Diretoria e organização",
   cargos: "Cargos",
   configuracoes: "Configurações",

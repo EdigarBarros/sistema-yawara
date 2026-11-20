@@ -31,7 +31,6 @@ import {
   meetingDoc,
   numberLocks,
   projectDocs,
-  sportTeamDoc,
   saleBuyerDoc,
   salePublicDoc,
 } from "../src/lib/firestore-model";
@@ -121,9 +120,6 @@ export async function seedEmulator({ quiet = false } = {}) {
   for (const c of data.contents) {
     put(`contents/${c.id}`, contentDoc(c));
     index(searchEntryFor.content(c));
-  }
-  for (const t of data.teams) {
-    put(`sportTeams/${t.id}`, sportTeamDoc(t));
   }
   for (const p of data.projects) {
     const { project, attendance } = projectDocs(p);

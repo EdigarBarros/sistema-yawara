@@ -18,7 +18,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useAccess } from "@/hooks/use-access";
-import { useAllSales, useCampaigns, useContents, useEvents, useFinanceEntries, useMeetings, useProjects, useTeams } from "@/hooks/use-data";
+import { useAllSales, useCampaigns, useContents, useEvents, useFinanceEntries, useMeetings, useProjects, useSportsTeams } from "@/hooks/use-data";
 import { byMonth } from "@/features/finance/utils";
 import { firstName, formatLongDate, formatMoney, formatShortMonth, greeting, parseDateOnly, todayDateOnly, daysBetween } from "@/lib/format";
 import { isDemoMode } from "@/lib/mode";
@@ -27,6 +27,7 @@ import { AREA_COLORS } from "@/components/layout/nav";
 import { ColumnChart } from "@/components/shared/column-chart";
 import { useAgenda } from "@/features/agenda/use-agenda";
 import { AGENDA_KINDS } from "@/features/agenda/agenda";
+import { CountUp } from "@/components/shared/count-up";
 import { Calendar3D } from "@/features/agenda/calendar-3d";
 import { HEALTH_LABELS, eventsArea, extensionArea, financeArea, marketingArea, meetingsArea, rafflesArea, sportsArea, type AreaKey, type AreaStatus, type Health } from "./panorama-rules";
 import { PendingSection, RaffleTile, Tile, useActionTiles } from "./presidency-mobile";
@@ -101,7 +102,9 @@ function AreaCard({ area, index }: { area: AreaStatus; index: number }) {
         </span>
       </span>
       <span className="mt-4 block">
-        <span className="block font-display text-[32px] leading-none font-extrabold tnum">{area.headline}</span>
+        <span className="block font-display text-[32px] leading-none font-extrabold tnum">
+          <CountUp value={area.headline} />
+        </span>
         <span className="mt-1 block truncate text-[13px] text-fg-muted">{area.caption}</span>
       </span>
       <span className="mt-auto flex items-end justify-between gap-3 pt-3">
@@ -145,7 +148,7 @@ function Panorama() {
   const contents = useContents(has("marketing"));
   const meetings = useMeetings(has("meetings"));
   const projects = useProjects(has("extension"));
-  const teams = useTeams(has("sports"));
+  const teams = useSportsTeams(has("sports"));
 
   const cards: (AreaStatus | { title: string; message: string })[] = [];
   if (has("campaigns")) cards.push(areaFrom("Rifas", [campaigns, sales], (c, s) => rafflesArea(today, c, s)));
@@ -354,7 +357,7 @@ export function PresidencyDesktopHome({ actions }: { actions?: React.ReactNode }
 
       <section aria-labelledby="o-que-fazer">
         <SectionTitle id="o-que-fazer">O que você quer fazer?</SectionTitle>
-        <div className="grid grid-cols-2 gap-4 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-[repeat(var(--cols),minmax(0,1fr))]" style={{ "--cols": tiles.length + (hasRaffle ? 2 : 0) } as React.CSSProperties}>
           {hasRaffle && <RaffleTile className="col-span-2 min-h-[180px]" />}
           {tiles.map((t, i) => (
             <Tile key={t.href} {...t} index={i} />

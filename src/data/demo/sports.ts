@@ -1,137 +1,97 @@
-import type { SessionKind, SessionStatus, SportModality, SportSession, SportTeam, TeamAthlete } from "@/types";
-import { SPORT_RULES } from "@/lib/sports";
+import type { Athlete, SportTeam } from "@/types";
 import { audience, h, type Clock } from "./helpers";
-import { DEP, USR } from "./organization";
+import { USR } from "./organization";
 
-export const TEAM = {
-  futsal: "tim-futsal-masc",
-  volei: "tim-volei-fem",
-  basquete: "tim-basquete-misto",
-} as const;
-
-/** Atletas fictícios: [nome, número, posição]. */
-type Row = [string, number, string];
-
-function athletes(prefix: string, rows: Row[], course = "Psicologia"): TeamAthlete[] {
-  return rows.map(([name, number, position], i) => ({ id: `${prefix}-a${i + 1}`, name, number, position, course, active: true }));
+/** Elenco fictício: "Atleta Demo 01"… (nenhum nome real). */
+function roster(prefix: string, positions: string[], captainIndex = 0): Athlete[] {
+  return positions.map((position, i) => ({
+    id: `${prefix}-ath-${i + 1}`,
+    name: `Atleta Demo ${String(i + 1).padStart(2, "0")}`,
+    number: String(i + 1 === 1 ? 1 : i * 2 + 3),
+    position,
+    captain: i === captainIndex || undefined,
+  }));
 }
 
-/** Escala os primeiros atletas na formação indicada. */
-function lineupFor(modality: SportModality, formation: string, roster: TeamAthlete[], clock: Clock) {
-  const f = SPORT_RULES[modality].formations.find((x) => x.key === formation)!;
-  return {
-    formation,
-    slots: f.spots.map((spot, i) => ({ athleteId: roster[i].id, x: spot.x, z: spot.z })),
-    updatedAt: clock.at(-2, 21, 10),
-    updatedBy: USR.gabriel,
-  };
-}
-
-let seq = 0;
-function session(
-  clock: Clock,
-  kind: SessionKind,
-  days: number,
-  time: string,
-  location: string,
-  status: SessionStatus,
-  extra: Partial<SportSession> = {},
-): SportSession {
-  const at = clock.at(Math.min(days, 0) - 3, 18, 0);
-  return { id: `ses-seed-${++seq}`, kind, date: clock.date(days), time, location, status, createdBy: USR.gabriel, createdAt: at, updatedAt: at, ...extra };
-}
-
-export function buildTeams(clock: Clock): SportTeam[] {
-  const futsal = athletes(TEAM.futsal, [
-    ["Rafael Nunes", 1, "goleiro"],
-    ["Diego Amaral", 4, "fixo"],
-    ["Matheus Lira", 7, "ala"],
-    ["Vitor Campos", 11, "ala"],
-    ["Igor Batista", 9, "pivo"],
-    ["Caíque Dantas", 12, "goleiro"],
-    ["André Fontes", 5, "fixo"],
-    ["Breno Sales", 8, "ala"],
-    ["Henrique Paiva", 10, "pivo"],
-    ["Samuel Rocha", 14, "ala"],
-  ]);
-  const volei = athletes(TEAM.volei, [
-    ["Larissa Menezes", 2, "levantador"],
-    ["Bianca Torres", 9, "ponteiro"],
-    ["Camila Freitas", 6, "central"],
-    ["Natália Rios", 11, "oposto"],
-    ["Jéssica Prado", 7, "ponteiro"],
-    ["Paula Antunes", 5, "libero"],
-    ["Amanda Lopes", 3, "central"],
-    ["Fernanda Reis", 10, "levantador"],
-    ["Yasmin Duarte", 12, "ponteiro"],
-  ]);
-  const basquete = athletes(TEAM.basquete, [
-    ["Thiago Moura", 4, "armador"],
-    ["Beatriz Lemos", 7, "ala-armador"],
-    ["Rodrigo Vale", 10, "ala"],
-    ["Clara Bastos", 13, "ala-pivo"],
-    ["Eduardo Sena", 15, "pivo"],
-    ["Mariana Castro", 8, "ala"],
-    ["Felipe Moraes", 21, "armador"],
-  ]);
-
-  const base = (id: string, code: string, created: number) => ({
-    id,
-    code,
-    departmentId: DEP.esportes,
-    coachIds: [USR.gabriel],
-    access: audience.all(),
-    status: "active" as const,
-    createdBy: USR.gabriel,
-    createdAt: clock.at(created, 19, 0),
-    updatedAt: clock.at(-2, 21, 10),
-    history: [h(clock.at(created, 19, 0), USR.gabriel, "created", "Time criado"), h(clock.at(-2, 21, 10), USR.gabriel, "updated", "Escalação salva")],
-  });
-
+export function buildSportsTeams(clock: Clock): SportTeam[] {
   return [
     {
-      ...base(TEAM.futsal, "TIM-2026-001", -120),
-      name: "Futsal Masculino",
-      modality: "futsal",
-      category: "masculino",
-      color: "#e1af37",
-      athletes: futsal,
-      lineup: lineupFor("futsal", "1-2-1", futsal, clock),
-      notes: "Treinos às terças e quintas. Prioridade: Jogos Interatléticas.",
-      sessions: [
-        session(clock, "treino", -12, "19:00", "Quadra do campus", "done"),
-        session(clock, "amistoso", -9, "15:00", "Quadra do campus", "done", { opponent: "Atlética de Direito", score: { us: 4, them: 2 } }),
-        session(clock, "treino", -5, "19:00", "Quadra do campus", "done"),
-        session(clock, "amistoso", -2, "16:00", "Ginásio municipal", "done", { opponent: "Atlética de Medicina", score: { us: 3, them: 3 } }),
-        session(clock, "treino", 2, "19:00", "Quadra do campus", "scheduled"),
-        session(clock, "treino", 4, "19:00", "Quadra do campus", "scheduled"),
-        session(clock, "campeonato", 30, "10:00", "Ginásio (local de demonstração)", "scheduled", { opponent: "Atlética de Engenharia", competition: "Jogos Interatléticas" }),
-      ],
-    },
-    {
-      ...base(TEAM.volei, "TIM-2026-002", -100),
-      name: "Vôlei Feminino",
-      modality: "volei",
+      id: "esp-futsal-fem",
+      code: "ESP-2026-001",
+      name: "Futsal Feminino",
+      sport: "Futsal",
       category: "feminino",
-      color: "#134cb6",
-      athletes: volei,
-      lineup: lineupFor("volei", "5-1", volei, clock),
-      sessions: [
-        session(clock, "treino", -6, "18:30", "Ginásio poliesportivo", "done"),
-        session(clock, "campeonato", -3, "14:00", "Ginásio poliesportivo", "done", { opponent: "Atlética de Enfermagem", competition: "Copa Universitária", score: { us: 2, them: 1 } }),
-        session(clock, "treino", 1, "18:30", "Ginásio poliesportivo", "scheduled"),
-        session(clock, "amistoso", 6, "15:30", "Ginásio poliesportivo", "scheduled", { opponent: "Atlética de Nutrição" }),
+      description: "Time de futsal feminino da Yawara. Treinos abertos a todas as estudantes de Psicologia.",
+      coach: "Técnica convidada (exemplo)",
+      responsibleId: USR.gabriel,
+      status: "active",
+      trainings: [
+        { id: "trn-ff-1", weekday: 2, start: "19:00", end: "20:30", location: "Quadra do campus (local de demonstração)" },
+        { id: "trn-ff-2", weekday: 4, start: "19:00", end: "20:30", location: "Quadra do campus (local de demonstração)" },
+      ],
+      athletes: roster("ff", ["Goleira", "Fixo", "Ala", "Ala", "Pivô", "Ala", "Fixo", "Goleira"], 2),
+      competitions: [
+        { id: "cmp-ff-1", name: "Jogos Universitários da Saúde (exemplo)", startDate: clock.date(-60), endDate: clock.date(-57), location: "Ginásio municipal (exemplo)", placement: "3º lugar", status: "finished" },
+        { id: "cmp-ff-2", name: "Copa Intercursos 2026.2 (exemplo)", startDate: clock.date(9), endDate: clock.date(30), location: "Ginásio do campus (exemplo)", status: "upcoming" },
+      ],
+      matches: [
+        { id: "mch-ff-1", date: clock.date(-59), time: "15:00", opponent: "Atlética de Medicina (exemplo)", location: "Ginásio municipal (exemplo)", competitionId: "cmp-ff-1", scoreFor: 3, scoreAgainst: 1, status: "played" },
+        { id: "mch-ff-2", date: clock.date(-58), time: "10:00", opponent: "Atlética de Enfermagem (exemplo)", location: "Ginásio municipal (exemplo)", competitionId: "cmp-ff-1", scoreFor: 2, scoreAgainst: 2, status: "played" },
+        { id: "mch-ff-3", date: clock.date(-57), time: "16:00", opponent: "Atlética de Odontologia (exemplo)", location: "Ginásio municipal (exemplo)", competitionId: "cmp-ff-1", scoreFor: 1, scoreAgainst: 2, status: "played", notes: "Disputa de 3º lugar vencida no dia seguinte." },
+        { id: "mch-ff-4", date: clock.date(4), time: "20:00", opponent: "Atlética de Direito (exemplo)", location: "Quadra do campus (exemplo)", status: "scheduled", notes: "Amistoso de preparação." },
+        { id: "mch-ff-5", date: clock.date(10), time: "18:30", opponent: "Atlética de Fisioterapia (exemplo)", location: "Ginásio do campus (exemplo)", competitionId: "cmp-ff-2", status: "scheduled" },
+      ],
+      access: audience.all(),
+      createdBy: USR.gabriel,
+      createdAt: clock.at(-120, 10, 0),
+      updatedAt: clock.at(-2, 18, 0),
+      history: [
+        h(clock.at(-120, 10, 0), USR.gabriel, "created", "Modalidade criada"),
+        h(clock.at(-56, 9, 0), USR.gabriel, "updated", "Competição atualizado(a)"),
+        h(clock.at(-2, 18, 0), USR.gabriel, "updated", "Jogo adicionado(a)"),
       ],
     },
     {
-      ...base(TEAM.basquete, "TIM-2026-003", -40),
-      name: "Basquete Misto",
-      modality: "basquete",
+      id: "esp-volei-misto",
+      code: "ESP-2026-002",
+      name: "Vôlei Misto",
+      sport: "Vôlei",
       category: "misto",
-      color: "#3fcf8e",
-      athletes: basquete,
-      lineup: { formation: "", slots: [] },
-      sessions: [session(clock, "treino", 3, "20:00", "Quadra externa", "scheduled"), session(clock, "treino", -4, "20:00", "Quadra externa", "cancelled", { notes: "Chuva forte." })],
+      description: "Equipe mista de vôlei de quadra.",
+      coach: "Treinador voluntário (exemplo)",
+      responsibleId: USR.gabriel,
+      status: "active",
+      trainings: [{ id: "trn-vm-1", weekday: 6, start: "09:00", end: "11:00", location: "Ginásio do campus (local de demonstração)" }],
+      athletes: roster("vm", ["Levantador(a)", "Oposto(a)", "Ponteiro(a)", "Ponteiro(a)", "Central", "Central", "Líbero"], 0),
+      competitions: [{ id: "cmp-vm-1", name: "Copa Intercursos 2026.2 (exemplo)", startDate: clock.date(9), endDate: clock.date(30), location: "Ginásio do campus (exemplo)", status: "upcoming" }],
+      matches: [
+        { id: "mch-vm-1", date: clock.date(-12), time: "10:00", opponent: "Atlética de Engenharia (exemplo)", location: "Ginásio do campus (exemplo)", scoreFor: 3, scoreAgainst: 1, status: "played", notes: "Placar em sets." },
+        { id: "mch-vm-2", date: clock.date(12), time: "10:00", opponent: "Atlética de Arquitetura (exemplo)", location: "Ginásio do campus (exemplo)", competitionId: "cmp-vm-1", status: "scheduled" },
+      ],
+      access: audience.all(),
+      createdBy: USR.gabriel,
+      createdAt: clock.at(-90, 10, 0),
+      updatedAt: clock.at(-12, 12, 0),
+      history: [h(clock.at(-90, 10, 0), USR.gabriel, "created", "Modalidade criada")],
+    },
+    {
+      id: "esp-handebol-masc",
+      code: "ESP-2026-003",
+      name: "Handebol Masculino",
+      sport: "Handebol",
+      category: "masculino",
+      description: "Equipe em formação; treinos suspensos até fechar o elenco mínimo.",
+      responsibleId: USR.gabriel,
+      status: "paused",
+      trainings: [],
+      athletes: roster("hm", ["Goleiro", "Armador", "Ponta"], 1),
+      competitions: [],
+      matches: [],
+      access: audience.board(),
+      createdBy: USR.gabriel,
+      createdAt: clock.at(-40, 10, 0),
+      updatedAt: clock.at(-20, 10, 0),
+      history: [h(clock.at(-40, 10, 0), USR.gabriel, "created", "Modalidade criada"), h(clock.at(-20, 10, 0), USR.gabriel, "status", "Situação alterada para Pausada")],
     },
   ];
 }
