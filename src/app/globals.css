@@ -486,40 +486,40 @@
     45%, 100% { background-position: 0% 0; }
   }
 
-  /* Selo #SOMOSYAWARA */
-  .somos-badge {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 18px 10px 14px;
-    border-radius: 999px;
+  /* #SOMOSYAWARA: letras em 3D. Chegam do fundo e, a cada 6 s, uma onda dá um giro em cada letra. */
+  .somos {
+    display: inline-block;
+    perspective: 500px;
     font-family: var(--font-display);
-    font-size: 17px;
+    font-size: 16px;
     font-weight: 800;
-    letter-spacing: 0.24em;
+    letter-spacing: 0.3em;
     color: var(--fg);
-    border: 1px solid color-mix(in oklab, var(--gold) 55%, transparent);
-    background: linear-gradient(90deg, color-mix(in oklab, var(--gold) 18%, transparent), color-mix(in oklab, var(--gold) 4%, transparent));
-    box-shadow: 0 0 0 4px color-mix(in oklab, var(--gold) 7%, transparent), 0 12px 32px -12px color-mix(in oklab, var(--gold) 55%, transparent);
-    overflow: hidden;
+    white-space: nowrap;
   }
-  .somos-badge b { color: var(--gold); font-weight: 800; }
-  .somos-badge::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(100deg, transparent 30%, rgba(255, 240, 190, 0.35) 50%, transparent 70%);
-    transform: translateX(-120%);
-    animation: somos-sweep 4.5s ease-in-out 1.5s infinite;
+  @media (min-width: 640px) {
+    .somos { font-size: 19px; }
   }
-  @keyframes somos-sweep {
-    0% { transform: translateX(-120%); }
-    40%, 100% { transform: translateX(120%); }
+  .somos-ch {
+    display: inline-block;
+    transform-origin: 50% 50% -0.4em;
+    animation:
+      somos-in 0.8s cubic-bezier(0.2, 1.25, 0.35, 1) calc(0.6s + var(--i) * 45ms) both,
+      somos-wave 6s ease-in-out calc(2.4s + var(--i) * 70ms) infinite;
   }
-  .somos-claws { display: inline-flex; gap: 3px; transform: rotate(-18deg); }
-  .somos-claws i { display: block; width: 3px; height: 16px; border-radius: 3px; background: linear-gradient(180deg, var(--gold), transparent); }
-  .somos-claws i:nth-child(2) { height: 20px; margin-top: -4px; }
+  .somos-gold {
+    color: #f4cd5c;
+    text-shadow: 0 1px 0 #c9971f, 0 2px 0 #a5780a, 0 3px 0 #8f6806, 0 6px 12px rgba(0, 0, 0, 0.5), 0 0 18px rgba(244, 205, 92, 0.35);
+  }
+  [data-theme="light"] .somos-gold { color: #d9a52a; }
+  @keyframes somos-in {
+    from { opacity: 0; transform: translate3d(0, 18px, -160px) rotateX(-80deg); }
+  }
+  @keyframes somos-wave {
+    0% { transform: rotateX(0deg); }
+    12% { transform: rotateX(360deg); }
+    100% { transform: rotateX(360deg); }
+  }
 
   /* Toque: encolhe de leve ao pressionar */
   .press { transition: transform 0.18s cubic-bezier(0.2, 1.3, 0.4, 1), filter 0.18s ease, background-color 0.18s ease; }

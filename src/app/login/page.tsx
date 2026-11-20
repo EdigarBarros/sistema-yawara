@@ -19,7 +19,6 @@ import { Field, Input } from "@/components/ui/form";
 import { Avatar, Skeleton } from "@/components/ui/misc";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DemoNotice } from "@/components/shared/states";
-import { BrandEmblem } from "@/components/layout/brand";
 import { ShowcaseStage, ShowcaseSummary, useShowcase } from "@/features/login/showcase/showcase";
 import { Checkbox } from "@/components/ui/form";
 import { FormAlert } from "@/components/shared/form-alert";
@@ -253,6 +252,29 @@ function DemoProfiles({ onSelect }: { onSelect: (userId: string, label: string) 
   );
 }
 
+/** "#SOMOSYAWARA" com as letras em 3D: chegam do fundo e, de tempos em tempos, uma onda gira cada letra. */
+function SomosYawara() {
+  const word = (text: string, from: number, gold?: boolean) =>
+    Array.from(text).map((ch, i) => (
+      <span key={i} className={gold ? "somos-ch somos-gold" : "somos-ch"} style={{ "--i": from + i } as React.CSSProperties}>
+        {ch}
+      </span>
+    ));
+  return (
+    <div className="anim-rise mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[13px] text-fg-subtle lg:mt-1 lg:justify-start" style={{ animationDelay: "500ms" }}>
+      <span className="anim-grow hidden h-px w-16 bg-gradient-to-r from-gold to-transparent sm:block" />
+      <span className="somos" aria-label="#SOMOSYAWARA">
+        <span aria-hidden>
+          {word("#SOMOS", 0)}
+          {word("YAWARA", 6, true)}
+        </span>
+      </span>
+      <span aria-hidden>·</span>
+      <span>@atleticayawara</span>
+    </div>
+  );
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const { ready: hydrated, userId } = useSessionReady();
@@ -300,41 +322,26 @@ export default function LoginPage() {
 
       <div className="mx-auto grid min-h-dvh max-w-[1400px] grid-cols-[minmax(0,1fr)] items-center lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
         {/* Marca */}
-        <section className="flex flex-col items-center gap-6 px-6 pt-10 pb-6 text-center sm:px-10 lg:min-h-dvh lg:items-start lg:justify-between lg:px-16 lg:py-14 lg:text-left">
-          <div className="anim-rise hidden items-center gap-2.5 lg:flex">
-            <BrandEmblem size={28} priority />
-            <span className="text-[11.5px] font-semibold tracking-[0.28em] text-fg-muted">CENTRAL YAWARA</span>
-          </div>
-          <div className="flex max-w-[540px] flex-col items-center lg:items-start">
-            {/* Vitrine 3D: órbita por diretoria e uma cena por recurso (features/login/showcase) */}
-            <div className="mb-8 w-full max-w-[620px] lg:-ml-10 lg:mb-6">
-              <ShowcaseStage {...showcase} />
-            </div>
+        <section className="flex flex-col items-center px-6 pt-10 pb-6 text-center sm:px-10 lg:min-h-dvh lg:items-start lg:justify-center lg:px-16 lg:py-10 lg:text-left">
+          <div className="flex w-full max-w-[560px] flex-col items-center lg:items-start">
             <ShowcaseSummary />
-            <p className="eyebrow anim-rise !text-gold-fg" style={{ animationDelay: "120ms" }}>
+            <p className="eyebrow anim-rise !text-gold-fg" style={{ animationDelay: "60ms" }}>
               Sistema interno de gestão
             </p>
-            <h1 className="anim-rise mt-3 font-display text-[50px] leading-[0.98] font-extrabold tracking-[-0.015em] drop-shadow-[0_10px_30px_rgba(0,0,0,0.35)] sm:text-[78px]" style={{ animationDelay: "200ms" }}>
+            <h1 className="anim-rise mt-3 font-display text-[50px] leading-[0.98] font-extrabold tracking-[-0.015em] drop-shadow-[0_10px_30px_rgba(0,0,0,0.35)] sm:text-[78px]" style={{ animationDelay: "120ms" }}>
               Central <span className="title-shine">Yawara</span>
             </h1>
-            <p className="anim-rise mt-2 font-display text-[17px] font-medium text-ice sm:text-[20px]" style={{ animationDelay: "280ms" }}>
+            <p className="anim-rise mt-2 font-display text-[17px] font-medium text-ice sm:text-[20px]" style={{ animationDelay: "180ms" }}>
               Associação Atlética Acadêmica de Psicologia
             </p>
-            <div className="anim-rise mt-5 flex flex-wrap items-center justify-center gap-3 lg:justify-start" style={{ animationDelay: "360ms" }}>
-              <span className="somos-badge">
-                <span aria-hidden className="somos-claws">
-                  <i />
-                  <i />
-                  <i />
-                </span>
-                #SOMOS<b>YAWARA</b>
-              </span>
-              <span className="hidden text-[13.5px] text-fg-muted sm:inline">Acesso restrito à diretoria e assessores.</span>
+            <p className="anim-rise mt-1.5 hidden text-[13.5px] text-fg-muted sm:block" style={{ animationDelay: "240ms" }}>
+              Acesso restrito à diretoria e assessores.
+            </p>
+            {/* Vitrine 3D: órbita por diretoria e uma cena por recurso (features/login/showcase) */}
+            <div className="mt-2 w-full max-w-[620px] lg:-mt-6 lg:-ml-10">
+              <ShowcaseStage {...showcase} />
             </div>
-          </div>
-          <div className="anim-rise hidden items-center gap-3.5 text-[12px] text-fg-subtle lg:flex" style={{ animationDelay: "800ms" }}>
-            <span className="anim-grow h-px w-14 bg-gradient-to-r from-gold to-transparent" />
-            <span>@atleticayawara</span>
+            <SomosYawara />
           </div>
         </section>
 

@@ -12,10 +12,10 @@
 
 /* ---------- palco ---------- */
 .sw-stage {
-  --s: 1; /* escala do palco: tudo é desenhado no tamanho do computador e encolhido no celular */
+  --s: 0.9; /* escala do palco: tudo é desenhado no tamanho do computador e encolhido no celular */
   position: relative;
   width: 100%;
-  height: 540px;
+  height: 490px;
   pointer-events: none;
   user-select: none;
 }
