@@ -20,7 +20,7 @@ import { Avatar, Skeleton } from "@/components/ui/misc";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DemoNotice } from "@/components/shared/states";
 import { BrandEmblem } from "@/components/layout/brand";
-import { DiretoriaWord, EmblemOrbit } from "@/features/login/emblem-orbit";
+import { ShowcaseLine, ShowcaseStage, useShowcase } from "@/features/login/showcase/showcase";
 import { Checkbox } from "@/components/ui/form";
 import { FormAlert } from "@/components/shared/form-alert";
 import { isDemoMode, isFirebaseMode } from "@/lib/mode";
@@ -262,6 +262,7 @@ export default function LoginPage() {
   const [tab, setTab] = useState<"login" | "demo">("login");
   const mounted = useMounted();
   const isDark = !mounted || resolveTheme(theme) === "dark";
+  const showcase = useShowcase();
 
   useEffect(() => {
     if (hydrated && userId) router.replace("/inicio");
@@ -305,9 +306,9 @@ export default function LoginPage() {
             <span className="text-[11.5px] font-semibold tracking-[0.28em] text-fg-muted">CENTRAL YAWARA</span>
           </div>
           <div className="flex max-w-[540px] flex-col items-center lg:items-start">
-            {/* Cena 3D: o escudo balança e as áreas da Central giram em volta dele */}
-            <div className="mb-2 w-full max-w-[560px] lg:-ml-6 lg:mb-4">
-              <EmblemOrbit />
+            {/* Vitrine 3D: órbita por diretoria e uma cena por recurso (features/login/showcase) */}
+            <div className="mb-2 w-full max-w-[620px] lg:-ml-10 lg:mb-2">
+              <ShowcaseStage {...showcase} />
             </div>
             <p className="eyebrow anim-rise !text-gold-fg" style={{ animationDelay: "120ms" }}>
               Sistema interno de gestão
@@ -320,7 +321,7 @@ export default function LoginPage() {
               Associação Atlética Acadêmica de Psicologia
             </p>
             <p className="anim-rise mt-5 font-display text-[21px] font-semibold text-fg sm:text-[26px]" style={{ animationDelay: "360ms" }}>
-              <DiretoriaWord />
+              <ShowcaseLine step={showcase.step} />
             </p>
             <p className="anim-rise mt-2 hidden max-w-[440px] text-[14.5px] leading-relaxed text-fg-muted sm:block" style={{ animationDelay: "440ms" }}>
               Tudo da Atlética em um só lugar. Acesso restrito à diretoria e assessores.
