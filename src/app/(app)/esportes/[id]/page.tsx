@@ -50,7 +50,11 @@ export default function SportTeamPage() {
   const { data: t, isLoading, isError, error, refetch } = useSportsTeam(id);
   useBreadcrumbTitle(`/esportes/${id}`, t?.name);
   const [editOpen, setEditOpen] = useState(false);
-  const [editing, setEditing] = useState<Editing>(null);
+  // ?novo=jogo|treino|atleta abre o formulário direto (atalhos da tela inicial de Esportes).
+  const [editing, setEditing] = useState<Editing>(() => {
+    const novo = params.get("novo");
+    return novo === "jogo" ? { kind: "match" } : novo === "treino" ? { kind: "training" } : novo === "atleta" ? { kind: "athlete" } : null;
+  });
   const [exporting, setExporting] = useState(false);
   const requested = params.get("aba") as Tab | null;
   const tab: Tab = requested && TABS.includes(requested) ? requested : "visao";
@@ -428,10 +432,10 @@ export default function SportTeamPage() {
       </Tabs>
 
       <TeamFormDialog open={editOpen} onOpenChange={setEditOpen} team={t} />
-      <TrainingDialog team={t} open={editing?.kind === "training"} item={editing?.kind === "training" ? editing.item : undefined} onOpenChange={(o) => !o && setEditing(null)} />
-      <AthleteDialog team={t} open={editing?.kind === "athlete"} item={editing?.kind === "athlete" ? editing.item : undefined} onOpenChange={(o) => !o && setEditing(null)} />
-      <MatchDialog team={t} open={editing?.kind === "match"} item={editing?.kind === "match" ? editing.item : undefined} onOpenChange={(o) => !o && setEditing(null)} />
-      <CompetitionDialog team={t} open={editing?.kind === "competition"} item={editing?.kind === "competition" ? editing.item : undefined} onOpenChange={(o) => !o && setEditing(null)} />
+      <TrainingDialog team={t} open={editable && editing?.kind === "training"} item={editing?.kind === "training" ? editing.item : undefined} onOpenChange={(o) => !o && setEditing(null)} />
+      <AthleteDialog team={t} open={editable && editing?.kind === "athlete"} item={editing?.kind === "athlete" ? editing.item : undefined} onOpenChange={(o) => !o && setEditing(null)} />
+      <MatchDialog team={t} open={editable && editing?.kind === "match"} item={editing?.kind === "match" ? editing.item : undefined} onOpenChange={(o) => !o && setEditing(null)} />
+      <CompetitionDialog team={t} open={editable && editing?.kind === "competition"} item={editing?.kind === "competition" ? editing.item : undefined} onOpenChange={(o) => !o && setEditing(null)} />
     </>
   );
 }
