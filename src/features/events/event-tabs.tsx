@@ -1,5 +1,7 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
+
 import { MemberAvatar } from "@/components/shared/member-avatar";
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
@@ -373,7 +375,9 @@ export function TasksTab({ event }: { event: AtleticaEvent }) {
   const manage = !!ctx && canEditEvent(ctx, event) && event.status !== "cancelled";
   const [filter, setFilter] = useState<"all" | TaskStatus>("all");
   const [dep, setDep] = useState("");
-  const [dialog, setDialog] = useState<{ task?: EventTask } | null>(null);
+  // ?novo=tarefa abre a nova tarefa direto (atalho da tela inicial de Eventos).
+  const params = useSearchParams();
+  const [dialog, setDialog] = useState<{ task?: EventTask } | null>(() => (params.get("novo") === "tarefa" ? {} : null));
   const setStatus = useAction((taskId: string, status: TaskStatus) => services.events.updateTask(event.id, taskId, { status }), {
     success: (t) => `“${t.title}”: ${TASK_STATUS[t.status].label}`,
   });
@@ -483,7 +487,7 @@ export function TasksTab({ event }: { event: AtleticaEvent }) {
           empty={<EmptyState compact title="Nenhuma tarefa neste filtro" description={editable ? "Adicione tarefas para organizar o evento." : undefined} />}
         />
       </section>
-      {dialog && <TaskDialog open onOpenChange={(o) => !o && setDialog(null)} event={event} task={dialog.task} />}
+      {dialog && editable && <TaskDialog open onOpenChange={(o) => !o && setDialog(null)} event={event} task={dialog.task} />}
     </div>
   );
 }

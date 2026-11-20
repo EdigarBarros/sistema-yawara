@@ -37,6 +37,7 @@ import { PresidencyMobileHome } from "@/features/home/presidency-mobile";
 import { PresidencyDesktopHome } from "@/features/home/presidency-desktop";
 import { FinanceDesktopHome, FinanceMobileHome } from "@/features/home/finance-home";
 import { SportsDesktopHome, SportsMobileHome } from "@/features/home/sports-home";
+import { EventsDesktopHome, EventsMobileHome } from "@/features/home/events-home";
 import { useIsDesktop } from "@/hooks/use-media";
 
 function Grid({ children }: { children: React.ReactNode }) {
@@ -212,6 +213,8 @@ export default function HomePage() {
   if (preset === "finance") return isDesktop ? <FinanceDesktopHome /> : <FinanceMobileHome />;
   // Esportes: tela própria (placar do próximo jogo e quadra 3D no computador; versão simples no celular).
   if (preset === "sports") return isDesktop ? <SportsDesktopHome /> : <SportsMobileHome />;
+  // Eventos: tela própria (ingresso 3D do próximo evento e quadro de tarefas; versão simples no celular).
+  if (preset === "events") return isDesktop ? <EventsDesktopHome /> : <EventsMobileHome />;
   return (
     <>
       <PageHeader
