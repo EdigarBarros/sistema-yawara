@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useState, type ComponentType, type CSSProperties } from "react";
 import { motionReduced } from "@/stores/ui";
 import { BOARDS } from "./boards";
 import { Orbit } from "./orbit";
@@ -25,17 +25,18 @@ const LEAVE_MS = 900;
 
 interface Feature {
   key: string;
-  text: string;
+  /** Frase em duas partes: a primeira menor, a segunda grande e dourada. */
+  lines: [string, string];
   Scene: ComponentType;
 }
 
 const FEATURES: Feature[] = [
-  { key: "docs", text: "Guarde os documentos da Atlética", Scene: DocsScene },
-  { key: "rifas", text: "Crie rifas e registre cada venda", Scene: RaffleScene },
-  { key: "esportes", text: "Monte os times da Atlética", Scene: SportsScene },
-  { key: "comunicacao", text: "Prepare os posts do Instagram", Scene: CommsScene },
-  { key: "financeiro", text: "Acompanhe cada real da Atlética", Scene: FinanceScene },
-  { key: "secretaria", text: "Marque reuniões e aprove as atas", Scene: SecretaryScene },
+  { key: "docs", lines: ["Guarde os documentos", "da Atlética"], Scene: DocsScene },
+  { key: "rifas", lines: ["Crie rifas e registre", "cada venda"], Scene: RaffleScene },
+  { key: "esportes", lines: ["Monte os times", "da Atlética"], Scene: SportsScene },
+  { key: "comunicacao", lines: ["Prepare os posts", "do Instagram"], Scene: CommsScene },
+  { key: "financeiro", lines: ["Acompanhe as finanças", "real por real"], Scene: FinanceScene },
+  { key: "secretaria", lines: ["Marque reuniões", "e aprove as atas"], Scene: SecretaryScene },
 ];
 
 /** 0 = órbita; 1..n = FEATURES[i - 1]. */
@@ -71,12 +72,51 @@ export function useShowcase() {
   return { step, prev };
 }
 
+/** Texto em letras soltas: cada letra chega voando do fundo, uma depois da outra. */
+function Letters({ text, from = 0, className }: { text: string; from?: number; className?: string }) {
+  return (
+    <span className={className}>
+      {Array.from(text).map((ch, i) => (
+        <span key={i} className="cp-ch" style={{ "--i": from + i } as CSSProperties}>
+          {ch === " " ? "\u00a0" : ch}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/**
+ * A frase dentro do palco 3D, logo abaixo do escudo (ou do objeto da cena):
+ * as peças passam na frente e atrás dela. Na órbita, a palavra da diretoria
+ * se monta de novo a cada troca.
+ */
+function Caption({ step }: { step: Step }) {
+  if (step.scene === 0) {
+    const intro = "Para a diretoria de";
+    return (
+      <div className="cp cp-orbit">
+        <Letters key="intro" text={intro} className="cp-small" />
+        <Letters key={BOARDS[step.board].key} text={BOARDS[step.board].word} from={6} className="cp-big" />
+      </div>
+    );
+  }
+  const f = FEATURES[step.scene - 1];
+  const [a, b] = f.lines;
+  return (
+    <div className={`cp cp-${f.key}`}>
+      <Letters text={a} className="cp-small" />
+      <Letters text={b} from={a.length * 0.5} className="cp-big" />
+    </div>
+  );
+}
+
 function SceneLayer({ step, leaving, prevBoard }: { step: Step; leaving?: boolean; prevBoard?: number | null }) {
   const Feature = step.scene > 0 ? FEATURES[step.scene - 1].Scene : null;
   return (
     <div className={leaving ? "sw-scene sw-out" : "sw-scene sw-in"}>
       <div className="sw-root">
         {Feature ? <Feature /> : <Orbit board={BOARDS[step.board]} leaving={prevBoard != null ? BOARDS[prevBoard] : null} />}
+        <Caption step={step} />
       </div>
     </div>
   );
@@ -98,26 +138,11 @@ export function ShowcaseStage({ step, prev }: ReturnType<typeof useShowcase>) {
   );
 }
 
-/** A frase que acompanha o palco: "Para a diretoria de …" na órbita, e a frase de cada cena depois. */
-export function ShowcaseLine({ step }: { step: Step }) {
-  const all = `Para as diretorias de ${BOARDS.map((b) => b.word).join(", ")}. ${FEATURES.map((f) => f.text).join(". ")}.`;
+/** Resumo para leitores de tela (o palco é decorativo e muda sozinho). */
+export function ShowcaseSummary() {
   return (
-    <span className="sw-line">
-      <span className="sr-only">{all}</span>
-      <span aria-hidden>
-        {step.scene === 0 ? (
-          <span key="orbit" className="sw-flip">
-            Para a diretoria de{" "}
-            <span key={BOARDS[step.board].key} className="sw-word sw-flip">
-              {BOARDS[step.board].word}
-            </span>
-          </span>
-        ) : (
-          <span key={FEATURES[step.scene - 1].key} className="sw-flip">
-            {FEATURES[step.scene - 1].text}
-          </span>
-        )}
-      </span>
-    </span>
+    <p className="sr-only">
+      Para as diretorias de {BOARDS.map((b) => b.word).join(", ")}. {FEATURES.map((f) => f.lines.join(" ")).join(". ")}.
+    </p>
   );
 }

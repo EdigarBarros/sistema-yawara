@@ -116,7 +116,7 @@ export const BOARDS: Board[] = [
   },
   {
     key: "financeiro",
-    word: "Financeiro",
+    word: "Finanças",
     pieces: [
       { icon: <Wallet />, title: "Recebido", tone: "ok", body: <Big v="+ R$ 912,00" ok /> },
       { icon: <BarChart3 />, title: "Saldo", body: <><Big v="R$ 4.454" /><Cols hs={[38, 62, 44, 80, 56, 92]} /></> },
@@ -158,7 +158,7 @@ export const BOARDS: Board[] = [
   },
   {
     key: "secretaria",
-    word: "Secretaria",
+    word: "Secretaria Executiva",
     pieces: [
       { icon: <ClipboardCheck />, title: "Ata da reunião", tone: "ok", body: <Pill>✓ Aprovada</Pill> },
       { icon: <CalendarCheck />, title: "Reunião", tone: "info", body: <DateRow d="27" m="SEX · 18H" t="Diretoria geral" /> },
