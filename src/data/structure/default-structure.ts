@@ -155,7 +155,7 @@ export function defaultSystemSettings(): SystemSettings {
       instagram: "",
       motto: "",
     },
-    modules: { campaigns: true, events: true, documents: true, meetings: true, finance: true, marketing: true, extension: true, organization: true, settings: true, audit: true },
+    modules: { campaigns: true, events: true, documents: true, meetings: true, finance: true, marketing: true, extension: true, sports: true, organization: true, settings: true, audit: true },
   };
 }
 

@@ -45,6 +45,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   finance: "Financeiro",
   marketing: "Marketing",
   extension: "Ensino e Extensão",
+  sports: "Esportes",
   organization: "Diretoria e organização",
   settings: "Configurações",
   audit: "Auditoria",

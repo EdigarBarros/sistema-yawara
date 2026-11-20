@@ -7,8 +7,8 @@ import { describe, expect, it } from "vitest";
 import { buildSeed } from "@/data/demo/seed";
 import { intersects, userTokens } from "./access-tokens";
 import { hasPermission, type AccessContext } from "./permissions";
-import { canEditProject, canSeeBuyer, canSeeCampaign, canSeeContent, canSeeDocument, canSeeEvent, canSeeMeeting, canSeeProject } from "./policies";
-import { buyerReaders, campaignReaders, contentReaders, documentReaders, eventReaders, meetingReaders, projectEditors, projectReaders } from "./record-readers";
+import { canEditProject, canSeeBuyer, canSeeCampaign, canSeeContent, canSeeDocument, canSeeEvent, canSeeMeeting, canSeeProject, canSeeTeam } from "./policies";
+import { buyerReaders, campaignReaders, contentReaders, documentReaders, eventReaders, meetingReaders, projectEditors, projectReaders, teamReaders } from "./record-readers";
 import type { ModuleKey } from "@/types";
 
 const db = buildSeed();
@@ -32,6 +32,19 @@ describe("readers ≡ políticas de visualização", () => {
         const c = db.campaigns.find((x) => x.id === sale.campaignId)!;
         if (!canSeeCampaign(ctx, c)) continue;
         expect(rulesAllow(ctx, "campaigns", buyerReaders(c, sale)), `${ctx.user.id} × ${sale.id}`).toBe(canSeeBuyer(ctx, c, sale));
+      }
+  });
+  it("times de esportes (com vários públicos)", () => {
+    const audiences = [
+      { scope: "all" as const, roleIds: [], userIds: [] },
+      { scope: "board" as const, roleIds: [], userIds: [] },
+      { scope: "department" as const, departmentId: "dep-esportes", roleIds: [], userIds: [] },
+      { scope: "people" as const, roleIds: [], userIds: ["usr-rebeca"] },
+    ];
+    for (const base of db.teams)
+      for (const access of audiences) {
+        const t = { ...base, access };
+        for (const ctx of contexts) expect(rulesAllow(ctx, "sports", teamReaders(t)), `${ctx.user.id} × ${t.id} × ${access.scope}`).toBe(canSeeTeam(ctx, t));
       }
   });
   it("eventos", () => {

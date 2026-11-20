@@ -8,6 +8,7 @@ export type ModuleKey =
   | "finance"
   | "marketing"
   | "extension"
+  | "sports"
   | "organization"
   | "settings"
   | "audit";

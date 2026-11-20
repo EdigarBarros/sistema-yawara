@@ -16,7 +16,7 @@ import { API_TRANSPORT } from "@/lib/mode";
 import { ServiceError, type ServiceErrorCode } from "../errors";
 import { firebase } from "./app";
 
-export type ApiName = "auth" | "organization" | "system" | "campaigns" | "events" | "documents" | "meetings" | "finance" | "marketing" | "extension";
+export type ApiName = "auth" | "organization" | "system" | "campaigns" | "events" | "documents" | "meetings" | "finance" | "marketing" | "extension" | "sports";
 
 let ambientRequestId: string | null = null;
 

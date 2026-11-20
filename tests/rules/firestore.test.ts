@@ -56,6 +56,8 @@ beforeEach(async () => {
     // Projeto restrito à pessoa responsável (ext): a lista de presença também fica restrita.
     await setDoc(doc(db, "projects/p2"), { name: "Projeto restrito", readers: ["u:ext"], updatedAt: NOW });
     await setDoc(doc(db, "projects/p2/private/attendance"), { attendees: [{ id: "b", name: "Participante", present: false }], editors: projectEditors({ createdBy: "ext", responsibleId: "ext" }) });
+    await setDoc(doc(db, "sportTeams/t-all"), { name: "Futsal", readers: ["all"], updatedAt: NOW });
+    await setDoc(doc(db, "sportTeams/t-evt"), { name: "Vôlei", readers: ["u:evt"], updatedAt: NOW });
     await setDoc(doc(db, "searchIndex/campaign__c-evt"), { terms: ["rifa"] });
     await setDoc(doc(db, "uploads/u1"), { uid: "ass" });
   });
@@ -187,6 +189,15 @@ describe("financeiro, auditoria, extensão e coleções internas", () => {
     // Quem pode editar projetos, mas não vê este projeto, não lê a presença dele.
     await assertSucceeds(getDoc(doc(fs("ext"), "projects/p2/private/attendance")));
     await assertFails(getDoc(doc(fs("assext"), "projects/p2/private/attendance")));
+  });
+  it("times de esportes: precisa de sports.view e estar no público; ninguém grava", async () => {
+    await assertSucceeds(getDoc(doc(fs("pres"), "sportTeams/t-all")));
+    await assertSucceeds(getDoc(doc(fs("pres"), "sportTeams/t-evt"))); // sports.admin
+    await assertFails(getDoc(doc(fs("fin"), "sportTeams/t-all"))); // sem o módulo
+    await assertSucceeds(getDocs(query(collection(fs("pres"), "sportTeams"), orderBy("updatedAt", "desc"), limit(10))));
+    await assertFails(getDocs(query(collection(fs("fin"), "sportTeams"), where("readers", "array-contains-any", tokens("fin")), limit(10))));
+    await assertFails(setDoc(doc(fs("pres"), "sportTeams/t-novo"), { name: "Time", readers: ["all"] }));
+    await assertFails(updateDoc(doc(fs("pres"), "sportTeams/t-all"), { name: "Alterado" }));
   });
   it("índice de busca, tíquetes, idempotência e contadores são inacessíveis", async () => {
     await assertFails(getDoc(doc(fs("pres"), "searchIndex/campaign__c-evt")));

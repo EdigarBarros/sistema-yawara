@@ -104,6 +104,18 @@ export const MODULES: ModuleDefinition[] = [
     },
   },
   {
+    key: "sports",
+    label: "Esportes",
+    description: "Times, elenco, escalação, treinos e jogos.",
+    actions: {
+      view: "Ver times e a agenda esportiva",
+      create: "Criar times",
+      edit: "Editar elenco, escalação, treinos e jogos",
+      archive: "Arquivar e reativar times",
+      admin: "Gerenciar acesso de qualquer time",
+    },
+  },
+  {
     key: "organization",
     label: "Diretoria e organização",
     description: "Integrantes, cargos, departamentos e permissões.",

@@ -17,12 +17,14 @@ import { firebaseNotifications } from "./notifications";
 import { firebaseOrganization } from "./organization";
 import { firebaseSearch } from "./search";
 import { firebaseSettings } from "./settings";
+import { firebaseSports } from "./sports";
 
 export const firebaseServices: Services = {
   auth: firebaseAuth,
   organization: firebaseOrganization,
   campaigns: firebaseCampaigns,
   events: firebaseEvents,
+  sports: firebaseSports,
   documents: firebaseDocuments,
   meetings: firebaseMeetings,
   finance: firebaseFinance,

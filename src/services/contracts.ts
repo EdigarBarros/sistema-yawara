@@ -7,8 +7,14 @@
  * implementação com Firebase (Auth, Firestore, Storage) que respeite os
  * mesmos contratos e trocá-la em src/services/index.ts.
  */
+import type { AthleteInput, SessionInput } from "@/lib/sports";
 import type {
   AppNotification,
+  SportModality,
+  SportTeam,
+  TeamCategory,
+  TeamLineup,
+  TeamStatus,
   AtleticaEvent,
   Audience,
   Campaign,
@@ -273,6 +279,34 @@ export interface EventService {
   updateSupplier(eventId: ID, supplierId: ID, input: Partial<Omit<Supplier, "id">>): Promise<AtleticaEvent>;
 }
 
+/* ------------------------------- Esportes ------------------------------- */
+
+export interface TeamInput {
+  name: string;
+  modality: SportModality;
+  category: TeamCategory;
+  color: string;
+  departmentId: ID;
+  coachIds: ID[];
+  access: Audience;
+  notes?: string;
+}
+
+export interface SportsService {
+  list(): Promise<SportTeam[]>;
+  get(id: ID): Promise<SportTeam>;
+  create(input: TeamInput): Promise<SportTeam>;
+  /** A modalidade só muda enquanto o time não tem atletas (posições e quadra dependem dela). */
+  update(id: ID, input: Partial<TeamInput>): Promise<SportTeam>;
+  setStatus(id: ID, status: TeamStatus): Promise<SportTeam>;
+  /** Sem `athleteId`: cadastra; com `athleteId`: edita. */
+  saveAthlete(teamId: ID, input: AthleteInput, athleteId?: ID): Promise<SportTeam>;
+  removeAthlete(teamId: ID, athleteId: ID): Promise<SportTeam>;
+  saveLineup(teamId: ID, lineup: Pick<TeamLineup, "formation" | "slots">): Promise<SportTeam>;
+  /** Sem `sessionId`: marca; com `sessionId`: edita (inclui situação e placar). */
+  saveSession(teamId: ID, input: SessionInput, sessionId?: ID): Promise<SportTeam>;
+}
+
 /* ------------------------------ Documentos ------------------------------ */
 
 export interface DocumentInput {
@@ -489,6 +523,7 @@ export interface Services {
   organization: OrganizationService;
   campaigns: CampaignService;
   events: EventService;
+  sports: SportsService;
   documents: DocumentService;
   meetings: MeetingService;
   finance: FinanceService;

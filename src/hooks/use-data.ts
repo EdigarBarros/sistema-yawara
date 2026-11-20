@@ -86,6 +86,15 @@ export function useEvent(id: ID) {
   return useQuery({ queryKey: [uid, "events", id], queryFn: () => services.events.get(id), retry: false });
 }
 
+export function useTeams(enabled = true) {
+  const uid = useUid();
+  return useQuery({ queryKey: [uid, "sports"], queryFn: () => services.sports.list(), enabled });
+}
+export function useTeam(id: ID) {
+  const uid = useUid();
+  return useQuery({ queryKey: [uid, "sports", id], queryFn: () => services.sports.get(id), retry: false });
+}
+
 export function useDocuments(enabled = true) {
   const uid = useUid();
   return useQuery({ queryKey: [uid, "documents"], queryFn: () => services.documents.list(), enabled });

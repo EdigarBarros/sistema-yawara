@@ -14,6 +14,7 @@ import { marketingActions } from "./modules/marketing";
 import { meetingsActions } from "./modules/meetings";
 import { authActions, organizationActions } from "./modules/organization";
 import { searchActions } from "./modules/search";
+import { sportsActions } from "./modules/sports";
 import { systemActions } from "./modules/system";
 
 export const API_ACTIONS = {
@@ -27,6 +28,7 @@ export const API_ACTIONS = {
   finance: financeActions,
   marketing: marketingActions,
   extension: extensionActions,
+  sports: sportsActions,
 } satisfies Record<string, Record<string, AnyAction>>;
 
 export type ApiName = keyof typeof API_ACTIONS;

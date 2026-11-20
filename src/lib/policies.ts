@@ -17,6 +17,7 @@ import type {
   Meeting,
   MeetingStatus,
   Sale,
+  SportTeam,
 } from "@/types";
 import { canSeeRecord, hasPermission, matchesAudience, type AccessContext } from "./permissions";
 
@@ -218,4 +219,26 @@ export function canEditProject(ctx: AccessContext, p: ExtensionProject) {
 
 export function canCloseProject(ctx: AccessContext, p: ExtensionProject) {
   return p.createdBy === ctx.user.id || hasPermission(ctx, "extension.archive");
+}
+
+/* -------------------------------- Esportes ------------------------------- */
+
+export function canSeeTeam(ctx: AccessContext, t: SportTeam) {
+  if (t.coachIds.includes(ctx.user.id) && hasPermission(ctx, "sports.view")) return true;
+  return canSeeRecord(ctx, "sports", t);
+}
+
+/** Elenco, escalação, treinos e jogos: quem tem "editar", o criador e os técnicos do time. */
+export function canEditTeam(ctx: AccessContext, t: SportTeam) {
+  return hasPermission(ctx, "sports.edit") || hasPermission(ctx, "sports.admin") || t.createdBy === ctx.user.id || t.coachIds.includes(ctx.user.id);
+}
+
+/** Nome, modalidade, técnicos e público do time: criador, administradores ou quem tem "editar" e não é assessor. */
+export function canEditTeamSettings(ctx: AccessContext, t: SportTeam) {
+  if (t.createdBy === ctx.user.id || hasPermission(ctx, "sports.admin")) return true;
+  return hasPermission(ctx, "sports.edit") && ctx.role.level !== "advisor";
+}
+
+export function canArchiveTeam(ctx: AccessContext, t: SportTeam) {
+  return t.createdBy === ctx.user.id || hasPermission(ctx, "sports.archive");
 }

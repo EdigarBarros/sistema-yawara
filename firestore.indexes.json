@@ -85,6 +85,20 @@
       ]
     },
     {
+      "collectionGroup": "sportTeams",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "readers",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "notifications",
       "queryScope": "COLLECTION",
       "fields": [
