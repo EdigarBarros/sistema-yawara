@@ -35,6 +35,7 @@ import { Calendar3D } from "@/features/agenda/calendar-3d";
 import { WeekStrip } from "@/features/agenda/week-strip";
 import { PresidencyMobileHome } from "@/features/home/presidency-mobile";
 import { PresidencyDesktopHome } from "@/features/home/presidency-desktop";
+import { FinanceDesktopHome, FinanceMobileHome } from "@/features/home/finance-home";
 import { useIsDesktop } from "@/hooks/use-media";
 
 function Grid({ children }: { children: React.ReactNode }) {
@@ -206,6 +207,8 @@ export default function HomePage() {
   const preset = access.role.homePreset;
   // Celular da presidência: tela própria, simples e direta (o computador mantém o painel completo).
   if (preset === "presidency") return isDesktop ? <PresidencyDesktopHome actions={<QuickActions preset={preset} />} /> : <PresidencyMobileHome />;
+  // Financeiro: tela própria (torres de moedas em 3D no computador; versão simples no celular).
+  if (preset === "finance") return isDesktop ? <FinanceDesktopHome /> : <FinanceMobileHome />;
   return (
     <>
       <PageHeader
