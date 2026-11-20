@@ -1,6 +1,7 @@
-import type { AtleticaEvent, Campaign, DateOnly, Meeting } from "@/types";
+import type { AtleticaEvent, Campaign, DateOnly, Meeting, SportTeam } from "@/types";
+import { SESSION_KIND_LABELS } from "@/lib/sports";
 
-export type AgendaKind = "event" | "meeting" | "raffle" | "deadline";
+export type AgendaKind = "event" | "meeting" | "raffle" | "deadline" | "sport";
 
 export interface AgendaItem {
   id: string;
@@ -18,14 +19,33 @@ export const AGENDA_KINDS: Record<AgendaKind, { label: string; color: string }> 
   meeting: { label: "Reuniões", color: "#5b86d9" },
   raffle: { label: "Rifas", color: "#3fcf8e" },
   deadline: { label: "Prazos", color: "#e88ab5" },
+  sport: { label: "Esportes", color: "#7fd9b0" },
 };
 
 /**
  * Junta o que tem data na Central em uma agenda única. Recebe apenas os
  * registros que o usuário já pode ver (as listas vêm filtradas pelo serviço).
  */
-export function buildAgenda({ events = [], meetings = [], campaigns = [] }: { events?: AtleticaEvent[]; meetings?: Meeting[]; campaigns?: Campaign[] }): AgendaItem[] {
+export function buildAgenda({
+  events = [],
+  meetings = [],
+  campaigns = [],
+  teams = [],
+}: {
+  events?: AtleticaEvent[];
+  meetings?: Meeting[];
+  campaigns?: Campaign[];
+  teams?: SportTeam[];
+}): AgendaItem[] {
   const items: AgendaItem[] = [];
+  for (const t of teams) {
+    if (t.status !== "active") continue;
+    for (const s of t.sessions) {
+      if (s.status === "cancelled") continue;
+      const title = s.kind === "treino" ? `Treino: ${t.name}` : `${t.name} x ${s.opponent ?? SESSION_KIND_LABELS[s.kind]}`;
+      items.push({ id: `sport:${t.id}:${s.id}`, date: s.date, time: s.time, title, detail: s.location, kind: "sport", href: `/esportes/${t.id}?aba=agenda` });
+    }
+  }
   for (const e of events) {
     if (e.status === "cancelled") continue;
     items.push({ id: `event:${e.id}`, date: e.date, time: e.time || undefined, title: e.name, detail: e.location || undefined, kind: "event", href: `/eventos/${e.id}` });

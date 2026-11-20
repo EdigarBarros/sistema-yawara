@@ -8,6 +8,7 @@ import {
   ScrollText,
   Settings,
   Ticket,
+  Trophy,
   Users,
   Wallet,
   type LucideIcon,
@@ -35,6 +36,7 @@ export const NAV: NavGroup[] = [
     items: [
       { label: "Campanhas e vendas", href: "/campanhas", icon: Ticket, module: "campaigns" },
       { label: "Eventos e projetos", href: "/eventos", icon: CalendarDays, module: "events" },
+      { label: "Esportes", href: "/esportes", icon: Trophy, module: "sports" },
       { label: "Financeiro", href: "/financeiro", icon: Wallet, module: "finance" },
       { label: "Marketing", href: "/marketing", icon: Megaphone, module: "marketing" },
     ],
@@ -61,6 +63,7 @@ export const NAV: NavGroup[] = [
 export const AREA_COLORS: Record<string, string> = {
   "/campanhas": "#e1af37",
   "/eventos": "#f2a93b",
+  "/esportes": "#3fcf8e",
   "/financeiro": "#5b86d9",
   "/marketing": "#e88ab5",
   "/documentos": "#3fcf8e",
@@ -81,6 +84,7 @@ export const ROUTE_LABELS: Record<string, string> = {
   campanhas: "Campanhas e vendas",
   nova: "Nova rifa",
   eventos: "Eventos e projetos",
+  esportes: "Esportes",
   novo: "Novo",
   documentos: "Documentos",
   secretaria: "Secretaria e reuniões",

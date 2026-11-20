@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { AtleticaEvent, Campaign, ContentItem, ExtensionProject, FinanceEntry, Meeting, Sale } from "@/types";
-import { eventsArea, extensionArea, financeArea, marketingArea, meetingsArea, rafflesArea } from "./panorama-rules";
+import type { AtleticaEvent, Campaign, ContentItem, ExtensionProject, FinanceEntry, Meeting, Sale, SportSession, SportTeam } from "@/types";
+import { eventsArea, extensionArea, financeArea, marketingArea, meetingsArea, rafflesArea, sportsArea } from "./panorama-rules";
 
 const TODAY = "2026-10-20";
 
@@ -75,5 +75,21 @@ describe("panorama: marketing, secretaria e extensão", () => {
     ] as ExtensionProject[];
     expect(extensionArea(TODAY, projects)).toMatchObject({ health: "warn", headline: "1" });
     expect(extensionArea(TODAY, []).health).toBe("idle");
+  });
+});
+
+describe("panorama: esportes", () => {
+  const session = (partial: Partial<SportSession>) => ({ id: Math.random().toString(36), kind: "treino", date: "2026-10-22", time: "19:00", location: "Quadra", status: "scheduled", ...partial }) as SportSession;
+  const team = (sessions: SportSession[], slots = 5) =>
+    ({ id: "t1", name: "Futsal", status: "active", sessions, lineup: { formation: "1-2-1", slots: Array.from({ length: slots }, (_, i) => ({ athleteId: `a${i}`, x: 0, z: 0 })) } }) as unknown as SportTeam;
+
+  it("parado sem time ativo; verde com treino na semana", () => {
+    expect(sportsArea(TODAY, []).health).toBe("idle");
+    expect(sportsArea(TODAY, [team([session({})])])).toMatchObject({ health: "ok", headline: "1" });
+  });
+
+  it("amarelo com jogo passado sem resultado ou jogo próximo sem escalação", () => {
+    expect(sportsArea(TODAY, [team([session({ kind: "amistoso", opponent: "X", date: "2026-10-10" })])]).reason).toContain("sem resultado");
+    expect(sportsArea(TODAY, [team([session({ kind: "amistoso", opponent: "X" })], 0)]).reason).toContain("ainda não tem escalação");
   });
 });

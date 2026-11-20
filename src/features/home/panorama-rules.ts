@@ -9,7 +9,7 @@
  * - verde ("Tudo certo"): nada pendente;
  * - cinza ("Parado"): a área não tem nada acontecendo agora.
  */
-import type { AtleticaEvent, Campaign, ContentItem, DateOnly, ExtensionProject, FinanceEntry, Meeting, Sale } from "@/types";
+import type { AtleticaEvent, Campaign, ContentItem, DateOnly, ExtensionProject, FinanceEntry, Meeting, Sale, SportTeam } from "@/types";
 import { daysBetween, formatDayMonth, formatMoneyCompact, toDateOnly } from "@/lib/format";
 import { summarize } from "@/lib/raffle";
 import { summarizeFinance } from "@/features/finance/utils";
@@ -17,7 +17,7 @@ import { STALE_SALE_DAYS } from "./pending-rules";
 
 export type Health = "ok" | "warn" | "alert" | "idle";
 
-export type AreaKey = "campaigns" | "finance" | "events" | "marketing" | "meetings" | "extension";
+export type AreaKey = "campaigns" | "finance" | "events" | "marketing" | "meetings" | "extension" | "sports";
 
 export interface AreaStatus {
   key: AreaKey;
@@ -148,4 +148,25 @@ export function extensionArea(today: DateOnly, projects: ExtensionProject[]): Ar
   if (certificates > 0) return { ...base, health: "warn", headline, caption, reason: `${plural(certificates, "atividade", "atividades")} já feita(s) sem certificado emitido.` };
   if (running.length === 0) return { ...base, health: "idle", headline, caption, reason: "Nenhuma atividade acadêmica agora." };
   return { ...base, health: "ok", headline, caption, reason: "Atividades em dia." };
+}
+
+export function sportsArea(today: DateOnly, teams: SportTeam[]): AreaStatus {
+  const base = { key: "sports" as const, title: "Esportes", href: "/esportes" };
+  const active = teams.filter((t) => t.status === "active");
+  const sessions = active.flatMap((t) => t.sessions.map((s) => ({ ...s, team: t })));
+  const week = sessions.filter((s) => s.status === "scheduled" && s.date >= today && daysBetween(today, s.date) <= 7);
+  const games = sessions.filter((s) => s.status === "scheduled" && s.kind !== "treino" && s.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+  // Jogo que já passou e continua "marcado": falta registrar o resultado.
+  const noResult = sessions.filter((s) => s.status === "scheduled" && s.kind !== "treino" && s.date < today).length;
+  const next = games[0];
+  const headline = String(week.length);
+  const caption = week.length === 1 ? "treino ou jogo nesta semana" : "treinos e jogos nesta semana";
+  if (active.length === 0) return { ...base, health: "idle", headline: "—", caption: "nenhum time ativo", reason: "Crie um time para montar elenco e escalação." };
+  if (noResult > 0) return { ...base, health: "warn", headline, caption, reason: `${plural(noResult, "jogo já passou", "jogos já passaram")} sem resultado registrado.` };
+  if (next && daysBetween(today, next.date) <= 7) {
+    const short = active.find((t) => t.id === next.team.id && t.lineup.slots.length === 0);
+    if (short) return { ...base, health: "warn", headline, caption, reason: `${next.team.name} joga em ${formatDayMonth(next.date)} e ainda não tem escalação.` };
+    return { ...base, health: "ok", headline, caption, reason: `Próximo jogo: ${next.team.name} x ${next.opponent} em ${formatDayMonth(next.date)}.` };
+  }
+  return { ...base, health: week.length ? "ok" : "idle", headline, caption, reason: week.length ? "Treinos em dia." : "Nada marcado para os próximos dias." };
 }

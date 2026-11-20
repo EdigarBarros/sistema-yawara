@@ -393,3 +393,13 @@ export function teamRecord(team: Pick<SportTeam, "sessions">) {
 export function nextSession(team: Pick<SportTeam, "sessions">, today: DateOnly) {
   return [...team.sessions].filter((s) => s.status === "scheduled" && s.date >= today).sort((a, b) => when(a).localeCompare(when(b)))[0];
 }
+
+/** Cor do texto sobre a cor do uniforme: escuro em cores claras, branco em cores escuras. */
+export function inkOn(hex: string) {
+  const n = parseInt(hex.replace("#", ""), 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.25 ? "#06102e" : "#ffffff";
+}

@@ -2,10 +2,10 @@
 
 import { useMemo } from "react";
 import { useAccess } from "@/hooks/use-access";
-import { useCampaigns, useEvents, useMeetings } from "@/hooks/use-data";
+import { useCampaigns, useEvents, useMeetings, useTeams } from "@/hooks/use-data";
 import { buildAgenda } from "./agenda";
 
-/** Agenda unificada com o que o cargo pode ver (eventos, reuniões e rifas). */
+/** Agenda unificada com o que o cargo pode ver (eventos, reuniões, rifas e esportes). */
 export function useAgenda() {
   const access = useAccess();
   const hasEvents = access.canModule("events");
@@ -14,11 +14,19 @@ export function useAgenda() {
   const events = useEvents(hasEvents);
   const meetings = useMeetings(hasMeetings);
   const campaigns = useCampaigns(hasCampaigns);
-  const queries = [hasEvents && events, hasMeetings && meetings, hasCampaigns && campaigns].filter((q) => !!q);
+  const hasSports = access.canModule("sports");
+  const teams = useTeams(hasSports);
+  const queries = [hasEvents && events, hasMeetings && meetings, hasCampaigns && campaigns, hasSports && teams].filter((q) => !!q);
 
   const items = useMemo(
-    () => buildAgenda({ events: hasEvents ? events.data : [], meetings: hasMeetings ? meetings.data : [], campaigns: hasCampaigns ? campaigns.data : [] }),
-    [hasEvents, hasMeetings, hasCampaigns, events.data, meetings.data, campaigns.data],
+    () =>
+      buildAgenda({
+        events: hasEvents ? events.data : [],
+        meetings: hasMeetings ? meetings.data : [],
+        campaigns: hasCampaigns ? campaigns.data : [],
+        teams: hasSports ? teams.data : [],
+      }),
+    [hasEvents, hasMeetings, hasCampaigns, hasSports, events.data, meetings.data, campaigns.data, teams.data],
   );
   const failed = queries.find((q) => q.isError);
   return {
