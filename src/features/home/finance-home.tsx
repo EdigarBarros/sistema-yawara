@@ -1,10 +1,11 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo, useSyncExternalStore } from "react";
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, BarChart3, FileSpreadsheet, MinusCircle, PlusCircle, Ticket, TrendingUp, Wallet, type LucideIcon } from "lucide-react";
 import { useAccess } from "@/hooks/use-access";
+import { useCan3D } from "@/hooks/use-can-3d";
 import { useAllSales, useCampaigns, useFinanceEntries } from "@/hooks/use-data";
 import { useCountUp } from "@/hooks/use-count-up";
 import { summarize } from "@/lib/raffle";
@@ -69,30 +70,6 @@ function useFinanceTiles(raffles: number | null, hasCampaigns: boolean) {
 }
 
 /* -------------------------------- peças -------------------------------- */
-
-function useReducedMotion() {
-  return useSyncExternalStore(
-    (cb) => {
-      const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-      mq.addEventListener("change", cb);
-      return () => mq.removeEventListener("change", cb);
-    },
-    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-    () => false,
-  );
-}
-
-let webglCache: boolean | null = null;
-function hasWebGL() {
-  if (webglCache !== null) return webglCache;
-  try {
-    const c = document.createElement("canvas");
-    webglCache = !!(c.getContext("webgl2") || c.getContext("webgl"));
-  } catch {
-    webglCache = false;
-  }
-  return webglCache;
-}
 
 function Money({ cents, className }: { cents: number; className?: string }) {
   const value = useCountUp(cents, 1100);
@@ -212,13 +189,7 @@ export function FinanceDesktopHome() {
   const router = useRouter();
   const { access, entries, numbers, towers, raffles, hasCampaigns } = useFinanceHome();
   const tiles = useFinanceTiles(raffles, hasCampaigns);
-  const reduced = useReducedMotion();
-  const webgl = useSyncExternalStore(
-    () => () => {},
-    hasWebGL,
-    () => true,
-  );
-  const show3D = webgl && !reduced;
+  const show3D = useCan3D();
   const today = todayDateOnly();
   const [y, m] = today.split("-").map(Number);
 

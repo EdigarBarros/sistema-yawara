@@ -2,10 +2,11 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useMemo, useSyncExternalStore } from "react";
+import { useMemo } from "react";
 import { AlertTriangle, CalendarDays, CalendarPlus, ClipboardList, ListChecks, ListPlus, Ticket, Truck, type LucideIcon } from "lucide-react";
 import type { AtleticaEvent } from "@/types";
 import { useAccess } from "@/hooks/use-access";
+import { useCan3D } from "@/hooks/use-can-3d";
 import { useEvents } from "@/hooks/use-data";
 import { canEditTasks } from "@/lib/policies";
 import { EVENT_STATUS, EVENT_TYPE_LABELS, TASK_STATUS } from "@/lib/labels";
@@ -15,7 +16,6 @@ import { Skeleton } from "@/components/ui/misc";
 import { StatusBadge } from "@/components/shared/badges";
 import { MemberAvatar } from "@/components/shared/member-avatar";
 import { ProgressRing, ShowcaseCard } from "@/components/shared/showcase";
-import { hasWebGL } from "@/features/sports/court/court-geometry";
 import { EVENT_TYPE_STYLE } from "@/features/events/event-card";
 import { eventCountdown, eventNumbers, nextEvent, taskBoard, type BoardColumn, type BoardTask, type EventNumbers, type NextEvent } from "@/features/events/home-rules";
 import type { TicketInfo } from "@/features/events/event-ticket-3d";
@@ -56,24 +56,6 @@ function useEventTiles(next: NextEvent | null) {
 }
 
 /* -------------------------------- peças -------------------------------- */
-
-function useCan3D() {
-  const reduced = useSyncExternalStore(
-    (cb) => {
-      const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-      mq.addEventListener("change", cb);
-      return () => mq.removeEventListener("change", cb);
-    },
-    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-    () => false,
-  );
-  const webgl = useSyncExternalStore(
-    () => () => {},
-    hasWebGL,
-    () => true,
-  );
-  return webgl && !reduced;
-}
 
 function ticketInfo(e: AtleticaEvent): TicketInfo {
   const d = new Date(`${e.date}T12:00:00Z`);

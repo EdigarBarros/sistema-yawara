@@ -6,6 +6,7 @@ import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/misc";
+import { motionReduced } from "@/stores/ui";
 
 /* -------------------------------- Grade -------------------------------- */
 
@@ -78,10 +79,6 @@ export function ShowcaseGroup({ title, count, children }: { title: string; count
 
 /* -------------------------------- Cartão ------------------------------- */
 
-function prefersReducedMotion() {
-  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
-
 type CardTarget = { href: string; onClick?: never } | { onClick: () => void; href?: never };
 
 /**
@@ -98,7 +95,7 @@ export function ShowcaseCard({
   const ref = useRef<HTMLElement | null>(null);
 
   const move = (e: PointerEvent<HTMLElement>) => {
-    if (e.pointerType !== "mouse" || prefersReducedMotion()) return;
+    if (e.pointerType !== "mouse" || motionReduced()) return;
     const el = ref.current;
     if (!el) return;
     const r = el.getBoundingClientRect();

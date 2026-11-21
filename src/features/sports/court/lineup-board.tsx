@@ -1,11 +1,12 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useState } from "react";
 import { Box, Eye, Map as MapIcon, RotateCcw, Save, Sparkles, UserMinus, UserPlus, Video } from "lucide-react";
 import type { Athlete as TeamAthlete, LineupSlot, SportTeam, TeamLineup } from "@/types";
 import { services } from "@/services";
 import { useAction } from "@/hooks/use-action";
+import { useCan3D } from "@/hooks/use-can-3d";
 import { useIsDesktop } from "@/hooks/use-media";
 import { byShirt, COURT_RULES as SPORT_RULES, inkOn, positionShort, samePosition, type CourtModality } from "@/lib/sports-court";
 import { formatDateTimeShort } from "@/lib/format";
@@ -14,32 +15,17 @@ import { Button } from "@/components/ui/button";
 import { Segmented, Select } from "@/components/ui/form";
 import { Skeleton } from "@/components/ui/misc";
 import { Court2D } from "./court-2d";
-import { hasWebGL, type CameraPreset, type CourtPlayer } from "./court-geometry";
+import { type CameraPreset, type CourtPlayer } from "./court-geometry";
 
 const Court3D = dynamic(() => import("./court-3d"), {
   ssr: false,
   loading: () => <Skeleton className="h-full w-full rounded-none" />,
 });
 
-function subscribeReduced(cb: () => void) {
-  const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-  mq.addEventListener("change", cb);
-  return () => mq.removeEventListener("change", cb);
-}
-
-const noop = () => () => {};
-let webglCache: boolean | null = null;
-function cachedWebGL() {
-  webglCache ??= hasWebGL();
-  return webglCache;
-}
-
-/** 3D só com WebGL, tela de computador e sem "reduzir movimento". */
-function useCan3D() {
+/** 3D só em tela de computador, com WebGL e sem "Animações reduzidas" nas Configurações. */
+function useCourt3D() {
   const desktop = useIsDesktop();
-  const reduced = useSyncExternalStore(subscribeReduced, () => window.matchMedia("(prefers-reduced-motion: reduce)").matches, () => false);
-  const webgl = useSyncExternalStore(noop, cachedWebGL, () => true);
-  return desktop && !reduced && webgl;
+  return useCan3D() && desktop;
 }
 
 /** Primeira vaga livre da formação (ou o meio do nosso lado). */
@@ -75,7 +61,7 @@ const EMPTY: TeamLineup = { formation: "", slots: [] };
 export function LineupBoard({ team, modality, color, editable }: { team: SportTeam; modality: CourtModality; color: string; editable: boolean }) {
   const rules = SPORT_RULES[modality];
   const lineup = team.lineup ?? EMPTY;
-  const can3D = useCan3D();
+  const can3D = useCourt3D();
   const [view, setView] = useState<"3d" | "2d">("3d");
   const [preset, setPreset] = useState<CameraPreset>("side");
   const [slots, setSlots] = useState<LineupSlot[]>(lineup.slots);
