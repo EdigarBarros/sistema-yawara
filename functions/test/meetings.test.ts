@@ -420,3 +420,30 @@ describe("integridade e auditoria", () => {
     expect(text).not.toContain("sigiloso");
   });
 });
+
+describe("encaminhamento feito (setActionDone)", () => {
+  it("responsável ou secretaria marcam; outros não; editar a ata mantém; vale em ata aprovada; arquivada trava", async () => {
+    const m = await createMeeting();
+    const actionId = m.actions[0].id;
+    // fin vê a reunião (diretoria), mas não é responsável nem edita atas.
+    await expectCode(meetings("setActionDone", "fin", { id: m.id, actionId, done: true }), "forbidden");
+    let r = await meetings<Meeting>("setActionDone", "mkt", { id: m.id, actionId, done: true });
+    expect(r.actions[0]).toMatchObject({ doneBy: "mkt" });
+    expect(r.actions[0].doneAt).toBeTruthy();
+    expect(r.history.at(-1)?.summary).toBe("Encaminhamento concluído");
+    expect((await auditFor(m.id)).map((a) => a.action)).toContain("meetings.setActionDone");
+
+    // Editar a ata (mesmo id do encaminhamento) não apaga o "feito".
+    r = await meetings<Meeting>("update", "sec", { id: m.id, input: { actions: [{ id: actionId, description: "Publicar o calendário (revisado)", responsibleId: "mkt", dueDate: "2026-10-25" }] } });
+    expect(r.actions[0].doneBy).toBe("mkt");
+
+    await meetings("setStatus", "sec", { id: m.id, status: "pending_approval" });
+    await meetings("setStatus", "sec", { id: m.id, status: "approved" });
+    r = await meetings<Meeting>("setActionDone", "sec", { id: m.id, actionId, done: false });
+    expect(r.actions[0].doneAt).toBeUndefined();
+
+    await meetings("setStatus", "sec", { id: m.id, status: "archived" });
+    await expectCode(meetings("setActionDone", "sec", { id: m.id, actionId, done: true }), "conflict");
+    await expectCode(meetings("setActionDone", "sec", { id: m.id, actionId: "nao-existe", done: true }), "not_found");
+  });
+});

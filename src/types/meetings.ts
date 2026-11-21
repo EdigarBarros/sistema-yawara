@@ -9,6 +9,9 @@ export interface MeetingAction {
   description: string;
   responsibleId?: ID;
   dueDate?: DateOnly;
+  /** Encaminhamento concluído (quando e por quem). */
+  doneAt?: ISODateTime;
+  doneBy?: ID;
 }
 
 export interface Meeting {

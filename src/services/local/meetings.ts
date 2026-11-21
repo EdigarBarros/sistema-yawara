@@ -3,6 +3,7 @@ import type { Meeting } from "@/types";
 import type { DemoDB } from "@/data/demo/seed";
 import type { AccessContext } from "@/lib/permissions";
 import { MEETING_STATUS } from "@/lib/labels";
+import { canToggleAction } from "@/lib/meeting-actions";
 import { newId } from "@/lib/utils";
 import { commit, getDB } from "./db";
 import {
@@ -170,7 +171,11 @@ export const localMeetings: MeetingService = {
       if (input.actions) {
         patch.actions = input.actions
           .filter((a) => a.description.trim())
-          .map((a) => ({ ...a, description: a.description.trim(), id: a.id ?? newId("act") }));
+          .map((a) => {
+            // "Feito" é marcado por ação própria: editar a ata não apaga.
+            const prev = a.id ? meeting.actions.find((x) => x.id === a.id) : undefined;
+            return { ...a, description: a.description.trim(), id: a.id ?? newId("act"), doneAt: prev?.doneAt, doneBy: prev?.doneBy };
+          });
       } else {
         delete patch.actions;
       }
@@ -221,6 +226,24 @@ export const localMeetings: MeetingService = {
           actorId: ctx.user.id,
         });
       }
+      return clone(meeting);
+    });
+  },
+
+  async setActionDone(id, actionId, done) {
+    await latency(150, 300);
+    return commit((db) => {
+      const ctx = accessContext(db);
+      const meeting = visibleMeeting(db, ctx, id);
+      const action = meeting.actions.find((a) => a.id === actionId);
+      if (!action) throw new ServiceError("not_found", "Encaminhamento não encontrado. Ele pode ter sido removido da ata.");
+      if (meeting.status === "archived") throw new ServiceError("conflict", "Esta reunião está arquivada.");
+      if (!canToggleAction(ctx, meeting, action)) throw new ServiceError("forbidden", "Só o responsável pelo encaminhamento ou quem cuida das atas pode marcar como feito.");
+      if (!!action.doneAt === done) return clone(meeting);
+      action.doneAt = done ? now() : undefined;
+      action.doneBy = done ? ctx.user.id : undefined;
+      meeting.updatedAt = now();
+      meeting.history.push(historyEntry(ctx.user.id, "updated", done ? "Encaminhamento concluído" : "Encaminhamento reaberto"));
       return clone(meeting);
     });
   },

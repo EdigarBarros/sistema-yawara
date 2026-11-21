@@ -119,4 +119,9 @@ export const firebaseMeetings: MeetingService = {
     const rid = takeRequestId();
     return normalize(await callApi<Meeting>("meetings", "setStatus", { id, status }, rid));
   },
+
+  async setActionDone(id, actionId, done) {
+    const rid = takeRequestId();
+    return normalize(await callApi<Meeting>("meetings", "setActionDone", { id, actionId, done }, rid));
+  },
 };

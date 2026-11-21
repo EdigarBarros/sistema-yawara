@@ -25,6 +25,7 @@ import { AudienceSummary } from "@/components/shared/audience";
 import { HistoryTimeline } from "@/components/shared/history";
 import { confirmAction } from "@/components/shared/confirm";
 import { approvalEntry, exportMeetingPdf } from "@/features/meetings/meeting-pdf";
+import { ActionDoneToggle } from "@/features/meetings/action-done";
 
 const TRANSITION_UI: Record<MeetingStatus, { label: string; icon: React.ReactNode; title: string; description: string; primary?: boolean; danger?: boolean }> = {
   pending_approval: {
@@ -214,7 +215,8 @@ export default function MeetingDetailPage() {
               <ul className="divide-y divide-line">
                 {m.actions.map((a) => (
                   <li key={a.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3 text-[13.5px]">
-                    <span className="min-w-0 flex-1 font-medium">{a.description}</span>
+                    <ActionDoneToggle meeting={m} action={a} />
+                    <span className={cn("min-w-0 flex-1 font-medium", a.doneAt && "text-fg-subtle line-through")}>{a.description}</span>
                     <span className="text-[12.5px] text-fg-muted">{a.responsibleId ? dir.memberName(a.responsibleId) : "Sem responsável"}</span>
                     <span className="tnum font-mono text-[12px] text-fg-subtle">{a.dueDate ? formatDate(a.dueDate) : "sem prazo"}</span>
                   </li>
