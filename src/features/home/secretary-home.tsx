@@ -2,10 +2,11 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useState } from "react";
 import { CalendarDays, ClipboardCheck, ClipboardPlus, FileDown, FilePlus2, FolderOpen, ListChecks, MapPin, type LucideIcon } from "lucide-react";
 import type { Meeting } from "@/types";
 import { useAccess } from "@/hooks/use-access";
+import { useCan3D } from "@/hooks/use-can-3d";
 import { useDirectory, useMeetings } from "@/hooks/use-data";
 import { MEETING_MODE_LABELS } from "@/lib/labels";
 import { daysBetween, firstName, formatDate, formatLongDate, formatTime, greeting, todayDateOnly } from "@/lib/format";
@@ -14,7 +15,6 @@ import { openActions, type OpenAction } from "@/lib/meeting-actions";
 import { Skeleton } from "@/components/ui/misc";
 import { Segmented } from "@/components/ui/form";
 import { MemberAvatar } from "@/components/shared/member-avatar";
-import { hasWebGL } from "@/features/sports/court/court-geometry";
 import { ActionDoneToggle } from "@/features/meetings/action-done";
 import type { Seat } from "@/features/meetings/meeting-table-3d";
 import { Tile } from "./presidency-mobile";
@@ -84,24 +84,6 @@ function useSecretaryTiles(toApprove: number, lastApproved: Meeting | null) {
 }
 
 /* -------------------------------- peças -------------------------------- */
-
-function useCan3D() {
-  const reduced = useSyncExternalStore(
-    (cb) => {
-      const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-      mq.addEventListener("change", cb);
-      return () => mq.removeEventListener("change", cb);
-    },
-    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-    () => false,
-  );
-  const webgl = useSyncExternalStore(
-    () => () => {},
-    hasWebGL,
-    () => true,
-  );
-  return webgl && !reduced;
-}
 
 function countdown(today: string, date: string) {
   const d = daysBetween(today, date);

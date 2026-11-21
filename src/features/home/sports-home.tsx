@@ -2,10 +2,11 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useState } from "react";
 import { CalendarPlus, Dumbbell, LayoutGrid, MapPin, Percent, Plus, Shirt, Swords, Target, Trophy, Users, type LucideIcon } from "lucide-react";
 import type { SportTeam } from "@/types";
 import { useAccess } from "@/hooks/use-access";
+import { useCan3D } from "@/hooks/use-can-3d";
 import { useSportsTeams } from "@/hooks/use-data";
 import { canEditTeam } from "@/lib/policies";
 import { courtModalityOf, positionShort } from "@/lib/sports-court";
@@ -13,7 +14,7 @@ import { firstName, formatDate, formatLongDate, greeting, todayDateOnly } from "
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/misc";
 import { ShowcaseCard } from "@/components/shared/showcase";
-import { hasWebGL, type CameraPreset, type CourtPlayer } from "@/features/sports/court/court-geometry";
+import { type CameraPreset, type CourtPlayer } from "@/features/sports/court/court-geometry";
 import { countdown, nextGame, seasonNumbers, weekAgenda, type NextGame, type SeasonNumbers, type WeekItem } from "@/features/sports/home-rules";
 import { SPORTS_COLOR, teamRecord, teamSubtitle } from "@/features/sports/utils";
 import { Tile } from "./presidency-mobile";
@@ -61,24 +62,6 @@ function useSportsTiles(game: NextGame | null, editable: SportTeam[]) {
 }
 
 /* -------------------------------- peças -------------------------------- */
-
-function useCan3D() {
-  const reduced = useSyncExternalStore(
-    (cb) => {
-      const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-      mq.addEventListener("change", cb);
-      return () => mq.removeEventListener("change", cb);
-    },
-    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-    () => false,
-  );
-  const webgl = useSyncExternalStore(
-    () => () => {},
-    hasWebGL,
-    () => true,
-  );
-  return webgl && !reduced;
-}
 
 /** Placar eletrônico do próximo jogo. */
 function Scoreboard({ game, compact }: { game: NextGame; compact?: boolean }) {
