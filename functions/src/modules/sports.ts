@@ -249,7 +249,7 @@ function addHistory(t: SportTeam, actor: Actor, ctx: RunContext, ...entries: [Hi
 }
 
 function audit(tx: Transaction, actor: Actor, ctx: RunContext, action: string, teamId: string, summary: string, details?: Record<string, string | number | boolean | null>) {
-  auditInTx(tx, { uid: actor.uid, name: actor.name }, { action: `sports.${action}`, module: "sports", resourceType: "team", resourceId: teamId, summary, details }, ctx.requestId, ctx.now);
+  auditInTx(tx, actor, { action: `sports.${action}`, module: "sports", resourceType: "team", resourceId: teamId, summary, details }, ctx.requestId, ctx.now);
 }
 
 /** Grava a modalidade completa (público recalculado) e a entrada de busca. */

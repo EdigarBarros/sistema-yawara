@@ -119,7 +119,7 @@ export const auditActions = {
       for (const logId of unique) tx.delete(db.doc(`auditLogs/${logId}`));
       auditInTx(
         tx,
-        { uid: actor.uid, name: actor.name },
+        actor,
         { action: "audit.deleteLogs", module: "audit", resourceType: "auditLog", resourceId: null, summary: `Suporte apagou ${unique.length} registro(s) da auditoria`, details: { count: unique.length } },
         ctx.requestId,
         ctx.now,
@@ -155,7 +155,7 @@ export const auditActions = {
       }
 
       await auditDirect(
-        { uid: actor.uid, name: actor.name },
+        actor,
         {
           action: `${input.module}.export`,
           module: input.module,

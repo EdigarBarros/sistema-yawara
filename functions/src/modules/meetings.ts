@@ -309,7 +309,7 @@ function addHistory(m: Meeting, actor: Actor, ctx: RunContext, ...entries: [Hist
 function audit(tx: Transaction, actor: Actor, ctx: RunContext, action: string, meetingId: string, summary: string, details?: Record<string, string | number | boolean | null>) {
   auditInTx(
     tx,
-    { uid: actor.uid, name: actor.name },
+    actor,
     { action: `meetings.${action}`, module: "meetings", resourceType: "meeting", resourceId: meetingId, summary, details },
     ctx.requestId,
     ctx.now,

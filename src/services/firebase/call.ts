@@ -10,6 +10,7 @@
  * IMPORTANTE: nos serviços, chame `takeRequestId()` na PRIMEIRA linha do
  * método (antes de qualquer await).
  */
+import { getViewAs } from "@/stores/session";
 import { getToken } from "firebase/app-check";
 import { httpsCallable } from "firebase/functions";
 import { API_TRANSPORT } from "@/lib/mode";
@@ -105,7 +106,7 @@ export function mapRouteError(status: number, body: unknown): ServiceError {
 }
 
 /** Chamada à rota de API do aplicativo (implantação gratuita): token de login no cabeçalho. */
-async function callRoute<T>(api: ApiName, body: { action: string; payload: unknown; requestId: string }): Promise<T> {
+async function callRoute<T>(api: ApiName, body: { action: string; payload: unknown; requestId: string; actAs?: string }): Promise<T> {
   const { auth, appCheck } = firebase();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   const user = auth.currentUser;
@@ -155,12 +156,23 @@ export async function callApi<T>(api: ApiName, action: string, payload: unknown 
   }
 }
 
+/** Entrar e sair da visão são pedidos do próprio suporte (sem `actAs`). */
+const OWN_ACTIONS = new Set(["organization.startViewAs", "organization.stopViewAs", "auth.sessionStarted"]);
+
+/** "Ver como" da conta de suporte: as operações acontecem na identidade da pessoa (o servidor confere). */
+function actAsFor(api: ApiName, action: string) {
+  if (OWN_ACTIONS.has(`${api}.${action}`)) return undefined;
+  return getViewAs()?.uid;
+}
+
 async function callApiRaw<T>(api: ApiName, action: string, payload: unknown, requestId: string): Promise<T> {
-  if (API_TRANSPORT === "route") return callRoute<T>(api, { action, payload: stripUndefined(payload), requestId });
+  const actAs = actAsFor(api, action);
+  const envelope = { action, payload: stripUndefined(payload), requestId, ...(actAs ? { actAs } : {}) };
+  if (API_TRANSPORT === "route") return callRoute<T>(api, envelope);
   const { functions } = firebase();
-  const fn = httpsCallable<{ action: string; payload: unknown; requestId: string }, T>(functions, `${api}Api`, { timeout: 120_000 });
+  const fn = httpsCallable<{ action: string; payload: unknown; requestId: string; actAs?: string }, T>(functions, `${api}Api`, { timeout: 120_000 });
   try {
-    const res = await fn({ action, payload: stripUndefined(payload), requestId });
+    const res = await fn(envelope);
     return res.data;
   } catch (error) {
     throw mapFunctionsError(error);

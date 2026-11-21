@@ -103,4 +103,12 @@ export const firebaseOrganization: OrganizationService = {
     const rid = takeRequestId();
     return (await callApi<{ link: string }>("organization", "invitationLink", { id }, rid)).link;
   },
+
+  async startViewAs(memberId) {
+    return callApi<{ uid: string; name: string; roleId: string }>("organization", "startViewAs", { memberId });
+  },
+
+  async stopViewAs(memberId) {
+    await callApi("organization", "stopViewAs", { memberId });
+  },
 };

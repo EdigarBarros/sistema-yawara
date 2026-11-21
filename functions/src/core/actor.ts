@@ -17,8 +17,13 @@ import { db } from "./admin";
 import { AppError, fail } from "./errors";
 
 export interface Actor {
+  /** Quem a operação considera autor (no "ver como", a pessoa vista). */
   uid: string;
   name: string;
+  /** Quem está de fato logado (o token). Igual a `uid`, exceto no "ver como". */
+  authUid: string;
+  /** "Ver como": o suporte que está agindo na visão de `uid` (só para a auditoria). */
+  onBehalfBy?: { uid: string; name: string };
   member: Member;
   role: Role;
   ctx: AccessContext;
@@ -60,6 +65,7 @@ export function buildActor(member: Member, role: Role): Actor {
   return {
     uid: member.id,
     name: member.name,
+    authUid: member.id,
     member,
     role,
     ctx,
@@ -69,10 +75,51 @@ export function buildActor(member: Member, role: Role): Actor {
 }
 
 /**
- * Carrega o integrante autenticado e o cargo dele, exigindo conta e cargo
- * ativos. Use sempre dentro da transação da operação.
+ * Quem chama: o uid do token e, no "ver como" da conta de suporte, o
+ * integrante na visão de quem a operação acontece (`actAs`).
  */
-export async function loadActor(tx: Transaction, uid: string | undefined): Promise<Actor> {
+export type Caller = string | { uid: string | undefined; actAs?: string };
+
+export function callerUid(caller: Caller | undefined): string | undefined {
+  return typeof caller === "object" ? caller.uid : caller;
+}
+
+export function callerActAs(caller: Caller | undefined): string | undefined {
+  return typeof caller === "object" ? caller.actAs : undefined;
+}
+
+/**
+ * Carrega o autor, exigindo conta e cargo ativos. Use sempre dentro da
+ * transação da operação.
+ *
+ * "Ver como" (`actAs`): só a conta com o cargo Suporte do sistema; a pessoa
+ * precisa estar ativa e não pode ser a própria conta nem outro suporte. A
+ * operação acontece com as permissões e a identidade da pessoa; o suporte fica
+ * registrado em `onBehalfBy` (auditoria). Conferido de novo a cada chamada.
+ */
+export async function loadActor(tx: Transaction, caller: Caller | undefined): Promise<Actor> {
+  const uid = callerUid(caller);
+  const actAs = callerActAs(caller);
+  const real = await loadOwnActor(tx, uid);
+  if (!actAs || actAs === real.uid) {
+    if (actAs === real.uid) fail("invalid", "Você já está na sua própria visão.");
+    return real;
+  }
+  if (!isSupportRole(real.role.id)) fail("forbidden", "Somente o Suporte do sistema pode ver a Central como outra pessoa.");
+  const memberSnap = await tx.get(db.doc(`members/${actAs}`));
+  if (!memberSnap.exists) fail("not_found", "O integrante escolhido não foi encontrado.");
+  const member = memberFromDoc(memberSnap.id, memberSnap.data()!);
+  if (member.status !== "active") fail("forbidden", "A conta deste integrante está desativada; não dá para ver como ele(a).");
+  const roleSnap = await tx.get(db.doc(`roles/${member.roleId}`));
+  if (!roleSnap.exists) fail("forbidden", "O cargo deste integrante não foi encontrado.");
+  const role = roleFromDoc(roleSnap.id, roleSnap.data()!);
+  if (!role.active) fail("forbidden", "O cargo deste integrante está desativado.");
+  if (isSupportRole(role.id)) fail("forbidden", "Não dá para ver como outra conta de suporte.");
+  return { ...buildActor(member, role), authUid: real.uid, onBehalfBy: { uid: real.uid, name: real.name } };
+}
+
+/** O integrante dono do token. */
+async function loadOwnActor(tx: Transaction, uid: string | undefined): Promise<Actor> {
   if (!uid) fail("unauthenticated", "Sua sessão expirou. Entre novamente.");
   const memberSnap = await tx.get(db.doc(`members/${uid}`));
   if (!memberSnap.exists) fail("forbidden", "Sua conta ainda não foi habilitada na Central. Procure a presidência.");

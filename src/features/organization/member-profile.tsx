@@ -21,6 +21,7 @@ import { confirmAction } from "@/components/shared/confirm";
 import { Badge } from "@/components/ui/misc";
 import { Button } from "@/components/ui/button";
 import { memberEditRules } from "./org-rules";
+import { ViewAsButton } from "./view-as";
 
 const MODULE_NAV = new Map(NAV.flatMap((g) => g.items).flatMap((i) => (i.module ? [[i.module, i] as const] : [])));
 
@@ -178,6 +179,7 @@ export function MemberActions({ member, onEdit, onDeleted }: { member: Member; o
   if (!canEdit) return rules?.reason ? <p className="text-[12.5px] text-fg-subtle">{rules.reason}</p> : null;
   return (
     <div className="flex w-full flex-wrap gap-2">
+      <ViewAsButton member={member} />
       <Button variant="secondary" onClick={onEdit}>
         <Pencil /> Editar
       </Button>

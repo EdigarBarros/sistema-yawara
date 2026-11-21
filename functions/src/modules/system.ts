@@ -70,7 +70,7 @@ export const systemActions = {
       tx.update(db.doc("settings/system"), Object.fromEntries(changed.map((k) => [`institution.${k}`, input[k]])));
       auditInTx(
         tx,
-        { uid: actor.uid, name: actor.name },
+        actor,
         {
           action: "settings.updateInstitution",
           module: "settings",
@@ -98,7 +98,7 @@ export const systemActions = {
       tx.update(db.doc("settings/system"), { [`modules.${input.module}`]: input.enabled });
       auditInTx(
         tx,
-        { uid: actor.uid, name: actor.name },
+        actor,
         {
           action: "settings.setModuleEnabled",
           module: "settings",
@@ -124,7 +124,7 @@ export const systemActions = {
       if (all.docs.some((d) => String(d.data().name).toLowerCase() === input.name.toLowerCase())) fail("conflict", "Essa categoria já existe.");
       const ref = db.collection("documentCategories").doc();
       tx.create(ref, { name: input.name, createdAt: ctx.now, createdBy: actor.uid });
-      auditInTx(tx, { uid: actor.uid, name: actor.name }, { action: "settings.createDocumentCategory", module: "settings", resourceType: "documentCategory", resourceId: ref.id, summary: `Categoria de documento criada: ${input.name}` }, ctx.requestId, ctx.now);
+      auditInTx(tx, actor, { action: "settings.createDocumentCategory", module: "settings", resourceType: "documentCategory", resourceId: ref.id, summary: `Categoria de documento criada: ${input.name}` }, ctx.requestId, ctx.now);
       return { id: ref.id };
     },
     async present(r) {
@@ -140,7 +140,7 @@ export const systemActions = {
       requirePermission(actor, "settings.edit", "Seu perfil não pode alterar categorias.");
       const snap = requireDoc(await tx.get(db.doc(`documentCategories/${input.id}`)), "Categoria");
       tx.update(snap.ref, { name: input.name, updatedAt: ctx.now, updatedBy: actor.uid });
-      auditInTx(tx, { uid: actor.uid, name: actor.name }, { action: "settings.renameDocumentCategory", module: "settings", resourceType: "documentCategory", resourceId: input.id, summary: `Categoria renomeada para ${input.name}` }, ctx.requestId, ctx.now);
+      auditInTx(tx, actor, { action: "settings.renameDocumentCategory", module: "settings", resourceType: "documentCategory", resourceId: input.id, summary: `Categoria renomeada para ${input.name}` }, ctx.requestId, ctx.now);
       return { id: input.id };
     },
     async present(r) {
@@ -158,7 +158,7 @@ export const systemActions = {
       if (all.docs.some((d) => d.data().type === input.type && String(d.data().name).toLowerCase() === input.name.toLowerCase())) fail("conflict", "Essa categoria já existe.");
       const ref = db.collection("financeCategories").doc();
       tx.create(ref, { name: input.name, type: input.type, createdAt: ctx.now, createdBy: actor.uid });
-      auditInTx(tx, { uid: actor.uid, name: actor.name }, { action: "settings.createFinanceCategory", module: "settings", resourceType: "financeCategory", resourceId: ref.id, summary: `Categoria financeira criada: ${input.name}` }, ctx.requestId, ctx.now);
+      auditInTx(tx, actor, { action: "settings.createFinanceCategory", module: "settings", resourceType: "financeCategory", resourceId: ref.id, summary: `Categoria financeira criada: ${input.name}` }, ctx.requestId, ctx.now);
       return { id: ref.id };
     },
     async present(r) {
@@ -174,7 +174,7 @@ export const systemActions = {
       requirePermission(actor, "settings.edit", "Seu perfil não pode alterar categorias.");
       const snap = requireDoc(await tx.get(db.doc(`financeCategories/${input.id}`)), "Categoria");
       tx.update(snap.ref, { name: input.name, updatedAt: ctx.now, updatedBy: actor.uid });
-      auditInTx(tx, { uid: actor.uid, name: actor.name }, { action: "settings.renameFinanceCategory", module: "settings", resourceType: "financeCategory", resourceId: input.id, summary: `Categoria financeira renomeada para ${input.name}` }, ctx.requestId, ctx.now);
+      auditInTx(tx, actor, { action: "settings.renameFinanceCategory", module: "settings", resourceType: "financeCategory", resourceId: input.id, summary: `Categoria financeira renomeada para ${input.name}` }, ctx.requestId, ctx.now);
       return { id: input.id };
     },
     async present(r) {
@@ -287,12 +287,12 @@ export async function finishDriveConnection(params: { code?: string | null; stat
   }
   if (!actor.can("settings.admin")) return "forbidden" as const;
   try {
-    await completeDriveConnection(params.code, driveRedirectUri(), { uid: actor.uid, name: actor.name });
+    await completeDriveConnection(params.code, driveRedirectUri(), actor);
   } catch {
     return "error" as const;
   }
   await auditDirect(
-    { uid: actor.uid, name: actor.name },
+    actor,
     { action: "settings.connectDrive", module: "settings", resourceType: "settings", resourceId: "drive", summary: "Google Drive da Atlética conectado para guardar os arquivos" },
   );
   return "ok" as const;

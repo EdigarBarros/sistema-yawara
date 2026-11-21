@@ -35,7 +35,7 @@ import type { Department, Invitation, Member, Permission, Role } from "@/types";
 import { adminAuth, db, FieldValue, nowISO, Timestamp, timestampInDays } from "../core/admin";
 import { memberFromDoc, requirePermission, requireSupport, roleFromDoc, type Actor } from "../core/actor";
 import { auditDirect, auditInTx } from "../core/audit";
-import { alreadyCompleted, mutation, query, type RunContext } from "../core/dispatch";
+import { alreadyCompleted, loadActorOutsideTx, mutation, query, type RunContext } from "../core/dispatch";
 import { AppError, ensure, fail } from "../core/errors";
 import { APP_BASE_URL, INVITE_TTL_DAYS, intParam, stringParam } from "../core/params";
 import { requireDoc, toDTO } from "../core/records";
@@ -336,12 +336,53 @@ async function presentInvitation(result: { id: string; requestId?: string }, act
 }
 
 function audit(tx: Transaction, actor: Actor, ctx: RunContext, action: string, resourceType: string, resourceId: string, summary: string, details?: Record<string, string | number | boolean | null>) {
-  auditInTx(tx, { uid: actor.uid, name: actor.name }, { action: `organization.${action}`, module: "organization", resourceType, resourceId, summary, details }, ctx.requestId, ctx.now);
+  auditInTx(tx, actor, { action: `organization.${action}`, module: "organization", resourceType, resourceId, summary, details }, ctx.requestId, ctx.now);
 }
 
 /* -------------------------------- ações --------------------------------- */
 
+const viewAsSchema = z.strictObject({ memberId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/, "Identificador inválido.") });
+
 export const organizationActions = {
+  /**
+   * "Ver como" (só a conta de suporte): confere as condições (as mesmas de
+   * loadActor com actAs) e registra na auditoria. Não notifica a pessoa.
+   */
+  startViewAs: query({
+    module: "organization",
+    schema: viewAsSchema,
+    async run(actor, { memberId }) {
+      actor = actor!;
+      requireSupport(actor, "Somente o Suporte do sistema pode ver a Central como outra pessoa.");
+      const target = await loadActorOutsideTx({ uid: actor.uid, actAs: memberId });
+      await auditDirect(actor, {
+        action: "organization.startViewAs",
+        module: "organization",
+        resourceType: "member",
+        resourceId: target.uid,
+        summary: `Suporte entrou na visão de ${target.name}`,
+      });
+      return { uid: target.uid, name: target.name, roleId: target.role.id };
+    },
+  }),
+
+  stopViewAs: query({
+    module: "organization",
+    schema: viewAsSchema,
+    async run(actor, { memberId }) {
+      actor = actor!;
+      requireSupport(actor);
+      await auditDirect(actor, {
+        action: "organization.stopViewAs",
+        module: "organization",
+        resourceType: "member",
+        resourceId: memberId,
+        summary: "Suporte saiu da visão de outro integrante",
+      });
+      return { ok: true };
+    },
+  }),
+
   createDepartment: mutation({
     module: "organization",
     schema: departmentInput,
@@ -731,7 +772,7 @@ export const organizationActions = {
     schema: supportAccountUpdate,
     async prepare(actor, { id: memberId, input }, ctx) {
       // Reenvio da mesma requisição: o Authentication já foi alterado.
-      if (await alreadyCompleted(actor.uid, ctx.requestId)) return;
+      if (await alreadyCompleted(actor.authUid, ctx.requestId)) return;
       requireSupport(actor);
       if (input.email === undefined && input.password === undefined && input.name === undefined) return;
       const user = await adminAuth.getUser(memberId).catch(() => null);
@@ -807,7 +848,7 @@ export const organizationActions = {
       if (status !== "pending") fail("conflict", "Só convites pendentes têm link válido. Para um convite expirado, use Renovar.");
       const token = link.data()?.token as string | undefined;
       if (!token) fail("not_found", "Este convite foi criado antes de os links serem guardados. Use Renovar para gerar um link novo.");
-      await auditDirect({ uid: actor.uid, name: actor.name }, { action: "organization.invitationLink", module: "organization", resourceType: "invitation", resourceId: invitationId, summary: "Suporte consultou o link de um convite" });
+      await auditDirect(actor, { action: "organization.invitationLink", module: "organization", resourceType: "invitation", resourceId: invitationId, summary: "Suporte consultou o link de um convite" });
       return { link: inviteLink(token) };
     },
   }),
@@ -1047,13 +1088,15 @@ export const authActions = {
     schema: z.object({}).passthrough(),
     async run(actor) {
       actor = actor!;
+      // No "ver como" do suporte, não conta como sessão da pessoa.
+      if (actor.onBehalfBy) return { recorded: false };
       const ref = db.doc(`memberPrivate/${actor.uid}`);
       const snap = await ref.get();
       const last = snap.data()?.lastSessionAuditAt as string | undefined;
       if (last && Date.now() - Date.parse(last) < 10 * 60 * 1000) return { recorded: false };
       const now = nowISO();
       await ref.set({ lastSessionAuditAt: now }, { merge: true });
-      await auditDirect({ uid: actor.uid, name: actor.name }, { action: "auth.signIn", module: "auth", resourceType: "session", resourceId: actor.uid, summary: "Sessão iniciada" });
+      await auditDirect(actor, { action: "auth.signIn", module: "auth", resourceType: "session", resourceId: actor.uid, summary: "Sessão iniciada" });
       return { recorded: true };
     },
   }),

@@ -316,7 +316,7 @@ function writeDocument(tx: Transaction, ref: DocumentReference, doc: Institution
 function audit(tx: Transaction, actor: Actor, ctx: RunContext, action: string, docIdValue: string, summary: string, details?: Record<string, string | number | boolean | null>) {
   auditInTx(
     tx,
-    { uid: actor.uid, name: actor.name },
+    actor,
     { action: `documents.${action}`, module: "documents", resourceType: "document", resourceId: docIdValue, summary, details },
     ctx.requestId,
     ctx.now,
@@ -381,15 +381,15 @@ export const documentsActions = {
     async prepare(actor, { uploadId, link }, ctx): Promise<CreatePrepared> {
       // Conferência antecipada (repetida dentro da transação) para não mover arquivos à toa.
       requirePermission(actor, "documents.create", "Seu perfil não pode adicionar documentos.");
-      const id = newDocumentId(actor.uid, ctx.requestId);
-      if ((!uploadId && !link) || (await alreadyCompleted(actor.uid, ctx.requestId))) return { docId: id, file: null };
+      const id = newDocumentId(actor.authUid, ctx.requestId);
+      if ((!uploadId && !link) || (await alreadyCompleted(actor.authUid, ctx.requestId))) return { docId: id, file: null };
       const file = await resolveFile(actor, { uploadId, link }, "document", `documents/${id}/v1`, ctx);
       return { docId: id, file };
     },
     async run(tx, actor, { input, uploadId, link }, ctx, prepared): Promise<DocumentRefResult> {
       actor = actor!;
       requirePermission(actor, "documents.create", "Seu perfil não pode adicionar documentos.");
-      const id = newDocumentId(actor.uid, ctx.requestId);
+      const id = newDocumentId(actor.authUid, ctx.requestId);
       if (prepared.docId !== id) fail("conflict", "Requisição inconsistente. Atualize a página e tente novamente.");
       if ((uploadId || link) && !prepared.file) fail("conflict", "O arquivo enviado não pôde ser anexado. Envie o arquivo novamente.");
       const access = sanitizeAudience(input.access);
@@ -559,7 +559,7 @@ export const documentsActions = {
     module: "documents",
     schema: addVersionSchema,
     async prepare(actor, { id, uploadId, link }, ctx): Promise<VersionPrepared> {
-      if (await alreadyCompleted(actor.uid, ctx.requestId)) return { version: 0, file: null };
+      if (await alreadyCompleted(actor.authUid, ctx.requestId)) return { version: 0, file: null };
       // Conferência antecipada (repetida dentro da transação) e pasta da próxima versão.
       const snap = await db.doc(`documents/${id}`).get();
       if (!snap.exists) fail("not_found", "Documento não encontrado. Pode ter sido removido ou não estar disponível para o seu perfil.");

@@ -34,7 +34,7 @@ import { logger } from "firebase-functions";
 import { z } from "zod";
 import type { ModuleKey } from "@/types";
 import { db, nowISO, timestampInDays } from "./admin";
-import { buildActor, loadActor, type Actor } from "./actor";
+import { buildActor, callerUid, loadActor, type Actor, type Caller } from "./actor";
 import { auditDirect } from "./audit";
 import { AppError, fail, normalizeError, toHttpsError } from "./errors";
 import { ENFORCE_APP_CHECK } from "./params";
@@ -104,11 +104,16 @@ const envelopeSchema = z.object({
     .string()
     .regex(/^[A-Za-z0-9_-]{8,80}$/)
     .optional(),
+  /** "Ver como" da conta de suporte: id do integrante (conferido em loadActor). */
+  actAs: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
 });
 
 /** Carrega o autor fora de uma transação (consultas e etapa de preparação). */
-export async function loadActorOutsideTx(uid: string | undefined): Promise<Actor> {
-  return db.runTransaction((tx) => loadActor(tx, uid), { readOnly: true });
+export async function loadActorOutsideTx(caller: Caller | undefined): Promise<Actor> {
+  return db.runTransaction((tx) => loadActor(tx, caller), { readOnly: true });
 }
 
 const IDEMPOTENCY_TTL_DAYS = 2;
@@ -169,7 +174,9 @@ export function isCommittedError(error: unknown) {
   return typeof error === "object" && error !== null && COMMITTED_ERRORS.has(error);
 }
 
-async function runMutation(def: MutationAction<unknown, unknown, unknown>, uid: string | undefined, input: unknown, requestId: string) {
+async function runMutation(def: MutationAction<unknown, unknown, unknown>, caller: Caller | undefined, input: unknown, requestId: string) {
+  // A idempotência fica sempre com quem está logado (o token).
+  const uid = callerUid(caller);
   const now = nowISO();
   const aborts: (() => Promise<void>)[] = [];
   const commits: (() => Promise<void>)[] = [];
@@ -179,7 +186,7 @@ async function runMutation(def: MutationAction<unknown, unknown, unknown>, uid: 
   if (def.prepare) {
     if (!uid) fail("unauthenticated", "Sua sessão expirou. Entre novamente.");
     try {
-      prepared = await def.prepare(await loadActorOutsideTx(uid), input, prepareCtx);
+      prepared = await def.prepare(await loadActorOutsideTx(caller), input, prepareCtx);
     } catch (error) {
       // Falha no meio da preparação (ex.: 2º arquivo recusado): desfaz o que já foi movido.
       await runAborts(aborts, actionKey(def), requestId);
@@ -217,7 +224,7 @@ async function runMutation(def: MutationAction<unknown, unknown, unknown>, uid: 
         }
       }
 
-      actor = def.public && !uid ? null : await loadActor(tx, uid);
+      actor = def.public && !uid ? null : await loadActor(tx, caller);
       const ctx: RunContext = {
         requestId,
         now,
@@ -261,7 +268,7 @@ async function runMutation(def: MutationAction<unknown, unknown, unknown>, uid: 
   if (!def.present) return result;
   // Na repetição, o autor é carregado de novo: conta ou cargo desativados são
   // uma recusa desta requisição (fora do try), não um erro "pós-confirmação".
-  if (!actor && uid) actor = await loadActorOutsideTx(uid);
+  if (!actor && uid) actor = await loadActorOutsideTx(caller);
   try {
     return await def.present(result, actor);
   } catch (error) {
@@ -282,14 +289,15 @@ export interface ApiRequestMeta {
 }
 
 /** Executa uma ação já validada. Exportado para os testes chamarem sem HTTP. */
-export async function executeAction(def: AnyAction, uid: string | undefined, rawPayload: unknown, requestId: string = randomUUID()) {
+export async function executeAction(def: AnyAction, caller: Caller | undefined, rawPayload: unknown, requestId: string = randomUUID()) {
+  const uid = callerUid(caller);
   if (!def.public && !uid) fail("unauthenticated", "Sua sessão expirou. Entre novamente.");
   const input = def.schema.parse(rawPayload ?? {});
   if (def.kind === "query") {
-    const actor = def.public && !uid ? null : await loadActorOutsideTx(uid);
+    const actor = def.public && !uid ? null : await loadActorOutsideTx(caller);
     return def.run(actor, input, { requestId, now: nowISO() });
   }
-  return runMutation(def as MutationAction<unknown, unknown, unknown>, uid, input, requestId);
+  return runMutation(def as MutationAction<unknown, unknown, unknown>, caller, input, requestId);
 }
 
 /** Registra os nomes "<api>.<ação>" usados na auditoria e nos logs. */
@@ -308,13 +316,15 @@ export function registerApi(name: string, actions: Record<string, AnyAction>) {
 export async function handleApiCall(name: string, actions: Record<string, AnyAction>, data: unknown, uid: string | undefined): Promise<unknown> {
   const envelope = envelopeSchema.safeParse(data);
   if (!envelope.success) throw new AppError("invalid", "Requisição inválida.");
-  const { action, payload } = envelope.data;
+  const { action, payload, actAs } = envelope.data;
+  // "Ver como": o uid do token continua sendo quem está logado; loadActor confere se é o suporte.
+  const caller: Caller = actAs && uid ? { uid, actAs } : uid ?? "";
   const requestId = envelope.data.requestId ?? randomUUID();
   const def = Object.prototype.hasOwnProperty.call(actions, action) ? actions[action] : undefined;
   if (!def) throw new AppError("invalid", "Operação desconhecida.");
 
   try {
-    return await executeAction(def, uid, payload, requestId);
+    return await executeAction(def, uid ? caller : undefined, payload, requestId);
   } catch (raw) {
     const committed = isCommittedError(raw);
     const error = normalizeError(raw);
@@ -335,6 +345,7 @@ export async function handleApiCall(name: string, actions: Record<string, AnyAct
           resourceId: null,
           summary: `Operação recusada por falta de permissão: ${error.message}`,
           outcome: "denied",
+          ...(actAs ? { details: { actAs } } : {}),
         },
         requestId,
       );
