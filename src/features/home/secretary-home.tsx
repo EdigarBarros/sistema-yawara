@@ -41,10 +41,18 @@ function useSecretaryHome() {
         .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))[0] ?? null,
     [meetings, today],
   );
+  // Sem reunião marcada, a mesa mostra a última que aconteceu.
+  const last = useMemo(
+    () =>
+      meetings
+        .filter((m) => m.status !== "archived" && m.date < today)
+        .sort((a, b) => b.date.localeCompare(a.date) || b.startTime.localeCompare(a.startTime))[0] ?? null,
+    [meetings, today],
+  );
   const actions = useMemo(() => openActions(meetings, today), [meetings, today]);
   const toApprove = meetings.filter((m) => m.status === "pending_approval").length;
   const lastApproved = useMemo(() => meetings.filter((m) => m.status === "approved").sort((a, b) => b.date.localeCompare(a.date))[0] ?? null, [meetings]);
-  return { access, dir, query, next, actions, toApprove, lastApproved, today };
+  return { access, dir, query, next, last, actions, toApprove, lastApproved, today };
 }
 
 function useSecretaryTiles(toApprove: number, lastApproved: Meeting | null) {
@@ -234,18 +242,95 @@ function ActionsList({ actions, userId, limit }: { actions: OpenAction[]; userId
   );
 }
 
+/**
+ * Mesa 3D da reunião: a próxima, ou a última que aconteceu, ou vazia (com
+ * "Registrar reunião"). Sem 3D no aparelho, mostra o cartão comum.
+ */
+function MeetingStage({ next, last, today, compact }: { next: Meeting | null; last: Meeting | null; today: string; compact?: boolean }) {
+  const access = useAccess();
+  const dir = useDirectory();
+  const can3D = useCan3D();
+  const meeting = next ?? last;
+  const canCreate = access.can("meetings.create");
+  const seats: Seat[] = useMemo(() => {
+    if (!meeting) return [];
+    const members = meeting.participantIds.map((id) => ({ id, name: dir.memberName(id), initials: initials(dir.memberName(id)) }));
+    const guests = (meeting.guests ?? []).map((g, i) => ({ id: `guest-${i}`, name: g, initials: initials(g), guest: true }));
+    return [...members, ...guests];
+  }, [meeting, dir]);
+  const register = canCreate && (
+    <Link
+      href="/secretaria/registrar"
+      className="press pointer-events-auto mt-3 inline-flex items-center gap-1.5 rounded-full bg-[#e1af37] px-3.5 py-1.5 text-[12.5px] font-bold text-[#1a1200] hover:bg-[#f3d27c]"
+    >
+      <ClipboardPlus className="size-3.5" aria-hidden /> Registrar reunião
+    </Link>
+  );
+
+  if (!can3D) {
+    if (next) return <NextMeetingCard meeting={next} today={today} compact={compact} />;
+    return (
+      <div className={cn("grid place-items-center rounded-[22px] border border-dashed border-line-strong p-6 text-center", compact ? "h-[200px]" : "h-[380px]")}>
+        <span>
+          <CalendarDays className="mx-auto mb-3 size-9 text-fg-subtle" aria-hidden />
+          <span className="block font-display text-[20px] font-bold">Nenhuma reunião marcada</span>
+          {canCreate && (
+            <Link href="/secretaria/registrar" className="mt-2 inline-block text-[13.5px] font-semibold text-gold-fg hover:underline">
+              Registrar uma reunião →
+            </Link>
+          )}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("relative overflow-hidden rounded-[22px] border border-line bg-[radial-gradient(ellipse_at_top,#1d3b8f,#030f45_72%)]", compact ? "h-[260px]" : "h-[380px]")}>
+      <MeetingTable3D seats={seats} agenda={meeting?.agenda ?? []} compact={compact} />
+      <div className={cn("pointer-events-none absolute top-3 left-3 max-w-[78%] rounded-2xl bg-black/35 text-white backdrop-blur", compact ? "px-3 py-2" : "top-4 left-4 max-w-[70%] px-4 py-3")}>
+        {meeting ? (
+          <>
+            <p className="text-[11px] font-semibold tracking-[0.14em] text-white/70 uppercase">
+              {next ? `Próxima reunião · ${countdown(today, next.date)}` : "Nenhuma reunião marcada · última"}
+            </p>
+            <p className={cn("mt-1 truncate font-display leading-tight font-extrabold", compact ? "text-[17px]" : "text-[22px]")}>{meeting.title}</p>
+            <p className="mt-0.5 truncate text-[12.5px] text-white/75">
+              {formatDate(meeting.date)} às {formatTime(meeting.startTime)} · {whereLabel(meeting)}
+            </p>
+            {!next && register}
+          </>
+        ) : (
+          <>
+            <p className="text-[11px] font-semibold tracking-[0.14em] text-white/70 uppercase">Mesa da reunião</p>
+            <p className={cn("mt-1 font-display leading-tight font-extrabold", compact ? "text-[17px]" : "text-[22px]")}>Nenhuma reunião marcada</p>
+            {register}
+          </>
+        )}
+      </div>
+      {!next && meeting && !compact && (
+        <Link
+          href={`/secretaria/${meeting.id}`}
+          className="absolute top-4 right-4 rounded-full bg-black/40 px-3 py-1 text-[12px] font-semibold text-white backdrop-blur hover:bg-black/60"
+        >
+          Abrir a última reunião →
+        </Link>
+      )}
+      {next && seats.length > 14 && (
+        <span className="pointer-events-none absolute top-4 right-4 rounded-full bg-black/40 px-3 py-1 text-[12px] text-white backdrop-blur">+{seats.length - 14} participantes</span>
+      )}
+      <p className="pointer-events-none absolute bottom-3 left-3 rounded-full bg-black/35 px-3 py-1 text-[11.5px] text-white/75 backdrop-blur">
+        {compact ? "Arraste para girar · toque numa cadeira" : "Passe o mouse numa cadeira para ver quem é · arraste para girar"}
+      </p>
+    </div>
+  );
+}
+
 /* ------------------------------ computador ------------------------------ */
 
 export function SecretaryDesktopHome() {
-  const { access, dir, query, next, actions, toApprove, lastApproved, today } = useSecretaryHome();
+  const { access, query, next, last, actions, toApprove, lastApproved, today } = useSecretaryHome();
   const tiles = useSecretaryTiles(toApprove, lastApproved);
   const can3D = useCan3D();
-  const seats: Seat[] = useMemo(() => {
-    if (!next) return [];
-    const members = next.participantIds.map((id) => ({ id, name: dir.memberName(id), initials: initials(dir.memberName(id)) }));
-    const guests = (next.guests ?? []).map((g, i) => ({ id: `guest-${i}`, name: g, initials: initials(g), guest: true }));
-    return [...members, ...guests];
-  }, [next, dir]);
 
   return (
     <div className="space-y-8">
@@ -264,37 +349,8 @@ export function SecretaryDesktopHome() {
           <p className="rounded-[22px] border border-line p-6 text-[14px] text-fg-muted">Não foi possível carregar as reuniões.</p>
         ) : !query.data ? (
           <Skeleton className="h-[380px] rounded-[22px]" />
-        ) : next ? (
-          can3D ? (
-            <div className="relative h-[380px] overflow-hidden rounded-[22px] border border-line bg-[radial-gradient(ellipse_at_top,#1d3b8f,#030f45_72%)]">
-              <MeetingTable3D seats={seats} agenda={next.agenda} />
-              <div className="pointer-events-none absolute top-4 left-4 max-w-[70%] rounded-2xl bg-black/35 px-4 py-3 text-white backdrop-blur">
-                <p className="text-[11px] font-semibold tracking-[0.14em] text-white/70 uppercase">Próxima reunião · {countdown(today, next.date)}</p>
-                <p className="mt-1 truncate font-display text-[22px] leading-tight font-extrabold">{next.title}</p>
-                <p className="mt-0.5 truncate text-[12.5px] text-white/75">
-                  {formatDate(next.date)} às {formatTime(next.startTime)} · {whereLabel(next)}
-                </p>
-              </div>
-              {seats.length > 14 && (
-                <span className="pointer-events-none absolute top-4 right-4 rounded-full bg-black/40 px-3 py-1 text-[12px] text-white backdrop-blur">+{seats.length - 14} participantes</span>
-              )}
-              <p className="pointer-events-none absolute bottom-3 left-4 rounded-full bg-black/35 px-3 py-1 text-[11.5px] text-white/75 backdrop-blur">
-                Passe o mouse numa cadeira para ver quem é · arraste para girar
-              </p>
-            </div>
-          ) : (
-            <NextMeetingCard meeting={next} today={today} />
-          )
         ) : (
-          <div className="grid h-[380px] place-items-center rounded-[22px] border border-dashed border-line-strong p-6 text-center">
-            <span>
-              <CalendarDays className="mx-auto mb-3 size-9 text-fg-subtle" aria-hidden />
-              <span className="block font-display text-[20px] font-bold">Nenhuma reunião marcada</span>
-              <Link href="/secretaria/registrar" className="mt-2 inline-block text-[13.5px] font-semibold text-gold-fg hover:underline">
-                Registrar uma reunião →
-              </Link>
-            </span>
-          </div>
+          <MeetingStage next={next} last={last} today={today} />
         )}
         {next && can3D ? <NextMeetingCard meeting={next} today={today} /> : <div className="hidden xl:block" />}
       </section>
@@ -325,8 +381,9 @@ export function SecretaryDesktopHome() {
 /* -------------------------------- celular -------------------------------- */
 
 export function SecretaryMobileHome() {
-  const { access, query, next, actions, toApprove, lastApproved, today } = useSecretaryHome();
+  const { access, query, next, last, actions, toApprove, lastApproved, today } = useSecretaryHome();
   const tiles = useSecretaryTiles(toApprove, lastApproved).slice(0, 4);
+  const can3D = useCan3D();
   return (
     <div className="space-y-6">
       <header className="anim-rise">
@@ -334,12 +391,15 @@ export function SecretaryMobileHome() {
         <h1 className="font-display text-[30px] leading-tight font-bold">{firstName(access.user?.name ?? "")}</h1>
       </header>
 
-      {!query.data ? (
-        <Skeleton className="h-[200px] rounded-[22px]" />
-      ) : next ? (
-        <NextMeetingCard meeting={next} today={today} compact />
+      {query.isError ? (
+        <p className="rounded-[22px] border border-line p-5 text-[13px] text-fg-muted">Não foi possível carregar as reuniões.</p>
+      ) : !query.data ? (
+        <Skeleton className="h-[260px] rounded-[22px]" />
       ) : (
-        <p className="rounded-[22px] border border-dashed border-line-strong p-5 text-center text-[13px] text-fg-muted">Nenhuma reunião marcada.</p>
+        <>
+          <MeetingStage next={next} last={last} today={today} compact />
+          {next && can3D && <NextMeetingCard meeting={next} today={today} compact />}
+        </>
       )}
 
       {tiles.length > 0 && (
