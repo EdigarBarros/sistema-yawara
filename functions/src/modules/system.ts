@@ -5,7 +5,7 @@ import { z } from "zod";
 import { MODULE_MAP } from "@/lib/modules";
 import type { DocumentCategory, FinanceCategory, InstitutionSettings, ModuleKey, SystemSettings } from "@/types";
 import { db } from "../core/admin";
-import { loadSettings, requirePermission } from "../core/actor";
+import { loadSettings, requireModuleEnabled, requirePermission } from "../core/actor";
 import { auditDirect, auditInTx } from "../core/audit";
 import { loadActorOutsideTx, mutation, query } from "../core/dispatch";
 import { fail } from "../core/errors";
@@ -54,7 +54,67 @@ async function presentSettings(): Promise<SystemSettings> {
   return (await db.doc("settings/system").get()).data() as SystemSettings;
 }
 
+/**
+ * "Ver como": coleções com público por registro e o módulo de cada uma (as
+ * mesmas que o navegador lê com listVisible/getVisible).
+ */
+const VIEW_AS_COLLECTIONS = {
+  campaigns: "campaigns",
+  events: "events",
+  documents: "documents",
+  meetings: "meetings",
+  contents: "marketing",
+  projects: "extension",
+  sportsTeams: "sports",
+} as const satisfies Record<string, ModuleKey>;
+
+const VIEW_AS_LIST_LIMIT = 500;
+
+const viewAsReadSchema = z.strictObject({
+  collection: z.enum(Object.keys(VIEW_AS_COLLECTIONS) as [keyof typeof VIEW_AS_COLLECTIONS, ...(keyof typeof VIEW_AS_COLLECTIONS)[]], { error: "Coleção inválida." }),
+  id: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/, "Identificador inválido.")
+    .optional(),
+});
+
 export const systemActions = {
+  /**
+   * Leitura no "ver como" da conta de suporte. No navegador, as regras do
+   * Firestore comparam o público do registro com os marcadores de quem está
+   * logado (o suporte), não com os da pessoa vista; nos módulos sem permissão
+   * "admin" (reuniões, marketing, extensão) a leitura seria recusada.
+   * Aqui vale exatamente a regra `visible()` (firestore.rules), aplicada à
+   * pessoa vista: módulo ativo + `<módulo>.view` + (`<módulo>.admin` ou
+   * público compatível). Só com actAs (loadActor confere que é o suporte).
+   */
+  viewAsRead: query({
+    module: "system",
+    schema: viewAsReadSchema,
+    async run(actor, input) {
+      actor = actor!;
+      if (!actor.onBehalfBy) fail("forbidden", "Esta leitura só existe no “ver como” da conta de suporte.");
+      const moduleKey = VIEW_AS_COLLECTIONS[input.collection];
+      await db.runTransaction((tx) => requireModuleEnabled(tx, moduleKey), { readOnly: true });
+      if (!actor.can(`${moduleKey}.view`)) fail("forbidden", "Este módulo não está disponível para o perfil desta pessoa.");
+      const isAdmin = actor.can(`${moduleKey}.admin`);
+      const tokens = actor.tokens.slice(0, 30);
+      if (input.id) {
+        const snap = await db.doc(`${input.collection}/${input.id}`).get();
+        const readers = (snap.data()?.readers ?? []) as string[];
+        if (!snap.exists || (!isAdmin && !readers.some((r) => tokens.includes(r)))) {
+          fail("forbidden", "Este registro não está disponível para o perfil desta pessoa.");
+        }
+        return { items: [toDTO<Record<string, unknown>>(snap)] };
+      }
+      if (!isAdmin && tokens.length === 0) return { items: [] };
+      let q = db.collection(input.collection) as FirebaseFirestore.Query;
+      if (!isAdmin) q = q.where("readers", "array-contains-any", tokens);
+      const snap = await q.orderBy("updatedAt", "desc").limit(VIEW_AS_LIST_LIMIT).get();
+      return { items: snap.docs.map((d) => toDTO<Record<string, unknown>>(d)) };
+    },
+  }),
+
   updateInstitution: mutation({
     module: "system",
     schema: institution,

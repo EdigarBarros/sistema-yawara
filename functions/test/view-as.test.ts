@@ -5,6 +5,9 @@ import { handleApiCall } from "../src/core/dispatch";
 import { normalizeError } from "../src/core/errors";
 import { eventsActions } from "../src/modules/events";
 import { organizationActions } from "../src/modules/organization";
+import { meetingsActions } from "../src/modules/meetings";
+import { systemActions } from "../src/modules/system";
+import { caller } from "./helpers";
 import { auditFor, createMember, db, expectCode, resetEmulators, seedPeople, seedStructure } from "./helpers";
 
 const NOW = "2026-11-21T12:00:00.000Z";
@@ -77,5 +80,45 @@ describe("ver como (conta de suporte)", () => {
     expect(actions).toEqual(expect.arrayContaining(["organization.startViewAs", "organization.stopViewAs"]));
     expect((await db.collection("notifications").where("recipientId", "==", "evt").get()).size).toBe(0);
     await expectCode(call(organizationActions, "organization", "startViewAs", "pres", { memberId: "evt" }), "forbidden");
+  });
+});
+
+describe("leituras no ver como (system.viewAsRead)", () => {
+  const meetings = caller("meetings", meetingsActions);
+  const meeting = (title: string, userIds: string[]) => ({
+    title,
+    date: "2026-12-01",
+    startTime: "19:00",
+    mode: "presencial",
+    location: "Sala",
+    participantIds: userIds,
+    guests: [],
+    agenda: ["Pauta"],
+    summary: "",
+    decisions: [],
+    actions: [],
+    documentIds: [],
+    access: { scope: "people", roleIds: [], userIds },
+  });
+
+  it("vendo como a secretária, lista o que ela vê (reunião só dela) e não o que é só de outra pessoa", async () => {
+    const mine = await meetings<{ id: string }>("create", "sec", meeting("Reunião da secretaria", ["sec"]));
+    const other = await meetings<{ id: string }>("create", "pres", meeting("Reunião só da presidência", ["pres"]));
+    const r = await call<{ items: { id: string; readers?: unknown }[] }>(systemActions, "system", "viewAsRead", "sup", { collection: "meetings" }, "sec");
+    const ids = r.items.map((i) => i.id);
+    expect(ids).toContain(mine.id);
+    expect(ids).not.toContain(other.id);
+    expect(r.items[0]).not.toHaveProperty("readers");
+    const one = await call<{ items: { id: string }[] }>(systemActions, "system", "viewAsRead", "sup", { collection: "meetings", id: mine.id }, "sec");
+    expect(one.items[0].id).toBe(mine.id);
+    await expectCode(call(systemActions, "system", "viewAsRead", "sup", { collection: "meetings", id: other.id }, "sec"), "forbidden");
+  });
+
+  it("só no ver como do suporte; coleção fora da lista e módulo desativado são recusados", async () => {
+    await expectCode(call(systemActions, "system", "viewAsRead", "sup", { collection: "meetings" }), "forbidden");
+    await expectCode(call(systemActions, "system", "viewAsRead", "pres", { collection: "meetings" }, "sec"), "forbidden");
+    await expectCode(call(systemActions, "system", "viewAsRead", "sup", { collection: "financeEntries" }, "sec"), "invalid");
+    await db.doc("settings/system").set({ modules: { meetings: false } }, { merge: true });
+    await expectCode(call(systemActions, "system", "viewAsRead", "sup", { collection: "meetings" }, "sec"), "unavailable");
   });
 });
