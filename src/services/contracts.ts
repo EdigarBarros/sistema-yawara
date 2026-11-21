@@ -350,6 +350,8 @@ export interface MeetingService {
   create(input: MeetingInput): Promise<Meeting>;
   update(id: ID, input: Partial<MeetingInput>): Promise<Meeting>;
   setStatus(id: ID, status: MeetingStatus): Promise<Meeting>;
+  /** Marca/desmarca um encaminhamento como feito (também em atas aprovadas). */
+  setActionDone(id: ID, actionId: ID, done: boolean): Promise<Meeting>;
 }
 
 /* ------------------------------ Financeiro ------------------------------ */

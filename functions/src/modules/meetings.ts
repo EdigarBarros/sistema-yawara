@@ -30,6 +30,7 @@ import type { DocumentReference, Transaction } from "firebase-admin/firestore";
 import { z } from "zod";
 import { meetingDoc } from "@/lib/firestore-model";
 import { MEETING_STATUS } from "@/lib/labels";
+import { canToggleAction } from "@/lib/meeting-actions";
 import { allowedMeetingTransitions, canEditMeeting, canSeeDocument, canSeeEvent, canSeeMeeting, MEETING_TRANSITIONS } from "@/lib/policies";
 import { meetingReaders } from "@/lib/record-readers";
 import type {
@@ -188,6 +189,8 @@ const updateSchema = strict({ id: docId, input: strict(meetingFields).partial().
 
 const statusSchema = strict({ id: docId, status: z.enum(MEETING_STATUSES, { error: "Situação inválida." }) });
 
+const actionDoneSchema = strict({ id: docId, actionId: docId, done: z.boolean({ error: "Informe se o encaminhamento foi feito." }) });
+
 type ActionInput = z.infer<typeof actionSchema>;
 
 /* ------------------------------- auxiliares ------------------------------ */
@@ -293,7 +296,9 @@ function buildActions(input: ActionInput[], current: MeetingAction[]): MeetingAc
     .map((a) => {
       const id = a.id && known.has(a.id) && !used.has(a.id) ? a.id : newActionId();
       used.add(id);
-      return { id, description: a.description, responsibleId: a.responsibleId || undefined, dueDate: a.dueDate || undefined };
+      // "Feito" é marcado por ação própria (setActionDone): editar a ata não apaga.
+      const prev = current.find((c) => c.id === id);
+      return { id, description: a.description, responsibleId: a.responsibleId || undefined, dueDate: a.dueDate || undefined, doneAt: prev?.doneAt, doneBy: prev?.doneBy };
     });
 }
 
@@ -555,6 +560,31 @@ export const meetingsActions = {
           });
         });
       }
+      return { id: meetingId };
+    },
+    async present(result, actor) {
+      return presentMeeting(result.id, actor);
+    },
+  }),
+
+  /** Marca ou desmarca um encaminhamento como feito (também em atas aprovadas). */
+  setActionDone: mutation({
+    module: "meetings",
+    schema: actionDoneSchema,
+    async run(tx, actor, { id: meetingId, actionId, done }, ctx): Promise<MeetingRef> {
+      actor = actor!;
+      await requireModuleEnabled(tx, "meetings");
+      const { ref, meeting: current } = await loadMeeting(tx, meetingId);
+      requireVisible(actor, current);
+      const action = current.actions.find((a) => a.id === actionId);
+      if (!action) fail("not_found", "Encaminhamento não encontrado. Ele pode ter sido removido da ata.");
+      if (current.status === "archived") fail("conflict", "Esta reunião está arquivada.");
+      if (!canToggleAction(actor.ctx, current, action)) fail("forbidden", "Só o responsável pelo encaminhamento ou quem cuida das atas pode marcar como feito.");
+      if (!!action.doneAt === done) return { id: meetingId };
+      const actions = current.actions.map((a) => (a.id === actionId ? { ...a, doneAt: done ? ctx.now : undefined, doneBy: done ? actor!.uid : undefined } : a));
+      const history = addHistory(current, actor, ctx, ["updated", done ? "Encaminhamento concluído" : "Encaminhamento reaberto"]);
+      tx.update(ref, { actions, updatedAt: ctx.now, history });
+      audit(tx, actor, ctx, "setActionDone", meetingId, `Encaminhamento da reunião ${current.code} ${done ? "concluído" : "reaberto"}`, { actionId, done });
       return { id: meetingId };
     },
     async present(result, actor) {
