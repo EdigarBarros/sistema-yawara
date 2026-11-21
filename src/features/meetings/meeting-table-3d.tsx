@@ -105,6 +105,11 @@ function Chair({ seat, angle, index, onHover }: { seat: Seat; angle: number; ind
         onHover(seat);
         document.body.style.cursor = "pointer";
       }}
+      // Toque no celular: mostra o nome (não há "passar o mouse").
+      onClick={(e: ThreeEvent<MouseEvent>) => {
+        e.stopPropagation();
+        onHover(seat);
+      }}
       onPointerOut={() => {
         onHover(null);
         document.body.style.cursor = "";
@@ -213,10 +218,11 @@ function Table() {
   );
 }
 
-export default function MeetingTable3D({ seats, agenda }: { seats: Seat[]; agenda: string[] }) {
+export default function MeetingTable3D({ seats, agenda, compact }: { seats: Seat[]; agenda: string[]; compact?: boolean }) {
   const [hover, setHover] = useState<Seat | null>(null);
   const shown = seats.slice(0, 14);
-  const items = agenda.slice(0, 5);
+  // Sem pauta, uma folha avisando (a mesa não fica com cara de quebrada).
+  const items = agenda.length ? agenda.slice(0, compact ? 3 : 5) : ["Sem pauta"];
   // Folhas espalhadas no meio da mesa.
   const sheets = items.map((text, i) => {
     const spread = items.length > 1 ? (i / (items.length - 1) - 0.5) * Math.min(4, items.length * 1) : 0;
@@ -226,9 +232,10 @@ export default function MeetingTable3D({ seats, agenda }: { seats: Seat[]; agend
   const hoverIndex = hover ? shown.findIndex((s) => s.id === hover.id) : -1;
 
   return (
-    <Canvas shadows dpr={[1, 2]} camera={{ position: [0, 6.2, 6.4], fov: 40 }}>
+    // No celular: menos pixels e sombra menor, para não pesar; câmera mais longe para a mesa caber na tela estreita.
+    <Canvas shadows dpr={compact ? [1, 1.5] : [1, 2]} camera={{ position: compact ? [0, 7.4, 8.2] : [0, 6.2, 6.4], fov: compact ? 44 : 40 }}>
       <hemisphereLight args={["#eef2ff", "#0b1a55", 0.7]} />
-      <directionalLight position={[3, 9, 4]} intensity={1.5} castShadow shadow-mapSize={[1024, 1024]} />
+      <directionalLight position={[3, 9, 4]} intensity={1.5} castShadow shadow-mapSize={compact ? [512, 512] : [1024, 1024]} />
       {/* luminária sobre a mesa */}
       <pointLight position={[0, 4, 0]} intensity={22} distance={12} color="#ffe2a8" />
       <Table />
