@@ -294,7 +294,7 @@ function addHistory(item: ContentItem, actor: Actor, ctx: RunContext, ...entries
 function audit(tx: Transaction, actor: Actor, ctx: RunContext, action: string, contentId: string, summary: string, details?: Record<string, string | number | boolean | null>) {
   auditInTx(
     tx,
-    { uid: actor.uid, name: actor.name },
+    actor,
     { action: `marketing.${action}`, module: "marketing", resourceType: "content", resourceId: contentId, summary, details },
     ctx.requestId,
     ctx.now,
@@ -521,7 +521,7 @@ export const marketingActions = {
      * aprovado depois).
      */
     async prepare(actor, { id: contentId, uploadIds, links }, ctx): Promise<FileRef[]> {
-      if (await alreadyCompleted(actor.uid, ctx.requestId)) return [];
+      if (await alreadyCompleted(actor.authUid, ctx.requestId)) return [];
       const snap = await db.doc(`contents/${contentId}`).get();
       if (!snap.exists) fail("not_found", "Conteúdo não encontrado. Pode ter sido removido ou não estar disponível para o seu perfil.");
       const item = normalizeContent(toDTO<ContentItem>(snap));

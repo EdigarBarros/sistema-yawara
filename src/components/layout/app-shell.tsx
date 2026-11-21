@@ -12,6 +12,7 @@ import { Topbar } from "./topbar";
 import { CommandPalette } from "./command-palette";
 import { TabBar, tabPosition } from "./tab-bar";
 import { UploadTray } from "@/components/shared/upload-tray";
+import { ViewAsBanner } from "@/features/organization/view-as";
 import { services } from "@/services";
 
 /**
@@ -71,6 +72,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="atmos flex min-h-dvh">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
+        <ViewAsBanner />
         <Topbar />
         <main id="conteudo" className="mx-auto w-full max-w-[1320px] flex-1 overflow-x-clip px-4 pt-5 pb-28 sm:px-6 lg:px-9 lg:pt-8 lg:pb-16">
           <PageTransition>

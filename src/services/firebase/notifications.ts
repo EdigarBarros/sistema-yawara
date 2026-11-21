@@ -1,3 +1,4 @@
+import { getViewAs } from "@/stores/session";
 import {
   collection,
   doc,
@@ -41,6 +42,8 @@ interface NotificationDoc {
  * (uma única vez, com o horário do servidor — regra do Firestore).
  */
 async function currentUid() {
+  // "Ver como": as regras só deixam cada um ler as próprias notificações.
+  if (getViewAs()) throw new ServiceError("unavailable", "As notificações desta pessoa não aparecem no “ver como”.");
   const access = await whenAccess();
   if (access.status !== "active") throw new ServiceError("forbidden", "Sua conta não está ativa.");
   return access.uid;

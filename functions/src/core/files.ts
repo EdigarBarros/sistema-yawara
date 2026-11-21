@@ -220,16 +220,16 @@ export async function createUploadTicket(actor: Actor, input: TicketInput) {
   const fileName = safeFileName(input.fileName);
   if (!officeNameMatches(fileName, input.contentType)) fail("invalid", OFFICE_NAME_MISMATCH);
   const id = randomUUID().replace(/-/g, "");
-  const path = `staging/${actor.uid}/${id}/${fileName}`;
+  const path = `staging/${actor.authUid}/${id}/${fileName}`;
   const inDatabase = storesInDatabase();
   const inDrive = storesInDrive();
-  if (inDatabase || inDrive) await discardMyStaleChunks(actor.uid);
+  if (inDatabase || inDrive) await discardMyStaleChunks(actor.authUid);
   // Drive: a sessão de envio é aberta já com o tamanho exato; o endereço dela nunca sai do servidor.
   const sessionUri = inDrive ? await startDriveUpload(fileName, input.contentType, input.size, id) : null;
   await db.doc(`uploads/${id}`).create({
     ...(inDatabase ? { storage: "database", chunks: chunkCount(input.size) } : {}),
     ...(inDrive ? { storage: "drive", chunks: Math.max(1, Math.ceil(input.size / DRIVE_CHUNK_BYTES)), nextIndex: 0, sessionUri } : {}),
-    uid: actor.uid,
+    uid: actor.authUid,
     purpose: input.purpose,
     targetId: input.targetId ?? null,
     fileName,
@@ -309,7 +309,7 @@ export async function finalizeUpload(actor: Actor, uploadId: string, purpose: Up
     const snap = await tx.get(ticketRef);
     if (!snap.exists) fail("invalid", "O envio do arquivo expirou ou não foi encontrado. Envie o arquivo novamente.");
     const ticket = snap.data()!;
-    if (ticket.uid !== actor.uid || ticket.purpose !== purpose) fail("forbidden", "Este envio de arquivo pertence a outra operação.");
+    if (ticket.uid !== actor.authUid || ticket.purpose !== purpose) fail("forbidden", "Este envio de arquivo pertence a outra operação.");
     // Arquivo já anexado neste mesmo destino: devolve-o sem copiar de novo (a
     // operação ignora o arquivo repetido). Arquivo só conferido ("finalized"):
     // apenas a requisição que o reservou o reaproveita — outra requisição para o
@@ -530,14 +530,14 @@ export async function writeUploadChunk(actor: Actor, input: { uploadId: string; 
   await db.runTransaction(async (tx) => {
     const ticket = (await tx.get(ticketRef)).data();
     if (!ticket) fail("invalid", "O envio do arquivo expirou ou não foi encontrado. Envie o arquivo novamente.");
-    if (ticket.uid !== actor.uid || ticket.storage !== "database") fail("forbidden", "Este envio de arquivo pertence a outra operação.");
+    if (ticket.uid !== actor.authUid || ticket.storage !== "database") fail("forbidden", "Este envio de arquivo pertence a outra operação.");
     if (ticket.status !== "pending") fail("conflict", USED_ELSEWHERE);
     if (ticketExpired(ticket)) fail("invalid", EXPIRED);
     const total = Number(ticket.chunks);
     if (!Number.isInteger(input.index) || input.index < 0 || input.index >= total) fail("invalid", "Pedaço do arquivo fora do esperado.");
     const expected = input.index < total - 1 ? FILE_CHUNK_BYTES : ticket.size - FILE_CHUNK_BYTES * (total - 1);
     if (bytes.length !== expected) fail("invalid", "O arquivo recebido não corresponde ao arquivo informado. Envie novamente.");
-    tx.set(db.doc(`fileChunks/${chunkId(input.uploadId, input.index)}`), { uploadId: input.uploadId, index: input.index, uid: actor.uid, data: bytes, createdAt: nowISO() });
+    tx.set(db.doc(`fileChunks/${chunkId(input.uploadId, input.index)}`), { uploadId: input.uploadId, index: input.index, uid: actor.authUid, data: bytes, createdAt: nowISO() });
   });
   return { received: input.index };
 }
@@ -657,7 +657,7 @@ async function writeDriveChunk(actor: Actor, input: { uploadId: string; index: n
   const ticketRef = db.doc(`uploads/${input.uploadId}`);
   const ticket = (await ticketRef.get()).data();
   if (!ticket) fail("invalid", "O envio do arquivo expirou ou não foi encontrado. Envie o arquivo novamente.");
-  if (ticket.uid !== actor.uid || ticket.storage !== "drive") fail("forbidden", "Este envio de arquivo pertence a outra operação.");
+  if (ticket.uid !== actor.authUid || ticket.storage !== "drive") fail("forbidden", "Este envio de arquivo pertence a outra operação.");
   if (ticket.status !== "pending") fail("conflict", USED_ELSEWHERE);
   if (ticketExpired(ticket)) fail("invalid", EXPIRED);
   const total = Number(ticket.chunks);

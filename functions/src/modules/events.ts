@@ -256,7 +256,7 @@ function addHistory(ev: AtleticaEvent, actor: Actor, ctx: RunContext, ...entries
 function audit(tx: Transaction, actor: Actor, ctx: RunContext, action: string, eventId: string, summary: string, details?: Record<string, string | number | boolean | null>) {
   auditInTx(
     tx,
-    { uid: actor.uid, name: actor.name },
+    actor,
     { action: `events.${action}`, module: "events", resourceType: "event", resourceId: eventId, summary, details },
     ctx.requestId,
     ctx.now,

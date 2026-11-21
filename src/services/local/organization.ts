@@ -178,4 +178,22 @@ export const localOrganization: OrganizationService = {
   async invitationLink() {
     throw new ServiceError("unavailable", "Convites dependem do Firebase.");
   },
+
+  // "Ver como" na demonstração: as mesmas condições do servidor (functions/src/core/actor.ts).
+  async startViewAs(memberId) {
+    await latency(120, 240);
+    const db = getDB();
+    const ctx = accessContext(db);
+    if (!isSupportRole(ctx.role.id)) throw new ServiceError("forbidden", "Somente o Suporte do sistema pode ver a Central como outra pessoa.");
+    if (memberId === ctx.user.id) throw new ServiceError("invalid", "Você já está na sua própria visão.");
+    const member = db.members.find((m) => m.id === memberId);
+    if (!member) throw new ServiceError("not_found", "O integrante escolhido não foi encontrado.");
+    if (member.status !== "active") throw new ServiceError("forbidden", "A conta deste integrante está desativada; não dá para ver como ele(a).");
+    if (isSupportRole(member.roleId)) throw new ServiceError("forbidden", "Não dá para ver como outra conta de suporte.");
+    return { uid: member.id, name: member.name, roleId: member.roleId };
+  },
+
+  async stopViewAs() {
+    await latency(60, 120);
+  },
 };

@@ -39,7 +39,10 @@ vi.mock("@/stores/session", () => ({
   useSession: {
     getState: () => state.session,
     setState: (patch: Partial<typeof state.session>) => Object.assign(state.session, patch),
+    subscribe: () => () => undefined,
   },
+  saveViewAs: vi.fn(),
+  loadSavedViewAs: () => null,
 }));
 
 const { startFirebaseSessionBridge } = await import("./firebase-session");
@@ -72,7 +75,10 @@ describe("ponte de sessão: configurações em tempo real", () => {
     qc.invalidateQueries.mockClear();
     // Outra pessoa desativou o Marketing: a consulta das configurações desta sessão é refeita.
     listenersOn("settings/system")[0].next({});
-    expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["usr-livia", "settings"] });
+    // Recarrega as configurações de qualquer visão aberta (a própria ou a do "ver como").
+    const [{ predicate }] = qc.invalidateQueries.mock.calls.at(-1) as unknown as [{ predicate: (q: { queryKey: unknown[] }) => boolean }];
+    expect(predicate({ queryKey: ["usr-livia", "settings"] })).toBe(true);
+    expect(predicate({ queryKey: ["usr-livia", "events"] })).toBe(false);
 
     // Novos retratos de acesso não duplicam o observador.
     listenersOn("userAccess/usr-livia")[0].next(activeAccess(1));

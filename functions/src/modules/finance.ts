@@ -247,7 +247,7 @@ function assertLinkedCampaign(actor: Actor, snap: DocumentSnapshot | null) {
 function audit(tx: Transaction, actor: Actor, ctx: RunContext, action: string, entryId: string, summary: string, details?: Record<string, string | number | boolean | null>) {
   auditInTx(
     tx,
-    { uid: actor.uid, name: actor.name },
+    actor,
     { action: `finance.${action}`, module: "finance", resourceType: "financeEntry", resourceId: entryId, summary, details },
     ctx.requestId,
     ctx.now,
@@ -305,7 +305,7 @@ export const financeActions = {
     module: "finance",
     schema: createSchema,
     async prepare(actor, { input, uploadId: upload, link }, ctx): Promise<CreatePrepared> {
-      const entryId = newEntryId(actor.uid, ctx.requestId);
+      const entryId = newEntryId(actor.authUid, ctx.requestId);
       if (!upload && !link) return { entryId, file: null };
       // Conferência antecipada (repetida na transação) para não mover arquivos à toa.
       requireFinanceView(actor);
@@ -313,7 +313,7 @@ export const financeActions = {
       if (input.status === "settled") {
         requirePermission(actor, "finance.approve", "Seu perfil não pode registrar já como recebido/pago. Registre como pendente para confirmação.");
       }
-      if (await alreadyCompleted(actor.uid, ctx.requestId)) return { entryId, file: null };
+      if (await alreadyCompleted(actor.authUid, ctx.requestId)) return { entryId, file: null };
       const file = await resolveFile(actor, { uploadId: upload, link }, "financeReceipt", `finance/${entryId}`, ctx);
       return { entryId, file };
     },
@@ -324,7 +324,7 @@ export const financeActions = {
       if (input.status === "settled") {
         requirePermission(actor, "finance.approve", "Seu perfil não pode registrar já como recebido/pago. Registre como pendente para confirmação.");
       }
-      const id = newEntryId(actor.uid, ctx.requestId);
+      const id = newEntryId(actor.authUid, ctx.requestId);
       if (prepared.entryId !== id) fail("conflict", "Requisição inconsistente. Atualize a página e tente novamente.");
       if ((upload || link) && !prepared.file) fail("conflict", "O comprovante enviado não pôde ser anexado. Envie o arquivo novamente.");
       const eventId = input.eventId || undefined;
@@ -537,7 +537,7 @@ export const financeActions = {
       // Conferência antecipada (repetida na transação) para não mover arquivos à toa.
       requireFinanceView(actor);
       requireCanAttach(actor);
-      if (await alreadyCompleted(actor.uid, ctx.requestId)) return null;
+      if (await alreadyCompleted(actor.authUid, ctx.requestId)) return null;
       if (!(await entryRef(id).get()).exists) fail("not_found", "Lançamento não encontrado(a). Pode ter sido removido(a) ou não estar disponível para o seu perfil.");
       return resolveFile(actor, { uploadId: upload, link }, "financeReceipt", `finance/${id}`, ctx);
     },

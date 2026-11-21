@@ -28,6 +28,8 @@ export interface AuditInput {
 interface AuditActor {
   uid: string | null;
   name: string;
+  /** "Ver como": o suporte que agiu na visão de `uid`. */
+  onBehalfBy?: { uid: string; name: string };
 }
 
 function entryData(actor: AuditActor, input: AuditInput, requestId: string | undefined, at: string): Omit<AuditLogEntry, "id"> & { expireAt: FirebaseFirestore.Timestamp } {
@@ -35,6 +37,7 @@ function entryData(actor: AuditActor, input: AuditInput, requestId: string | und
     at,
     actorId: actor.uid,
     actorName: actor.name,
+    ...(actor.onBehalfBy ? { onBehalfById: actor.onBehalfBy.uid, onBehalfByName: actor.onBehalfBy.name } : {}),
     action: input.action,
     module: input.module,
     resourceType: input.resourceType,

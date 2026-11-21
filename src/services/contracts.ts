@@ -180,6 +180,10 @@ export interface OrganizationService {
   supportUpdateAccount(id: ID, input: SupportAccountInput): Promise<Member>;
   /** Suporte do sistema: link de um convite pendente. */
   invitationLink(id: ID): Promise<string>;
+  /** Suporte do sistema: confere e registra a entrada na visão de um integrante ("ver como"). */
+  startViewAs(memberId: ID): Promise<{ uid: ID; name: string; roleId: ID }>;
+  /** Suporte do sistema: registra a saída da visão. */
+  stopViewAs(memberId: ID): Promise<void>;
 }
 
 /* ------------------------------ Campanhas ------------------------------- */

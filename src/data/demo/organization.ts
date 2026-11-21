@@ -1,5 +1,6 @@
 import type { Department, Member, Permission, Role } from "@/types";
 import { allPermissions, permissionsFor } from "@/lib/modules";
+import { SUPPORT_ROLE_ID, supportRoleDefinition } from "@/lib/support";
 import type { Clock } from "./helpers";
 
 export const DEP = {
@@ -43,6 +44,7 @@ export const USR = {
   davi: "usr-davi",
   anabia: "usr-anabia",
   sofia: "usr-sofia",
+  suporte: "usr-suporte",
 } as const;
 
 export function buildDepartments(clock: Clock): Department[] {
@@ -71,6 +73,8 @@ function role(
 export function buildRoles(clock: Clock): Role[] {
   const presidencyPermissions: Permission[] = allPermissions();
   return [
+    // Suporte do sistema (src/lib/support.ts): acima da Presidência; tem o "ver como".
+    role(clock, { id: SUPPORT_ROLE_ID, ...supportRoleDefinition() }),
     role(clock, {
       id: ROLE.presidente, name: "Presidente", departmentId: DEP.presidencia, level: "presidency", isBoard: true, homePreset: "presidency",
       description: "Coordena a Atlética e administra cargos, permissões e configurações.",
@@ -223,6 +227,9 @@ export function buildMembers(clock: Clock): Member[] {
     }),
     member(clock, USR.pedro, "Pedro Lins", ROLE.assEventos, 200, {
       demoProfile: { label: "Assessor", description: "Acesso restrito: tarefas de eventos e registro de vendas.", order: 8 },
+    }),
+    member(clock, USR.suporte, "Suporte Yawara", SUPPORT_ROLE_ID, 400, {
+      demoProfile: { label: "Suporte", description: "Manutenção da Central e \"ver como\" outra pessoa (perfil de qualquer integrante).", order: 9 },
     }),
     member(clock, USR.lucas, "Lucas Farias", ROLE.assEventos, 150),
     member(clock, USR.julia, "Júlia Rocha", ROLE.assMarketing, 190),

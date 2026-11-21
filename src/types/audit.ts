@@ -14,6 +14,9 @@ export interface AuditLogEntry {
   actorId: ID | null;
   /** Nome do autor no momento da operação (o cadastro pode mudar depois). */
   actorName: string;
+  /** "Ver como": a conta de suporte que agiu na visão de `actorId`. */
+  onBehalfById?: string;
+  onBehalfByName?: string;
   /** Operação no formato modulo.acao (ex.: campaigns.registerSale). */
   action: string;
   module: ModuleKey | "auth";

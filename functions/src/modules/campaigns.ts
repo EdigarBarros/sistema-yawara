@@ -451,7 +451,7 @@ function audit(
   summary: string,
   details?: Record<string, string | number | boolean | null>,
 ) {
-  auditInTx(tx, { uid: actor.uid, name: actor.name }, { action: `campaigns.${action}`, module: "campaigns", resourceType, resourceId, summary, details }, ctx.requestId, ctx.now);
+  auditInTx(tx, actor, { action: `campaigns.${action}`, module: "campaigns", resourceType, resourceId, summary, details }, ctx.requestId, ctx.now);
 }
 
 function saleAuditDetails(campaign: Campaign, sale: Sale): Record<string, string | number | boolean | null> {

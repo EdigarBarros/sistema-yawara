@@ -308,7 +308,7 @@ function addHistory(p: ExtensionProject, actor: Actor, ctx: RunContext, ...entri
 function audit(tx: Transaction, actor: Actor, ctx: RunContext, action: string, projectId: string, summary: string, details?: Record<string, string | number | boolean | null>) {
   auditInTx(
     tx,
-    { uid: actor.uid, name: actor.name },
+    actor,
     { action: `extension.${action}`, module: "extension", resourceType: "project", resourceId: projectId, summary, details },
     ctx.requestId,
     ctx.now,
