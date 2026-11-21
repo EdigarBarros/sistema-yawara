@@ -12,11 +12,27 @@ import { ServiceError } from "../errors";
 import { firebase } from "./app";
 import { fromSnap, mapFirestoreError } from "./convert";
 import { hasPerm, whenAccess } from "./session";
+import { callApi } from "./call";
+import { getViewAs } from "@/stores/session";
 
 /** Limite por listagem. Volumes maiores devem usar paginação por cursor (ver docs/backend/arquitetura.md). */
 export const LIST_LIMIT = 500;
 
+/** Coleções com público por registro que o servidor lê no "ver como" (functions/src/modules/system.ts). */
+const VIEW_AS_COLLECTIONS = new Set(["campaigns", "events", "documents", "meetings", "contents", "projects", "sportsTeams"]);
+
+/**
+ * "Ver como" da conta de suporte: as regras do Firestore comparam o público com
+ * quem está logado (o suporte), não com a pessoa vista. Por isso a leitura vai
+ * pelo servidor, que aplica a mesma regra com a pessoa vista.
+ */
+async function viewAsRead<T>(collectionName: string, id?: string): Promise<T[]> {
+  const { items } = await callApi<{ items: T[] }>("system", "viewAsRead", id ? { collection: collectionName, id } : { collection: collectionName });
+  return items;
+}
+
 export async function listVisible<T>(collectionName: string, module: ModuleKey, extra: QueryConstraint[] = [], max = LIST_LIMIT): Promise<T[]> {
+  if (getViewAs() && VIEW_AS_COLLECTIONS.has(collectionName) && extra.length === 0) return viewAsRead<T>(collectionName);
   const access = await whenAccess();
   if (!hasPerm(access, `${module}.view`)) return [];
   const { db } = firebase();
@@ -34,6 +50,16 @@ export async function listVisible<T>(collectionName: string, module: ModuleKey, 
 
 /** Lê um documento; recusa com mensagem clara quando não existe ou não é permitido. */
 export async function getVisible<T>(path: string, label: string): Promise<T> {
+  const [collectionName, id, ...rest] = path.split("/");
+  if (getViewAs() && VIEW_AS_COLLECTIONS.has(collectionName) && id && rest.length === 0) {
+    try {
+      const [item] = await viewAsRead<T>(collectionName, id);
+      return item;
+    } catch (error) {
+      if (error instanceof ServiceError && error.code === "forbidden") throw new ServiceError("forbidden", `${label} não está disponível para o perfil desta pessoa.`);
+      throw error;
+    }
+  }
   const { db } = firebase();
   try {
     const snap = await getDoc(doc(db, path));
